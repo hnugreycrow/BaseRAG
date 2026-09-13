@@ -1,15 +1,20 @@
-import vue from "@vitejs/plugin-vue";
-import { defineConfig } from "vite";
-export default defineConfig({
-  plugins: [vue()],
-  server: {
-    host: "127.0.0.1",
-    proxy: {
-      "/api": {
-        target: process.env.API_TARGET || "http://127.0.0.1:8080",
-        timeout: 0,
-        proxyTimeout: 0,
+import vue from '@vitejs/plugin-vue'
+import { defineConfig, loadEnv } from 'vite'
+
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+
+  return {
+    plugins: [vue()],
+    server: {
+      proxy: {
+        '/api': {
+          target: env.VITE_API_PROXY_TARGET || 'http://localhost:8080',
+          changeOrigin: true,
+          timeout: 0,
+          proxyTimeout: 0,
+        },
       },
     },
-  },
-});
+  }
+})

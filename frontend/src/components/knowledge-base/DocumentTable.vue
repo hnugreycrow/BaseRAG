@@ -1,0 +1,201 @@
+<script setup lang="ts">
+import { Delete, EditPen, Files, RefreshRight, Scissor } from '@element-plus/icons-vue'
+
+import type { KnowledgeDocument } from '../../api'
+
+defineProps<{
+  rows: KnowledgeDocument[]
+  loading: boolean
+  processingIds: Set<string>
+}>()
+
+const emit = defineEmits<{
+  open: [row: KnowledgeDocument]
+  rename: [row: KnowledgeDocument]
+  remove: [row: KnowledgeDocument]
+  chunk: [row: KnowledgeDocument]
+}>()
+
+const statusMeta = {
+  UPLOADED: { label: '待分块', type: 'warning' },
+  PROCESSING: { label: '处理中', type: 'primary' },
+  READY: { label: '已完成', type: 'success' },
+  FAILED: { label: '处理失败', type: 'danger' },
+} as const
+
+const dateFormatter = new Intl.DateTimeFormat('zh-CN', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
+function formatDate(value: string) {
+  return dateFormatter.format(new Date(value))
+}
+
+function canOpen(row: KnowledgeDocument) {
+  return row.status === 'READY'
+}
+
+function rowClassName({ row }: { row: KnowledgeDocument }) {
+  return canOpen(row) ? 'clickable-row' : ''
+}
+
+function handleRowClick(row: KnowledgeDocument) {
+  if (canOpen(row)) emit('open', row)
+}
+
+function statusType(row: KnowledgeDocument) {
+  return statusMeta[row.status].type
+}
+
+function statusLabel(row: KnowledgeDocument) {
+  return statusMeta[row.status].label
+}
+</script>
+
+<template>
+  <el-table
+    :data="rows"
+    row-key="id"
+    class="data-table"
+    :row-class-name="rowClassName"
+    @row-click="handleRowClick"
+  >
+    <el-table-column label="文档" min-width="270">
+      <template #default="{ row }">
+        <div class="document-cell">
+          <span class="document-icon"
+            ><el-icon><Files /></el-icon
+          ></span>
+          <div>
+            <strong>{{ row.name }}</strong>
+            <small v-if="row.errorCode">错误代码：{{ row.errorCode }}</small>
+            <small v-else>{{ formatDate(row.createdAt) }}</small>
+          </div>
+        </div>
+      </template>
+    </el-table-column>
+    <el-table-column label="状态" width="110">
+      <template #default="{ row }">
+        <el-tag :type="statusType(row)" effect="light" round>
+          <i v-if="processingIds.has(row.id) || row.status === 'PROCESSING'" class="pulse-dot"></i>
+          {{ processingIds.has(row.id) ? '处理中' : statusLabel(row) }}
+        </el-tag>
+      </template>
+    </el-table-column>
+    <el-table-column label="分块" width="90">
+      <template #default="{ row }">{{ row.chunkCount }} 块</template>
+    </el-table-column>
+    <el-table-column label="上传时间" width="160">
+      <template #default="{ row }">{{ formatDate(row.createdAt) }}</template>
+    </el-table-column>
+    <el-table-column label="操作" width="340" fixed="right" align="center">
+      <template #default="{ row }">
+        <div class="row-actions" @click.stop>
+          <el-button
+            class="chunk-button"
+            :icon="row.status === 'READY' ? RefreshRight : Scissor"
+            :loading="processingIds.has(row.id)"
+            :disabled="row.status === 'PROCESSING'"
+            @click="emit('chunk', row)"
+          >
+            {{ row.status === 'READY' ? '重新分块' : '开始分块' }}
+          </el-button>
+          <el-button v-if="canOpen(row)" class="open-button" text @click="emit('open', row)">
+            管理分块
+          </el-button>
+          <el-button text :icon="EditPen" @click="emit('rename', row)">重命名</el-button>
+          <el-button text type="danger" :icon="Delete" @click="emit('remove', row)">
+            删除
+          </el-button>
+        </div>
+      </template>
+    </el-table-column>
+    <template #empty>
+      <el-empty :description="loading ? '正在加载文档' : '还没有文档'" :image-size="72" />
+    </template>
+  </el-table>
+</template>
+
+<style scoped>
+.document-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.document-icon {
+  width: 35px;
+  height: 35px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  color: #64738a;
+  background: #f0f3f8;
+  border-radius: 9px;
+}
+
+.document-cell div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.document-cell strong {
+  overflow: hidden;
+  color: var(--color-ink);
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.document-cell small {
+  color: var(--color-muted);
+  font-size: 11px;
+}
+
+.row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.row-actions :deep(.el-button) {
+  margin-left: 0;
+  padding-right: 7px;
+  padding-left: 7px;
+}
+
+.chunk-button {
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
+  border-color: transparent;
+}
+
+.open-button {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.pulse-dot {
+  width: 6px;
+  height: 6px;
+  display: inline-block;
+  margin-right: 4px;
+  background: currentColor;
+  border-radius: 50%;
+  animation: pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+</style>
