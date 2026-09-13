@@ -1,0 +1,241 @@
+[
+  {
+    "id": "q001",
+    "category": "single",
+    "question": "工作日和办公时间是什么？",
+    "expectedDocument": "employee-handbook.md",
+    "expectedHeading": "工作时间",
+    "expectedEvidence": [
+      "工作日为周一至周五，办公时间为 09:30 至 18:30"
+    ],
+    "referenceAnswer": "周一至周五，09:30–18:30。",
+    "answerable": true
+  },
+  {
+    "id": "q002",
+    "category": "single",
+    "question": "午休从几点到几点？",
+    "expectedDocument": "employee-handbook.md",
+    "expectedHeading": "工作时间",
+    "expectedEvidence": [
+      "午休为 12:30 至 13:30"
+    ],
+    "referenceAnswer": "12:30–13:30。",
+    "answerable": true
+  },
+  {
+    "id": "q003",
+    "category": "single",
+    "question": "转正员工一年有几天年假？",
+    "expectedDocument": "employee-handbook.md",
+    "expectedHeading": "年假资格",
+    "expectedEvidence": [
+      "转正员工每个自然年享有 5 天年假。"
+    ],
+    "referenceAnswer": "每自然年 5 天。",
+    "answerable": true
+  },
+  {
+    "id": "q004",
+    "category": "single",
+    "question": "试用期可以申请年假吗？",
+    "expectedDocument": "employee-handbook.md",
+    "expectedHeading": "年假资格",
+    "expectedEvidence": [
+      "试用期员工暂不能申请年假。"
+    ],
+    "referenceAnswer": "不可以。",
+    "answerable": true
+  },
+  {
+    "id": "q005",
+    "category": "single",
+    "question": "没休完的年假能留到明年吗？",
+    "expectedDocument": "employee-handbook.md",
+    "expectedHeading": "年假资格",
+    "expectedEvidence": [
+      "未休年假不跨年结转。"
+    ],
+    "referenceAnswer": "不跨年结转。",
+    "answerable": true
+  },
+  {
+    "id": "q006",
+    "category": "single",
+    "question": "年假需要提前多久申请，谁审批？",
+    "expectedDocument": "employee-handbook.md",
+    "expectedHeading": "请假流程",
+    "expectedEvidence": [
+      "年假需至少提前 3 个工作日在星舟服务台提交申请，由直属负责人审批。"
+    ],
+    "referenceAnswer": "至少提前 3 个工作日，直属负责人审批。",
+    "answerable": true
+  },
+  {
+    "id": "q007",
+    "category": "single",
+    "question": "连续请四天年假需要哪些审批？",
+    "expectedDocument": "employee-handbook.md",
+    "expectedHeading": "请假流程",
+    "expectedEvidence": [
+      "由直属负责人审批。",
+      "单次连续请假超过 3 天时，还需部门负责人复核。"
+    ],
+    "referenceAnswer": "直属负责人审批并由部门负责人复核。",
+    "answerable": true
+  },
+  {
+    "id": "q008",
+    "category": "single",
+    "question": "差旅结束多久内报销，需要什么材料？",
+    "expectedDocument": "employee-handbook.md",
+    "expectedHeading": "报销规则",
+    "expectedEvidence": [
+      "差旅结束后 10 个工作日内提交报销。",
+      "报销需提供发票和差旅行程单。"
+    ],
+    "referenceAnswer": "10 个工作日内，提供发票和差旅行程单。",
+    "answerable": true
+  },
+  {
+    "id": "q009",
+    "category": "single",
+    "question": "住宿每天最多报销多少？",
+    "expectedDocument": "employee-handbook.md",
+    "expectedHeading": "报销规则",
+    "expectedEvidence": [
+      "住宿报销上限为每人每晚 450 元"
+    ],
+    "referenceAnswer": "每人每晚 450 元。",
+    "answerable": true
+  },
+  {
+    "id": "q010",
+    "category": "identifier",
+    "question": "笔记本最长借多久，找谁联系？",
+    "expectedDocument": "employee-handbook.md",
+    "expectedHeading": "设备借用",
+    "expectedEvidence": [
+      "借用期限最长 30 天。",
+      "资产管理员联系邮箱为 assets@example.test。"
+    ],
+    "referenceAnswer": "30 天，联系 assets@example.test。",
+    "answerable": true
+  },
+  {
+    "id": "q011",
+    "category": "single",
+    "question": "转正员工一周可远程办公几天？",
+    "expectedDocument": "employee-handbook.md",
+    "expectedHeading": "远程办公",
+    "expectedEvidence": [
+      "转正员工每周最多远程办公 2 天"
+    ],
+    "referenceAnswer": "最多 2 天，提前 1 个工作日申请并获批准。",
+    "answerable": true
+  },
+  {
+    "id": "q012",
+    "category": "multi",
+    "question": "试用期员工能申请年假和远程办公吗？",
+    "expectedDocument": "employee-handbook.md",
+    "expectedHeading": "年假资格 / 远程办公",
+    "expectedEvidence": [
+      "试用期员工暂不能申请年假。",
+      "试用期员工不适用远程办公政策。"
+    ],
+    "referenceAnswer": "两项都不适用。",
+    "answerable": true
+  },
+  {
+    "id": "q013",
+    "category": "identifier",
+    "question": "账号异常怎么办，安全事件编号前缀是什么？",
+    "expectedDocument": "employee-handbook.md",
+    "expectedHeading": "信息安全",
+    "expectedEvidence": [
+      "立即修改密码并通过 security@example.test 联系安全值班人员。",
+      "安全事件编号前缀为 SEC-2026。"
+    ],
+    "referenceAnswer": "立即改密码并联系安全邮箱，编号前缀 SEC-2026。",
+    "answerable": true
+  },
+  {
+    "id": "q014",
+    "category": "single",
+    "question": "入职后两项培训分别在什么时候完成？",
+    "expectedDocument": "employee-handbook.md",
+    "expectedHeading": "培训安排",
+    "expectedEvidence": [
+      "7 个工作日内完成信息安全培训，30 个自然日内完成产品基础培训。"
+    ],
+    "referenceAnswer": "安全培训 7 个工作日内，产品培训 30 个自然日内。",
+    "answerable": true
+  },
+  {
+    "id": "q015",
+    "category": "multi",
+    "question": "审批两天没处理能否催办，服务台几点开放？",
+    "expectedDocument": "employee-handbook.md",
+    "expectedHeading": "文档与审批 / 联系渠道",
+    "expectedEvidence": [
+      "流程审批超过 2 个工作日未处理时，可在服务台发起催办。",
+      "服务台开放时间为工作日 09:00 至 19:00。"
+    ],
+    "referenceAnswer": "超过 2 个工作日可催办；服务台工作日 09:00–19:00。恰好两天不满足超过两天的条件。",
+    "answerable": true
+  },
+  {
+    "id": "q016",
+    "category": "identifier",
+    "question": "人事和财务咨询邮箱分别是什么？",
+    "expectedDocument": "employee-handbook.md",
+    "expectedHeading": "联系渠道",
+    "expectedEvidence": [
+      "人事咨询邮箱为 hr@example.test，财务咨询邮箱为 finance@example.test。"
+    ],
+    "referenceAnswer": "人事 hr@example.test；财务 finance@example.test。",
+    "answerable": true
+  },
+  {
+    "id": "q017",
+    "category": "unanswerable",
+    "question": "员工每年能涨薪多少？",
+    "expectedDocument": "employee-handbook.md",
+    "expectedHeading": "",
+    "expectedEvidence": [],
+    "referenceAnswer": "现有资料不足，手册未说明薪资调整。",
+    "answerable": false
+  },
+  {
+    "id": "q018",
+    "category": "unanswerable",
+    "question": "公司的 CEO 叫什么名字？",
+    "expectedDocument": "employee-handbook.md",
+    "expectedHeading": "",
+    "expectedEvidence": [],
+    "referenceAnswer": "现有资料不足，手册未说明。",
+    "answerable": false
+  },
+  {
+    "id": "q019",
+    "category": "unanswerable",
+    "question": "产假共有多少天？",
+    "expectedDocument": "employee-handbook.md",
+    "expectedHeading": "",
+    "expectedEvidence": [],
+    "referenceAnswer": "现有资料不足，不能根据年假推断。",
+    "answerable": false
+  },
+  {
+    "id": "q020",
+    "category": "unanswerable",
+    "question": "2027 年年假将调整为几天？",
+    "expectedDocument": "employee-handbook.md",
+    "expectedHeading": "",
+    "expectedEvidence": [],
+    "referenceAnswer": "现有资料不足，不能推断未来政策。",
+    "answerable": false
+  }
+]
+

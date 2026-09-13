@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hnu.backend.knowledgebase.infrastructure.persistence.KnowledgeBaseMapper">
+    <select id="lock" resultType="com.hnu.backend.knowledgebase.domain.KnowledgeBase">
+        SELECT *
+        FROM knowledge_bases
+        WHERE id = #{id}
+        FOR UPDATE
+    </select>
+
+    <select id="selectWithDocumentCount" resultType="com.hnu.backend.knowledgebase.domain.KnowledgeBase">
+        SELECT kb.*, COUNT(d.id) AS document_count
+        FROM knowledge_bases kb
+        LEFT JOIN documents d ON d.knowledge_base_id = kb.id
+        GROUP BY kb.id
+        ORDER BY kb.created_at DESC, kb.id
+    </select>
+</mapper>

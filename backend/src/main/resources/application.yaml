@@ -1,0 +1,97 @@
+spring:
+  application:
+    name: jagent
+  profiles:
+    default: local
+  datasource:
+    url: "${DB_URL:jdbc:postgresql://localhost:5432/jagent}"
+    username: "${POSTGRES_USER:jagent}"
+    password: "${POSTGRES_PASSWORD:jagent-local-change-me}"
+    hikari:
+      connection-timeout: 5000
+  flyway:
+    enabled: true
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
+
+server:
+  address: 127.0.0.1
+  port: 8080
+
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+  type-handlers-package: com.hnu.backend.shared.persistence
+  global-config:
+    banner: false
+
+ai:
+  providers:
+    bailian:
+      url: "${BAILIAN_URL:https://dashscope.aliyuncs.com}"
+      api-key: "${BAILIAN_API_KEY:${CHAT_API_KEY:sk-ws-H.EIDXXPP.HwwU.MEQCIE7F0C3RBVHeLX373btLS2zWh8TzO_VyOe-Q1-dYPe0jAiBzzLRRyV_mX8oTUghPwTAfHEL6fGYd1CFmnPsHjQYEUQ}}"
+      endpoints:
+        chat: "${BAILIAN_CHAT_ENDPOINT:/compatible-mode/v1/chat/completions}"
+    siliconflow:
+      url: "${SILICONFLOW_URL:https://api.siliconflow.cn}"
+      api-key: "${SILICONFLOW_API_KEY:${EMBEDDING_API_KEY:sk-njfllpwuenomqsqkpcggyxxfyxerkreskeftsfzbcagugkbt}}"
+      endpoints:
+        embedding: "${SILICONFLOW_EMBEDDING_ENDPOINT:/v1/embeddings}"
+    deepseek:
+      url: https://api.deepseek.com
+      api-key: "${DEEPSEEK_API_KEY:${CHAT_API_KEY:sk-a1e8182db7cd461c88834dd28f8c1be1}}"
+      endpoints:
+        chat: /chat/completions
+  selection:
+    failure-threshold: 2
+    open-duration-ms: 30000
+    max-retries: 2
+  stream:
+    message-chunk-size: 1
+  chat:
+    default-tier: standard
+    candidates:
+      - id: deepseek-flash
+        provider: deepseek
+        model: deepseek-flash
+      - id: qwen3.8-flash
+        provider: bailian
+        model: qwen3.8-flash
+    tiers:
+      standard:
+        candidates: [deepseek-flash, qwen3.8-flash]
+        timeout-ms: 30000
+  embedding:
+    default-model: qwen-emb-8b
+    batch-size: 16
+    timeout-ms: 60000
+    candidates:
+      - id: qwen-emb-8b
+        provider: siliconflow
+        model: Qwen/Qwen3-Embedding-8B
+        dimension: ${EMBEDDING_DIMENSIONS:1536}
+        priority: 1
+
+rag:
+  # Semantic blocks are packed near the target; small tails may grow up to max-size.
+  chunk-size: 1400
+  chunk-min-size: 500
+  chunk-max-size: 2000
+  chunk-overlap: 180
+  top-k: 5
+  max-question-chars: 2000
+  storage:
+    endpoint: "${RUSTFS_ENDPOINT:http://localhost:9000}"
+    access-key: jagent-local
+    secret-key: jagent-local-secret-change-me
+    bucket: "${RUSTFS_BUCKET:jagent}"
+    region: us-east-1
+
+conversation:
+  recent-turns: 8
+  summary-batch-turns: 4
+  checkpoint-chars: 512
+  checkpoint-interval-ms: 1000

@@ -1,0 +1,9 @@
+.env
+.env.*
+!.env.example
+**/target/
+**/node_modules/
+**/dist/
+**/.idea/
+.artifacts/
+
