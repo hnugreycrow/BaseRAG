@@ -1,56 +1,96 @@
 package com.hnu.backend.shared.error;
 
+import com.hnu.backend.shared.web.ApiResponse;
+import com.hnu.backend.shared.web.RequestIdFilter;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.ConstraintViolationException;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.ServletRequestBindingException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
   private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
-  public record ErrorBody(String code, String message, String requestId) {}
+  public record FieldViolation(String field, String message) {}
 
-  private ErrorBody body(String code, String message, HttpServletRequest request) {
-    return new ErrorBody(code, message, (String) request.getAttribute("requestId"));
+  private String requestId(HttpServletRequest request) {
+    return (String) request.getAttribute(RequestIdFilter.REQUEST_ID_ATTRIBUTE);
   }
 
   @ExceptionHandler(ApiException.class)
-  ResponseEntity<ErrorBody> api(ApiException e, HttpServletRequest request) {
-    log.warn("requestId={} code={}", request.getAttribute("requestId"), e.code());
-    return ResponseEntity.status(e.status()).body(body(e.code(), e.getMessage(), request));
+  ResponseEntity<ApiResponse<Void>> api(ApiException e, HttpServletRequest request) {
+    log.warn("requestId={} code={}", requestId(request), e.code());
+    return failure(e.status(), e.code(), e.getMessage(), request);
   }
 
   @ExceptionHandler(MaxUploadSizeExceededException.class)
-  ResponseEntity<ErrorBody> size(HttpServletRequest request) {
-    return ResponseEntity.status(413).body(body("FILE_TOO_LARGE", "文件不能超过 5 MiB", request));
+  ResponseEntity<ApiResponse<Void>> size(HttpServletRequest request) {
+    return failure(HttpStatus.PAYLOAD_TOO_LARGE, "FILE_TOO_LARGE", "文件不能超过 5 MiB", request);
+  }
+
+  @ExceptionHandler(MethodArgumentNotValidException.class)
+  ResponseEntity<ApiResponse<List<FieldViolation>>> invalidBody(
+      MethodArgumentNotValidException e, HttpServletRequest request) {
+    List<FieldViolation> violations =
+        e.getBindingResult().getFieldErrors().stream()
+            .map(error -> new FieldViolation(error.getField(), error.getDefaultMessage()))
+            .toList();
+    return ResponseEntity.badRequest()
+        .body(ApiResponse.failure("INVALID_REQUEST", "请求参数校验失败", violations, requestId(request)));
   }
 
   @ExceptionHandler({
-    MethodArgumentNotValidException.class,
     MethodArgumentTypeMismatchException.class,
     HttpMessageNotReadableException.class,
-    MissingServletRequestPartException.class
+    MissingServletRequestPartException.class,
+    ServletRequestBindingException.class,
+    ConstraintViolationException.class
   })
-  ResponseEntity<ErrorBody> invalid(HttpServletRequest request) {
-    return ResponseEntity.badRequest().body(body("INVALID_REQUEST", "请检查请求参数及文件", request));
+  ResponseEntity<ApiResponse<Void>> invalid(HttpServletRequest request) {
+    return failure(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "请检查请求参数及文件", request);
+  }
+
+  @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+  ResponseEntity<ApiResponse<Void>> methodNotAllowed(HttpServletRequest request) {
+    return failure(HttpStatus.METHOD_NOT_ALLOWED, "METHOD_NOT_ALLOWED", "请求方法不受支持", request);
+  }
+
+  @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+  ResponseEntity<ApiResponse<Void>> mediaTypeNotSupported(HttpServletRequest request) {
+    return failure(
+        HttpStatus.UNSUPPORTED_MEDIA_TYPE, "UNSUPPORTED_MEDIA_TYPE", "请求内容类型不受支持", request);
+  }
+
+  @ExceptionHandler(NoResourceFoundException.class)
+  ResponseEntity<ApiResponse<Void>> notFound(HttpServletRequest request) {
+    return failure(HttpStatus.NOT_FOUND, "RESOURCE_NOT_FOUND", "请求的资源不存在", request);
   }
 
   @ExceptionHandler(Exception.class)
-  ResponseEntity<ErrorBody> unexpected(Exception e, HttpServletRequest request) {
+  ResponseEntity<ApiResponse<Void>> unexpected(Exception e, HttpServletRequest request) {
     // Do not log raw provider responses, SQL values, credentials or document text.
-    log.error(
-        "requestId={} exceptionType={}",
-        request.getAttribute("requestId"),
-        e.getClass().getSimpleName());
-    return ResponseEntity.internalServerError()
-        .body(body("INTERNAL_ERROR", "服务暂时不可用，请稍后重试", request));
+    log.error("requestId={} exceptionType={}", requestId(request), e.getClass().getSimpleName());
+    return failure(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "服务暂时不可用，请稍后重试", request);
+  }
+
+  private ResponseEntity<ApiResponse<Void>> failure(
+      HttpStatusCode status, String code, String message, HttpServletRequest request) {
+    return ResponseEntity.status(status)
+        .body(ApiResponse.failure(code, message, null, requestId(request)));
   }
 }

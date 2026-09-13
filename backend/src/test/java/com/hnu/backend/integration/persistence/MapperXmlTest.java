@@ -2,9 +2,15 @@ package com.hnu.backend.integration.persistence;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.hnu.backend.document.infrastructure.persistence.DocumentChunkMapper;
-import com.hnu.backend.knowledgebase.infrastructure.persistence.KnowledgeBaseMapper;
-import com.hnu.backend.question.infrastructure.persistence.RetrievalMapper;
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.hnu.backend.conversation.mapper.ConversationMapper;
+import com.hnu.backend.conversation.mapper.GenerationAttemptMapper;
+import com.hnu.backend.conversation.mapper.MessageMapper;
+import com.hnu.backend.document.mapper.DocumentChunkMapper;
+import com.hnu.backend.document.mapper.DocumentMapper;
+import com.hnu.backend.document.mapper.DocumentVersionMapper;
+import com.hnu.backend.knowledgebase.mapper.KnowledgeBaseMapper;
+import com.hnu.backend.rag.mapper.RetrievalMapper;
 import com.hnu.backend.shared.persistence.UuidTypeHandler;
 import java.io.IOException;
 import java.io.InputStream;
@@ -22,11 +28,9 @@ class MapperXmlTest {
         Map.of(
             "mapper/knowledgebase/KnowledgeBaseMapper.xml",
             new ExpectedMapper(
-                KnowledgeBaseMapper.class, new String[] {"lock", "selectWithDocumentCount"}),
-            "mapper/document/DocumentChunkMapper.xml",
-            new ExpectedMapper(
-                DocumentChunkMapper.class, new String[] {"deleteByKnowledgeBase", "insertVector"}),
-            "mapper/question/RetrievalMapper.xml",
+                KnowledgeBaseMapper.class,
+                new String[] {"lock", "selectWithDocumentCount", "countWithDocumentCount"}),
+            "mapper/rag/RetrievalMapper.xml",
             new ExpectedMapper(
                 RetrievalMapper.class,
                 new String[] {"activeModelBindings", "searchAll", "search"}));
@@ -40,6 +44,22 @@ class MapperXmlTest {
         assertTrue(
             configuration.hasStatement(entry.getValue().type().getName() + "." + statement, false));
       }
+    }
+  }
+
+  @Test
+  void entityMappersUseMybatisPlusDataInterface() {
+    for (Class<?> mapper :
+        new Class<?>[] {
+          ConversationMapper.class,
+          MessageMapper.class,
+          GenerationAttemptMapper.class,
+          KnowledgeBaseMapper.class,
+          DocumentMapper.class,
+          DocumentVersionMapper.class,
+          DocumentChunkMapper.class
+        }) {
+      assertTrue(BaseMapper.class.isAssignableFrom(mapper));
     }
   }
 

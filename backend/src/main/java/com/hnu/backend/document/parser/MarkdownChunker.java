@@ -8,6 +8,11 @@ import java.util.Objects;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Component;
 
+/**
+ * 按 Markdown 标题、段落和代码围栏切分文本，并在长度限制内合并过小片段。
+ *
+ * <p>切分结果保留标题路径和原文行号，便于回答引用回溯到原文。
+ */
 @Component
 public class MarkdownChunker {
   public record Piece(String content, String heading, int lineStart, int lineEnd) {}
@@ -29,6 +34,12 @@ public class MarkdownChunker {
     overlap = config.getChunkOverlap();
   }
 
+  /**
+   * 将 Markdown 文本切分为适合向量化的语义片段。
+   *
+   * @param markdown Markdown 原文
+   * @return 按原文顺序排列的非空片段
+   */
   public List<Piece> split(String markdown) {
     String text = markdown.replace("\r\n", "\n").replace('\r', '\n');
     String[] lines = text.split("\n", -1);
@@ -73,6 +84,7 @@ public class MarkdownChunker {
     }
     if (start >= 0) blocks.add(new Block(start, text.length(), path));
 
+    // 超长块优先在句末或空白处回退切分，并保留配置要求的上下文重叠。
     List<Block> atomic = new ArrayList<>();
     for (Block block : blocks) {
       if (block.end - block.start <= targetSize) {
@@ -94,6 +106,7 @@ public class MarkdownChunker {
       }
     }
 
+    // 将相邻的小块重新打包，减少碎片化，同时不突破最大长度。
     List<Block> packed = new ArrayList<>();
     for (Block block : atomic) {
       if (!packed.isEmpty()) {

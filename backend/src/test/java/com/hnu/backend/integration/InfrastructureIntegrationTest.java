@@ -5,19 +5,19 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.hnu.backend.ai.chat.ChatClient;
-import com.hnu.backend.ai.embedding.EmbeddingClient;
-import com.hnu.backend.conversation.domain.Message;
-import com.hnu.backend.conversation.infrastructure.persistence.ConversationMapper;
-import com.hnu.backend.conversation.infrastructure.persistence.MessageMapper;
-import com.hnu.backend.document.application.DocumentService;
-import com.hnu.backend.document.domain.DocumentChunk;
-import com.hnu.backend.document.infrastructure.persistence.DocumentChunkMapper;
-import com.hnu.backend.document.infrastructure.persistence.DocumentMapper;
-import com.hnu.backend.document.infrastructure.persistence.DocumentVersionMapper;
-import com.hnu.backend.knowledgebase.domain.KnowledgeBase;
-import com.hnu.backend.knowledgebase.infrastructure.persistence.KnowledgeBaseMapper;
-import com.hnu.backend.question.infrastructure.persistence.RetrievalMapper;
+import com.hnu.backend.conversation.entity.Message;
+import com.hnu.backend.conversation.mapper.ConversationMapper;
+import com.hnu.backend.conversation.mapper.MessageMapper;
+import com.hnu.backend.document.entity.DocumentChunk;
+import com.hnu.backend.document.mapper.DocumentChunkMapper;
+import com.hnu.backend.document.mapper.DocumentMapper;
+import com.hnu.backend.document.mapper.DocumentVersionMapper;
+import com.hnu.backend.document.service.DocumentService;
+import com.hnu.backend.knowledgebase.entity.KnowledgeBase;
+import com.hnu.backend.knowledgebase.mapper.KnowledgeBaseMapper;
+import com.hnu.backend.model.client.ChatClient;
+import com.hnu.backend.model.client.EmbeddingClient;
+import com.hnu.backend.rag.mapper.RetrievalMapper;
 import com.hnu.backend.shared.error.ApiException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -117,6 +117,59 @@ class InfrastructureIntegrationTest {
     assertTrue(messageMapper.list(conversationId).isEmpty());
   }
 
+  @Test
+  void cancellationIsIdempotentAndCannotBeOverwrittenByLateGenerationWork() {
+    UUID conversationId = UUID.randomUUID();
+    UUID userId = UUID.randomUUID();
+    UUID generationId = UUID.randomUUID();
+    conversationMapper.insert(conversationId, "取消状态测试");
+
+    Message user = new Message();
+    user.setId(userId);
+    user.setConversationId(conversationId);
+    user.setClientRequestId(UUID.randomUUID());
+    user.setRole("USER");
+    user.setTurnIndex(1);
+    user.setVariantIndex(0);
+    user.setActive(true);
+    user.setStatus("COMPLETED");
+    user.setContent("问题");
+    user.setSourcesJson("[]");
+    user.setCitationsJson("[]");
+    messageMapper.insert(user);
+
+    Message assistant = new Message();
+    assistant.setId(generationId);
+    assistant.setConversationId(conversationId);
+    assistant.setRole("ASSISTANT");
+    assistant.setTurnIndex(1);
+    assistant.setVariantIndex(1);
+    assistant.setActive(true);
+    assistant.setReplyToId(userId);
+    assistant.setStatus("PENDING");
+    assistant.setContent("");
+    assistant.setSourcesJson("[]");
+    assistant.setCitationsJson("[]");
+    messageMapper.insert(assistant);
+
+    assertEquals(1, messageMapper.cancelRunning(generationId, conversationId, "部分回答"));
+    assertEquals(0, messageMapper.cancelRunning(generationId, conversationId, "被覆盖"));
+    assertEquals(0, messageMapper.markStreaming(generationId));
+    assertEquals(
+        0,
+        messageMapper.complete(
+            generationId,
+            "迟到的完整回答",
+            "[]",
+            "{\"id\":\"late\",\"provider\":\"test\",\"model\":\"test\"}"));
+
+    Message stored = messageMapper.find(generationId);
+    assertEquals("CANCELLED", stored.getStatus());
+    assertEquals("部分回答", stored.getContent());
+    assertEquals("GENERATION_CANCELLED", stored.getErrorCode());
+    conversationMapper.delete(conversationId);
+  }
+
   @BeforeEach
   void testModels() {
     when(embedding.embed(anyString(), anyInt(), anyList()))
@@ -213,7 +266,7 @@ class InfrastructureIntegrationTest {
         .thenThrow(ApiException.upstream("MODEL_TIMEOUT", "test"));
     var uploaded = documents.upload(kb, file("失败.md", "# 测试\n不应可检索。"));
     assertThrows(ApiException.class, () -> documents.createChunks(kb, uploaded.documentId()));
-    var docs = documents.list(kb);
+    var docs = documents.list(kb, 1, 10, null).items();
     assertEquals(1, docs.size());
     assertEquals("FAILED", docs.getFirst().status());
     assertNull(documentMapper.selectById(docs.getFirst().id()).getActiveVersionId());
@@ -229,7 +282,7 @@ class InfrastructureIntegrationTest {
   void uploadDoesNotInvokeEmbeddingBeforeManualChunking() {
     UUID kb = kb();
     var uploaded = documents.upload(kb, file("待处理.md", "# 资料\n原内容。"));
-    assertEquals("UPLOADED", documents.list(kb).getFirst().status());
+    assertEquals("UPLOADED", documents.list(kb, 1, 10, null).items().getFirst().status());
     verify(embedding, never()).embed(anyString(), anyInt(), anyList());
     documents.createChunks(kb, uploaded.documentId());
     verify(embedding).embed(eq("Qwen/Qwen3-Embedding-8B"), eq(2), anyList());
@@ -245,7 +298,7 @@ class InfrastructureIntegrationTest {
     String multiChunk = "# 第一节\n" + "第一块内容。".repeat(300) + "\n\n# 第二节\n" + "第二块内容。".repeat(300);
     var uploaded = documents.upload(kb, file("回滚.md", multiChunk));
     assertThrows(ApiException.class, () -> documents.createChunks(kb, uploaded.documentId()));
-    var doc = documents.list(kb).getFirst();
+    var doc = documents.list(kb, 1, 10, null).items().getFirst();
     assertEquals("FAILED", doc.status());
     assertNull(documentMapper.selectById(doc.id()).getActiveVersionId());
     assertEquals(
@@ -295,6 +348,6 @@ class InfrastructureIntegrationTest {
                 new MockMultipartFile(
                     "file", "bad.md", "text/markdown", new byte[] {(byte) 0xc3, 0x28})));
     assertThrows(ApiException.class, () -> documents.upload(kb, file("空.md", " \n")));
-    assertTrue(documents.list(kb).isEmpty());
+    assertTrue(documents.list(kb, 1, 10, null).items().isEmpty());
   }
 }

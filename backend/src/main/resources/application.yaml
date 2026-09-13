@@ -9,6 +9,9 @@ spring:
     password: "${POSTGRES_PASSWORD:jagent-local-change-me}"
     hikari:
       connection-timeout: 5000
+      validation-timeout: 3000
+      keepalive-time: 60000
+      max-lifetime: 600000
   flyway:
     enabled: true
   servlet:

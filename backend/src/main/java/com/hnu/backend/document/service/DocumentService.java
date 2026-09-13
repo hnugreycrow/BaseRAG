@@ -1,0 +1,451 @@
+package com.hnu.backend.document.service;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.hnu.backend.document.entity.Document;
+import com.hnu.backend.document.entity.DocumentChunk;
+import com.hnu.backend.document.entity.DocumentVersion;
+import com.hnu.backend.document.mapper.DocumentChunkMapper;
+import com.hnu.backend.document.mapper.DocumentMapper;
+import com.hnu.backend.document.mapper.DocumentVersionMapper;
+import com.hnu.backend.document.parser.MarkdownChunker;
+import com.hnu.backend.document.storage.FileStorage;
+import com.hnu.backend.document.vo.DocumentChunkDetailResponse;
+import com.hnu.backend.document.vo.DocumentChunkResponse;
+import com.hnu.backend.document.vo.DocumentImportResponse;
+import com.hnu.backend.document.vo.DocumentResponse;
+import com.hnu.backend.knowledgebase.service.KnowledgeBaseService;
+import com.hnu.backend.model.client.EmbeddingClient;
+import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.web.PageResponse;
+import java.nio.ByteBuffer;
+import java.nio.charset.CodingErrorAction;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
+import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.Semaphore;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.web.multipart.MultipartFile;
+
+/** 处理 Markdown 文档的上传、分块、向量化及版本数据维护。 */
+@Service
+public class DocumentService {
+  private static final Logger log = LoggerFactory.getLogger(DocumentService.class);
+  private final KnowledgeBaseService knowledgeBases;
+  private final DocumentMapper documents;
+  private final DocumentVersionMapper versions;
+  private final DocumentChunkMapper chunks;
+  private final MarkdownChunker chunker;
+  private final EmbeddingClient embedding;
+  private final FileStorage storage;
+  private final TransactionTemplate tx;
+  private final Semaphore imports = new Semaphore(2);
+
+  public DocumentService(
+      KnowledgeBaseService knowledgeBases,
+      DocumentMapper documents,
+      DocumentVersionMapper versions,
+      DocumentChunkMapper chunks,
+      MarkdownChunker chunker,
+      EmbeddingClient embedding,
+      FileStorage storage,
+      TransactionTemplate tx) {
+    this.knowledgeBases = knowledgeBases;
+    this.documents = documents;
+    this.versions = versions;
+    this.chunks = chunks;
+    this.chunker = chunker;
+    this.embedding = embedding;
+    this.storage = storage;
+    this.tx = tx;
+  }
+
+  /**
+   * 校验并保存 Markdown 原文件，同时创建待处理的文档版本。
+   *
+   * <p>该方法不执行耗时的分块与向量化；若数据库写入失败，会补偿删除已上传的对象。
+   *
+   * @param knowledgeBaseId 所属知识库
+   * @param file 上传文件
+   * @return 状态为 {@code UPLOADED} 的导入结果
+   */
+  public DocumentImportResponse upload(UUID knowledgeBaseId, MultipartFile file) {
+    var knowledgeBase = knowledgeBases.ensureModel(knowledgeBaseId);
+    String name = Optional.ofNullable(file.getOriginalFilename()).orElse("");
+    name = name.replace('\\', '/');
+    name = name.substring(name.lastIndexOf('/') + 1);
+    if (name.isBlank()
+        || name.length() > 255
+        || name.chars().anyMatch(Character::isISOControl)
+        || !(name.toLowerCase(Locale.ROOT).endsWith(".md")
+            || name.toLowerCase(Locale.ROOT).endsWith(".markdown"))) {
+      throw ApiException.bad("INVALID_FILE", "请上传文件名不超过 255 字符的 Markdown 文件");
+    }
+    if (file.isEmpty()) throw ApiException.bad("EMPTY_DOCUMENT", "文档不能为空");
+    if (file.getSize() > 5L * 1024 * 1024)
+      throw new ApiException("FILE_TOO_LARGE", "文件不能超过 5 MiB", HttpStatus.PAYLOAD_TOO_LARGE);
+    byte[] bytes;
+    try {
+      bytes = file.getBytes();
+    } catch (java.io.IOException e) {
+      throw ApiException.bad("INVALID_UTF8", "无法读取文件，请使用 UTF-8 编码");
+    }
+    decode(bytes);
+
+    Document document = new Document();
+    document.setId(UUID.randomUUID());
+    document.setKnowledgeBaseId(knowledgeBaseId);
+    document.setName(name);
+    DocumentVersion version = new DocumentVersion();
+    version.setId(UUID.randomUUID());
+    version.setDocumentId(document.getId());
+    version.setKnowledgeBaseId(knowledgeBaseId);
+    version.setFileHash(hash(bytes));
+    version.setStorageKey(knowledgeBaseId + "/" + document.getId() + "/" + version.getId() + ".md");
+    version.setStatus("UPLOADED");
+    version.setParserVersion("markdown-v1");
+    version.setChunkerVersion("semantic-pack-v2");
+    version.setEmbeddingModel(knowledgeBase.getEmbeddingModel());
+    version.setEmbeddingDimensions(knowledgeBase.getEmbeddingDimensions());
+
+    try {
+      storage.put(version.getStorageKey(), bytes);
+      tx.executeWithoutResult(
+          status -> {
+            knowledgeBases.lockAndBindModel(
+                knowledgeBaseId, version.getEmbeddingModel(), version.getEmbeddingDimensions());
+            documents.insert(document);
+            versions.insert(version);
+          });
+      log.info("upload documentId={} status=UPLOADED", document.getId());
+      return new DocumentImportResponse(document.getId(), "UPLOADED", 0);
+    } catch (RuntimeException e) {
+      removeStoredFile(version.getStorageKey());
+      if (e instanceof ApiException api) throw api;
+      throw ApiException.upstream("IMPORT_FAILED", "文档入库失败，请检查服务状态后重新上传");
+    }
+  }
+
+  /**
+   * 对文档最新版本执行分块和向量化。
+   *
+   * <p>进程内最多允许两个导入任务并发，防止模型和数据库连接被批量任务耗尽。
+   */
+  public DocumentImportResponse createChunks(UUID knowledgeBaseId, UUID documentId) {
+    if (!imports.tryAcquire())
+      throw new ApiException("IMPORT_BUSY", "正在处理其他文档，请稍后重试", HttpStatus.TOO_MANY_REQUESTS);
+    try {
+      return processChunks(knowledgeBaseId, documentId);
+    } finally {
+      imports.release();
+    }
+  }
+
+  private DocumentImportResponse processChunks(UUID knowledgeBaseId, UUID documentId) {
+    Document document = requireDocument(knowledgeBaseId, documentId);
+    DocumentVersion version = latestVersion(documentId);
+    boolean rebuilding = "READY".equals(version.getStatus());
+    if ("PROCESSING".equals(version.getStatus())) {
+      throw new ApiException("DOCUMENT_PROCESSING", "文档正在分块，请稍后刷新", HttpStatus.CONFLICT);
+    }
+    int claimed =
+        versions.update(
+            new LambdaUpdateWrapper<DocumentVersion>()
+                .eq(DocumentVersion::getId, version.getId())
+                .in(DocumentVersion::getStatus, "UPLOADED", "FAILED", "READY")
+                .set(DocumentVersion::getStatus, "PROCESSING")
+                .set(DocumentVersion::getErrorCode, null));
+    if (claimed != 1)
+      throw new ApiException("DOCUMENT_PROCESSING", "文档正在分块，请稍后刷新", HttpStatus.CONFLICT);
+    // 先通过条件更新抢占处理权，确保同一版本不会被两个请求重复向量化。
+    version.setStatus("PROCESSING");
+    version.setErrorCode(null);
+    try {
+      String text = decode(storage.get(version.getStorageKey()));
+      List<MarkdownChunker.Piece> pieces = chunker.split(text);
+      if (pieces.isEmpty()) throw ApiException.bad("EMPTY_DOCUMENT", "文档没有可用文本");
+      if (pieces.size() > 1000)
+        throw ApiException.bad("TOO_MANY_CHUNKS", "单份文档最多处理 1000 个片段，请拆分文档");
+      embedding.requireConfigured(version.getEmbeddingModel(), version.getEmbeddingDimensions());
+      List<float[]> vectors =
+          embedding.embed(
+              version.getEmbeddingModel(),
+              version.getEmbeddingDimensions(),
+              pieces.stream().map(MarkdownChunker.Piece::content).toList());
+      tx.executeWithoutResult(
+          status -> {
+            // 新分块和激活版本在同一事务内切换，查询端不会观察到半成品版本。
+            knowledgeBases.lockAndBindModel(
+                knowledgeBaseId, version.getEmbeddingModel(), version.getEmbeddingDimensions());
+            chunks.delete(
+                new LambdaQueryWrapper<DocumentChunk>()
+                    .eq(DocumentChunk::getDocumentId, document.getId()));
+            for (int i = 0; i < pieces.size(); i++) {
+              var piece = pieces.get(i);
+              DocumentChunk chunk = new DocumentChunk();
+              chunk.setId(UUID.randomUUID());
+              chunk.setDocumentId(document.getId());
+              chunk.setVersionId(version.getId());
+              chunk.setChunkIndex(i);
+              chunk.setContent(piece.content());
+              chunk.setHeading(piece.heading());
+              chunk.setLineStart(piece.lineStart());
+              chunk.setLineEnd(piece.lineEnd());
+              chunk.setEmbeddingDimensions(version.getEmbeddingDimensions());
+              chunk.setVector(EmbeddingClient.literal(vectors.get(i)));
+              chunks.insertVector(chunk);
+            }
+            version.setStatus("READY");
+            version.setChunkerVersion("semantic-pack-v2");
+            versions.updateById(version);
+            document.setActiveVersionId(version.getId());
+            documents.updateById(document);
+          });
+      log.info("chunk documentId={} chunks={} status=READY", document.getId(), pieces.size());
+      return new DocumentImportResponse(document.getId(), "READY", pieces.size());
+    } catch (RuntimeException e) {
+      String code = e instanceof ApiException api ? api.code() : "IMPORT_FAILED";
+      try {
+        tx.executeWithoutResult(
+            status -> {
+              // 重建失败时保留原 READY 状态和旧分块；首次处理失败则标记为 FAILED。
+              version.setStatus(rebuilding ? "READY" : "FAILED");
+              version.setErrorCode(code);
+              versions.updateById(version);
+            });
+      } catch (RuntimeException markingFailure) {
+        log.error("Could not mark failed chunking documentId={} code={}", document.getId(), code);
+      }
+      if (e instanceof ApiException api) throw api;
+      throw ApiException.upstream("IMPORT_FAILED", "文档分块失败，请检查服务状态后重试");
+    }
+  }
+
+  /** 分页查询知识库内文档及其最新版本状态和生效分块数。 */
+  public PageResponse<DocumentResponse> list(UUID id, int page, int pageSize, String rawQuery) {
+    knowledgeBases.requireEntity(id);
+    String query = normalizeQuery(rawQuery);
+    long rowOffset = offset(page, pageSize);
+    long total = documents.selectCount(documentQuery(id, query));
+    List<DocumentResponse> items =
+        documents
+            .selectList(
+                documentQuery(id, query)
+                    .orderByDesc(Document::getCreatedAt)
+                    .orderByAsc(Document::getId)
+                    .last("LIMIT " + pageSize + " OFFSET " + rowOffset))
+            .stream()
+            .map(this::toDocumentResponse)
+            .toList();
+    return PageResponse.of(items, total, page, pageSize);
+  }
+
+  /** 修改文档显示名称。 */
+  public DocumentResponse rename(UUID knowledgeBaseId, UUID documentId, String rawName) {
+    Document document = requireDocument(knowledgeBaseId, documentId);
+    String name = normalizeDocumentName(rawName);
+    document.setName(name);
+    documents.updateById(document);
+    return toDocumentResponse(document);
+  }
+
+  /** 在事务内删除文档关系数据，提交后尽力移除各版本对应的对象存储文件。 */
+  public void delete(UUID knowledgeBaseId, UUID documentId) {
+    requireDocument(knowledgeBaseId, documentId);
+    List<DocumentVersion> storedVersions =
+        versions.selectList(
+            new LambdaQueryWrapper<DocumentVersion>()
+                .eq(DocumentVersion::getDocumentId, documentId));
+    tx.executeWithoutResult(
+        status -> {
+          documents.update(
+              new LambdaUpdateWrapper<Document>()
+                  .eq(Document::getId, documentId)
+                  .set(Document::getActiveVersionId, null));
+          chunks.delete(
+              new LambdaQueryWrapper<DocumentChunk>().eq(DocumentChunk::getDocumentId, documentId));
+          versions.delete(
+              new LambdaQueryWrapper<DocumentVersion>()
+                  .eq(DocumentVersion::getDocumentId, documentId));
+          documents.deleteById(documentId);
+        });
+    storedVersions.forEach(version -> removeStoredFile(version.getStorageKey()));
+  }
+
+  /** 分页查询文档当前生效版本的分块摘要；尚无生效版本时返回空页。 */
+  public PageResponse<DocumentChunkResponse> listChunks(
+      UUID knowledgeBaseId, UUID documentId, int page, int pageSize, String rawQuery) {
+    Document document = requireDocument(knowledgeBaseId, documentId);
+    long rowOffset = offset(page, pageSize);
+    if (document.getActiveVersionId() == null) return PageResponse.empty(page, pageSize);
+    String query = normalizeQuery(rawQuery);
+    long total = chunks.selectCount(chunkQuery(documentId, document.getActiveVersionId(), query));
+    List<DocumentChunkResponse> items =
+        chunks
+            .selectList(
+                chunkQuery(documentId, document.getActiveVersionId(), query)
+                    .orderByAsc(DocumentChunk::getChunkIndex)
+                    .last("LIMIT " + pageSize + " OFFSET " + rowOffset))
+            .stream()
+            .map(this::toChunkResponse)
+            .toList();
+    return PageResponse.of(items, total, page, pageSize);
+  }
+
+  /** 获取文档当前生效版本中的指定分块。 */
+  public DocumentChunkDetailResponse chunk(UUID knowledgeBaseId, UUID documentId, UUID chunkId) {
+    Document document = requireDocument(knowledgeBaseId, documentId);
+    DocumentChunk chunk = chunks.selectById(chunkId);
+    if (chunk == null
+        || !chunk.getDocumentId().equals(documentId)
+        || !Objects.equals(chunk.getVersionId(), document.getActiveVersionId()))
+      throw new ApiException("CHUNK_NOT_FOUND", "分块不存在", HttpStatus.NOT_FOUND);
+    return new DocumentChunkDetailResponse(
+        chunk.getId(),
+        chunk.getDocumentId(),
+        chunk.getVersionId(),
+        chunk.getChunkIndex(),
+        chunk.getHeading(),
+        chunk.getLineStart(),
+        chunk.getLineEnd(),
+        chunk.getContent().length(),
+        chunk.getContent());
+  }
+
+  private DocumentResponse toDocumentResponse(Document document) {
+    DocumentVersion version = latestVersion(document.getId());
+    long chunkCount =
+        document.getActiveVersionId() == null
+            ? 0
+            : chunks.selectCount(
+                new LambdaQueryWrapper<DocumentChunk>()
+                    .eq(DocumentChunk::getVersionId, document.getActiveVersionId()));
+    return new DocumentResponse(
+        document.getId(),
+        document.getName(),
+        version.getStatus(),
+        version.getErrorCode(),
+        chunkCount,
+        document.getCreatedAt());
+  }
+
+  private DocumentChunkResponse toChunkResponse(DocumentChunk chunk) {
+    String content = chunk.getContent();
+    String preview = content.length() > 160 ? content.substring(0, 160) + "…" : content;
+    return new DocumentChunkResponse(
+        chunk.getId(),
+        chunk.getChunkIndex(),
+        chunk.getHeading(),
+        chunk.getLineStart(),
+        chunk.getLineEnd(),
+        content.length(),
+        preview);
+  }
+
+  private LambdaQueryWrapper<Document> documentQuery(UUID knowledgeBaseId, String query) {
+    LambdaQueryWrapper<Document> wrapper =
+        new LambdaQueryWrapper<Document>().eq(Document::getKnowledgeBaseId, knowledgeBaseId);
+    if (query != null) wrapper.like(Document::getName, query);
+    return wrapper;
+  }
+
+  private LambdaQueryWrapper<DocumentChunk> chunkQuery(
+      UUID documentId, UUID versionId, String query) {
+    LambdaQueryWrapper<DocumentChunk> wrapper =
+        new LambdaQueryWrapper<DocumentChunk>()
+            .eq(DocumentChunk::getDocumentId, documentId)
+            .eq(DocumentChunk::getVersionId, versionId);
+    if (query != null)
+      wrapper.and(
+          nested ->
+              nested
+                  .like(DocumentChunk::getHeading, query)
+                  .or()
+                  .like(DocumentChunk::getContent, query));
+    return wrapper;
+  }
+
+  private String normalizeQuery(String rawQuery) {
+    if (rawQuery == null || rawQuery.isBlank()) return null;
+    return rawQuery.trim();
+  }
+
+  private long offset(int page, int pageSize) {
+    if (page < 1 || pageSize < 1 || pageSize > 100)
+      throw ApiException.bad("INVALID_PAGE", "页码应大于 0，每页数量应为 1 到 100");
+    return (long) (page - 1) * pageSize;
+  }
+
+  private DocumentVersion latestVersion(UUID documentId) {
+    DocumentVersion version =
+        versions.selectOne(
+            new LambdaQueryWrapper<DocumentVersion>()
+                .eq(DocumentVersion::getDocumentId, documentId)
+                .orderByDesc(DocumentVersion::getCreatedAt)
+                .last("LIMIT 1"));
+    if (version == null)
+      throw new ApiException("DOCUMENT_VERSION_NOT_FOUND", "文档版本不存在", HttpStatus.NOT_FOUND);
+    return version;
+  }
+
+  /** 严格按 UTF-8 解码并拒绝空文本、非法字节和二进制空字符。 */
+  private String decode(byte[] bytes) {
+    String text;
+    try {
+      text =
+          StandardCharsets.UTF_8
+              .newDecoder()
+              .onMalformedInput(CodingErrorAction.REPORT)
+              .onUnmappableCharacter(CodingErrorAction.REPORT)
+              .decode(ByteBuffer.wrap(bytes))
+              .toString();
+    } catch (java.nio.charset.CharacterCodingException e) {
+      throw ApiException.bad("INVALID_UTF8", "无法读取文件，请使用 UTF-8 编码");
+    }
+    if (text.startsWith("\uFEFF")) text = text.substring(1);
+    if (text.indexOf('\0') >= 0) throw ApiException.bad("INVALID_FILE", "Markdown 不能包含二进制空字符");
+    if (text.isBlank()) throw ApiException.bad("EMPTY_DOCUMENT", "文档没有可用文本");
+    return text;
+  }
+
+  private Document requireDocument(UUID knowledgeBaseId, UUID documentId) {
+    knowledgeBases.requireEntity(knowledgeBaseId);
+    Document document = documents.selectById(documentId);
+    if (document == null || !document.getKnowledgeBaseId().equals(knowledgeBaseId))
+      throw new ApiException("DOCUMENT_NOT_FOUND", "文档不存在", HttpStatus.NOT_FOUND);
+    return document;
+  }
+
+  private String normalizeDocumentName(String rawName) {
+    String name = rawName == null ? "" : rawName.trim();
+    if (name.isEmpty() || name.length() > 255 || name.chars().anyMatch(Character::isISOControl))
+      throw ApiException.bad("INVALID_DOCUMENT_NAME", "文档名称应为 1 到 255 个有效字符");
+    return name;
+  }
+
+  private void removeStoredFile(String key) {
+    try {
+      storage.remove(key);
+    } catch (RuntimeException e) {
+      log.warn("Could not remove stored document file key={}", key, e);
+    }
+  }
+
+  private String hash(byte[] bytes) {
+    try {
+      return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+    } catch (NoSuchAlgorithmException e) {
+      throw new IllegalStateException(e);
+    }
+  }
+}
