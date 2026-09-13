@@ -1,6 +1,16 @@
 # JAgent
 
-阶段 1：导入 Markdown，用真实检索片段生成单轮回答。Java 21 + Spring Boot 4 + MyBatis-Plus + PostgreSQL/pgvector + RustFS，前端为 Vue 3。
+JAgent 是一个本地运行的单用户 RAG 知识问答系统。当前版本支持 Markdown 知识库、手动分块与向量化、全库检索、多轮会话、SSE 流式回答和来源审计。后端采用 Java 21、Spring Boot 4、MyBatis-Plus、PostgreSQL/pgvector 与 RustFS，前端采用 Vue 3。
+
+## 当前范围
+
+- 支持创建知识库并绑定配置中的 Embedding 模型。
+- 仅支持不超过 5 MiB 的 UTF-8 Markdown；上传后由用户手动开始分块。
+- 问答默认检索全部知识库中当前生效的 READY 文档，不支持用户指定检索范围。
+- 支持历史摘要、独立问题改写、流式回答、停止、重试、重新生成和回答版本切换。
+- 当前没有登录、多用户隔离、PDF、异步索引、混合检索、Agent、MCP 或公网部署能力。
+
+当前产品范围和验收标准以 [REQUIREMENTS.md](REQUIREMENTS.md) 为唯一来源；技术实现以 [架构文档](docs/architecture.md) 为准。
 
 ## 启动
 
@@ -12,7 +22,7 @@
    Copy-Item .env.example .env
    ```
 
-   编辑 .env：填写 `BAILIAN_API_KEY`、`SILICONFLOW_API_KEY` 和 `EMBEDDING_DIMENSIONS`。当前对话模型为百炼 `qwen-plus-latest`；知识库可选的 Embedding 模型来自 `application.yaml` 的候选列表，默认包含 SiliconFlow `Qwen/Qwen3-Embedding-8B`。为兼容已有本地配置，暂时仍接受旧的 `CHAT_API_KEY` 与 `EMBEDDING_API_KEY`。
+   编辑 `.env`：填写 `application.yaml` 当前启用服务商所需的 API Key（如 `DEEPSEEK_API_KEY`、`BAILIAN_API_KEY`、`SILICONFLOW_API_KEY`）以及 `EMBEDDING_DIMENSIONS`。Chat 与 Embedding 的候选模型、顺序和超时都以 `backend/src/main/resources/application.yaml` 为准；不要在文档或代码中依赖某个固定模型名称。为兼容已有本地配置，暂时仍接受旧的 `CHAT_API_KEY` 与 `EMBEDDING_API_KEY`。
 
 2. 启动存储：
 
@@ -41,7 +51,7 @@
 
    打开终端输出的本地地址（通常 http://127.0.0.1:5173）。在 /admin 进入默认知识库并上传 evaluation/datasets/employee-handbook.md，点击文档行的“开始分块”，再回到 /chat 提问“试用期员工能申请年假吗？”，点击回答下的“检索来源”核对原文与行号。
 
-本阶段仅用于本地开发，不提供登录、用户权限或正式部署。默认 local profile；其他 profile 启动会拒绝运行。密钥不得提交到仓库。
+当前版本仅用于本地开发，不提供登录、用户权限或正式部署。默认 local profile；其他 profile 启动会拒绝运行。密钥不得提交到仓库。
 
 后端主配置使用 backend/src/main/resources/application.yaml，按 `spring`、`server`、`mybatis-plus`、`ai`、`rag` 分组。`ai` 负责服务商、端点、候选模型、层级、超时和熔断参数；`rag` 只负责检索、分块和存储配置。.env 仍只用于本地凭据注入和 Docker Compose，不替代 YAML 主配置。
 
@@ -111,6 +121,19 @@ createdb 仅需首次执行；已存在时无需重建。测试默认连接独�
 
 SSE v1 事件为 started、delta、reset、complete、cancelled、error，每条数据都包含 schemaVersion。sources 包含 citationId、knowledgeBaseId、knowledgeBaseName、chunkId、documentId、versionId、documentName、heading、lineStart、lineEnd、similarity、content；与 citations、modelInfo 一起按回答版本保存。/api/questions 保留为阶段 1 评测兼容入口。
 
+除 SSE 和 `204 No Content` 外，JSON 接口统一返回：
+
+```json
+{
+  "code": "SUCCESS",
+  "message": "请求成功",
+  "data": {},
+  "requestId": "请求追踪 ID"
+}
+```
+
+失败响应保持对应的 HTTP 4xx/5xx 状态，`code` 为稳定的业务错误码，`message` 为可展示说明，`data` 通常为 `null`；参数校验失败时包含字段错误列表。`requestId` 同时写入 `X-Request-Id` 响应头。前端 HTTP 客户端会自动解包 `data`，流式事件协议不变。
+
 ## 限制与配置
 
 - 只支持 UTF-8 .md / .markdown，最大 5 MiB、最多 1000 块。上传状态为 `UPLOADED`，手动分块失败后可在原文档上重试。
@@ -121,6 +144,6 @@ SSE v1 事件为 started、delta、reset、complete、cancelled、error，每条
 - 本机已有 5432/9000 端口占用时，修改 Compose 映射及对应连接地址。
 - 默认数据库与 RustFS 密码只是本地示例，应在个人 .env 中修改。已有 PostgreSQL volume 修改密码不会自动改变数据库用户密码。
 
-架构和细节见 [architecture.md](docs/architecture.md)、[backend-structure.md](docs/backend-structure.md)、[decisions.md](docs/decisions.md)。实际执行的检查见 [validation.md](docs/validation.md)，阶段结论见 [阶段 1 验收分析](docs/phase-1-acceptance.md)，后续范围见 [阶段 2 计划](docs/phase-2-plan.md)。
+当前范围见 [REQUIREMENTS.md](REQUIREMENTS.md)，架构和目录约束见 [architecture.md](docs/architecture.md) 与 [backend-structure.md](docs/backend-structure.md)，历史决策见 [decisions.md](docs/decisions.md)。实际执行的检查见 [validation.md](docs/validation.md)，历史阶段结论见 [阶段 1 验收分析](docs/phase-1-acceptance.md)。[阶段 2 计划](docs/phase-2-plan.md) 是部分已落地的历史路线图，不覆盖当前需求基线。
 
 
