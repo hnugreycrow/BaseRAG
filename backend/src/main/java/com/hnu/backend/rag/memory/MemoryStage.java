@@ -4,14 +4,27 @@ import java.util.Objects;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
 
+/** RAG 流程的记忆加载阶段，负责统一校验阶段输入和提供者输出。 */
 @Component
 public final class MemoryStage {
   private final MemoryProvider provider;
 
+  /**
+   * 创建记忆加载阶段。
+   *
+   * @param provider 会话记忆提供者
+   */
   public MemoryStage(MemoryProvider provider) {
     this.provider = provider;
   }
 
+  /**
+   * 加载当前轮次之前的会话记忆。
+   *
+   * @param conversationId 会话标识
+   * @param beforeTurn 当前问题所在轮次
+   * @return 已校验的会话记忆
+   */
   public RagMemory execute(UUID conversationId, int beforeTurn) {
     Objects.requireNonNull(conversationId, "conversationId");
     if (beforeTurn < 1) throw new IllegalArgumentException("beforeTurn must be positive");

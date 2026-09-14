@@ -7,8 +7,16 @@ import java.util.List;
 import java.util.UUID;
 import org.apache.ibatis.annotations.Mapper;
 
+/** 会话的数据访问接口。 */
 @Mapper
 public interface ConversationMapper extends BaseMapper<Conversation> {
+  /**
+   * 创建会话。
+   *
+   * @param id 会话标识
+   * @param title 初始标题
+   * @return 受影响行数
+   */
   default int insert(UUID id, String title) {
     Conversation conversation = new Conversation();
     conversation.setId(id);
@@ -16,10 +24,23 @@ public interface ConversationMapper extends BaseMapper<Conversation> {
     return insert(conversation);
   }
 
+  /**
+   * 按标识查询会话。
+   *
+   * @param id 会话标识
+   * @return 会话；不存在时返回 {@code null}
+   */
   default Conversation find(UUID id) {
     return selectById(id);
   }
 
+  /**
+   * 按最近更新时间列出会话，可选按标题模糊搜索。
+   *
+   * @param query 可选的标题搜索词
+   * @param limit 最大返回数量
+   * @return 会话列表
+   */
   default List<Conversation> list(String query, int limit) {
     return selectList(
         Wrappers.<Conversation>lambdaQuery()
@@ -32,6 +53,13 @@ public interface ConversationMapper extends BaseMapper<Conversation> {
             .last("LIMIT " + limit));
   }
 
+  /**
+   * 修改会话标题并刷新更新时间。
+   *
+   * @param id 会话标识
+   * @param title 新标题
+   * @return 受影响行数
+   */
   default int rename(UUID id, String title) {
     return update(
         Wrappers.<Conversation>lambdaUpdate()
@@ -40,6 +68,12 @@ public interface ConversationMapper extends BaseMapper<Conversation> {
             .setSql("updated_at = now()"));
   }
 
+  /**
+   * 刷新会话更新时间，使最近有活动的会话优先展示。
+   *
+   * @param id 会话标识
+   * @return 受影响行数
+   */
   default int touch(UUID id) {
     return update(
         Wrappers.<Conversation>lambdaUpdate()
@@ -47,7 +81,17 @@ public interface ConversationMapper extends BaseMapper<Conversation> {
             .setSql("updated_at = now()"));
   }
 
+  /**
+   * 使用乐观锁更新会话摘要及其覆盖轮次。
+   *
+   * @param id 会话标识
+   * @param summaryJson 新摘要的 JSON 表示
+   * @param throughTurn 摘要覆盖到的最大轮次
+   * @param expectedRevision 调用方读取到的摘要版本
+   * @return 受影响行数；为 0 表示版本冲突或会话不存在
+   */
   default int updateSummary(UUID id, String summaryJson, int throughTurn, int expectedRevision) {
+    // revision 条件与自增必须在同一条 SQL 中完成，避免并发摘要相互覆盖。
     return update(
         Wrappers.<Conversation>update()
             .eq("id", id)
@@ -58,6 +102,12 @@ public interface ConversationMapper extends BaseMapper<Conversation> {
             .setSql("updated_at = now()"));
   }
 
+  /**
+   * 删除会话。
+   *
+   * @param id 会话标识
+   * @return 受影响行数
+   */
   default int delete(UUID id) {
     return deleteById(id);
   }
