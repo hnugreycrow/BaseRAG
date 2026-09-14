@@ -56,6 +56,17 @@ class RagServiceTest {
     verifyNoInteractions(retrieval, chat);
   }
 
+  @Test
+  void passesRequestedKnowledgeBaseScopeToRetrieval() {
+    UUID knowledgeBaseId = UUID.randomUUID();
+    when(retrieval.retrieve("年假？", List.of(knowledgeBaseId))).thenReturn(List.of());
+
+    service.ask("年假？", List.of(knowledgeBaseId));
+
+    verify(retrieval).retrieve("年假？", List.of(knowledgeBaseId));
+    verify(retrieval, never()).retrieve("年假？");
+  }
+
   private ChatClient.Generation generation(String content) {
     return new ChatClient.Generation(content, "qwen-plus", "bailian", "qwen-plus-latest");
   }

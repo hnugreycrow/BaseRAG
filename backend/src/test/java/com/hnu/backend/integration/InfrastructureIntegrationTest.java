@@ -18,6 +18,7 @@ import com.hnu.backend.knowledgebase.mapper.KnowledgeBaseMapper;
 import com.hnu.backend.model.client.ChatClient;
 import com.hnu.backend.model.client.EmbeddingClient;
 import com.hnu.backend.rag.mapper.RetrievalMapper;
+import com.hnu.backend.rag.model.EmbeddingBinding;
 import com.hnu.backend.shared.error.ApiException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -257,6 +258,13 @@ class InfrastructureIntegrationTest {
     assertEquals(1.0, hits.getFirst().getSimilarity(), 1e-6);
     assertEquals(0.0, hits.get(1).getSimilarity(), 1e-6);
     assertTrue(hits.stream().noneMatch(h -> h.getDocumentName().equals("其他库.md")));
+    var scopedHits =
+        retrievalMapper.searchIn(List.of(first), "[1,0]", "Qwen/Qwen3-Embedding-8B", 2, 10);
+    assertEquals(2, scopedHits.size());
+    assertTrue(scopedHits.stream().noneMatch(h -> h.getDocumentName().equals("其他库.md")));
+    assertEquals(
+        List.of(new EmbeddingBinding("Qwen/Qwen3-Embedding-8B", 2)),
+        retrievalMapper.activeModelBindingsIn(List.of(first)));
   }
 
   @Test

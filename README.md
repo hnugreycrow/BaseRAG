@@ -99,19 +99,35 @@ createdb 仅需首次执行；已存在时无需重建。测试默认连接独�
 
 脚本上传样例并逐条执行 20 个问题，保存实际响应及错误到 .artifacts/evaluation-*.json。它不将来源字符串命中自动等同于答案正确，人工检查回答忠实性与引用支持。再次执行会导入新文档；建议在干净的开发知识库验收。参考 [演示与验收](docs/demo.md)。
 
+业务仿真基准使用独立知识库和显式检索范围：
+
+```powershell
+# 默认运行 40 道开发题，完成后删除临时知识库
+./scripts/evaluate-business.ps1
+
+# 运行 20 道留出测试题并保留知识库，便于后续复用
+./scripts/evaluate-business.ps1 -Split test -KeepKnowledgeBase
+
+# 复用已完成索引的评测知识库
+./scripts/evaluate-business.ps1 -Split development -KnowledgeBaseId <UUID>
+```
+
+结果保存到 `.artifacts/business-evaluation-<split>-<timestamp>.json`，包含导入记录、原始回答、requestId、错误阶段、逐项必要证据命中、知识库范围校验、P50/P95 延迟和待人工评分字段。自动证据命中不是回答正确率，仍需人工检查答案正确性、引用支持和拒答。
+
 ## 接口
 
 | 方法 | 路径 | 输入 / 输出 |
 | --- | --- | --- |
 | GET / POST | /api/knowledge-bases | 查询或新建知识库 |
 | GET | /api/knowledge-bases/embedding-models | 查询 YAML 中配置的可选向量模型 |
+| GET | /api/evaluation/config | local profile 下查询非敏感 RAG 评测参数快照 |
 | GET / PATCH / DELETE | /api/knowledge-bases/{id} | 查询、重命名或删除知识库 |
 | POST | /api/knowledge-bases/{id}/documents | multipart file → documentId、status、chunkCount |
 | GET | /api/knowledge-bases/{id}/documents | 文档 id、name、status、errorCode、chunkCount、createdAt |
 | PATCH / DELETE | /api/knowledge-bases/{id}/documents/{documentId} | 重命名或删除文档 |
 | GET / POST | /api/knowledge-bases/{id}/documents/{documentId}/chunks | 查询分块 / 手动启动分块与向量化 |
 | GET | /api/knowledge-bases/{id}/documents/{documentId}/chunks/{chunkId} | 分块完整内容与元数据 |
-| POST | /api/questions | 全库检索；JSON question → answer、sources、citations、modelInfo |
+| POST | /api/questions | 单轮检索；JSON question 与可选 knowledgeBaseIds → answer、sources、citations、modelInfo |
 | GET / POST | /api/conversations | 标题搜索/列表或创建会话 |
 | GET / PATCH / DELETE | /api/conversations/{id} | 恢复、重命名或删除会话 |
 | POST (SSE) | /api/conversations/{id}/messages | 创建用户消息并流式生成回答 |

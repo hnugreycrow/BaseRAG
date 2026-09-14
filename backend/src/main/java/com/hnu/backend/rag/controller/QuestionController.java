@@ -24,6 +24,6 @@ public class QuestionController {
   /** 检索知识库并生成带来源引用的回答。 */
   @PostMapping
   public AnswerResponse ask(@Valid @RequestBody QuestionRequest request) {
-    return rag.ask(request.question());
+    return rag.ask(request.question(), request.knowledgeBaseIds());
   }
 }

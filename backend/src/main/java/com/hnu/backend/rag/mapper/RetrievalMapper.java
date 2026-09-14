@@ -11,7 +11,17 @@ import org.apache.ibatis.annotations.Param;
 public interface RetrievalMapper {
   List<EmbeddingBinding> activeModelBindings();
 
+  List<EmbeddingBinding> activeModelBindingsIn(
+      @Param("knowledgeBaseIds") List<UUID> knowledgeBaseIds);
+
   List<SearchHit> searchAll(
+      @Param("vector") String vector,
+      @Param("model") String model,
+      @Param("dimensions") int dimensions,
+      @Param("limit") int limit);
+
+  List<SearchHit> searchIn(
+      @Param("knowledgeBaseIds") List<UUID> knowledgeBaseIds,
       @Param("vector") String vector,
       @Param("model") String model,
       @Param("dimensions") int dimensions,

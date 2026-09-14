@@ -55,3 +55,19 @@
 配套的 `questions.json` 包含 60 道金标准问题，分为 40 道开发题和 20 道留出测试题。字段、评分方式和运行纪律见 `evaluation-spec.md`。
 
 在仓库根目录运行 `./scripts/validate-business-dataset.ps1`，可以检查题号、分组、可回答性以及每条必要证据对应的文件、标题和原文。必要证据应始终引用最小、连续的原文，不要只记录关键词。
+
+## 执行评测
+
+后端和真实模型服务就绪后，在仓库根目录运行：
+
+```powershell
+# 调参使用的 40 道开发题
+./scripts/evaluate-business.ps1 -Split development
+
+# 形成候选方案后运行的 20 道留出测试题
+./scripts/evaluate-business.ps1 -Split test
+```
+
+脚本默认创建临时知识库、上传并向量化 28 份文档、限定问答只检索该知识库，并在结束后删除临时库。添加 `-KeepKnowledgeBase` 可以保留索引；后续通过 `-KnowledgeBaseId <UUID>` 复用，但脚本会检查 28 份文档是否齐全且全部为 `READY`。
+
+结果写入 `.artifacts/business-evaluation-<split>-<timestamp>.json`。使用 `-Limit 3` 可以先做三题冒烟检查，使用 `-EmbeddingModelId <模型ID>` 可以选择后端配置的候选 Embedding 模型。

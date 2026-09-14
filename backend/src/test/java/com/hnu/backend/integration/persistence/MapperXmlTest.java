@@ -33,7 +33,9 @@ class MapperXmlTest {
             "mapper/rag/RetrievalMapper.xml",
             new ExpectedMapper(
                 RetrievalMapper.class,
-                new String[] {"activeModelBindings", "searchAll", "search"}));
+                new String[] {
+                  "activeModelBindings", "activeModelBindingsIn", "searchAll", "searchIn", "search"
+                }));
 
     for (var entry : expectedMappers.entrySet()) {
       try (InputStream input = resource(entry.getKey())) {

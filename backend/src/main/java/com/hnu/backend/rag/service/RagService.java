@@ -8,6 +8,7 @@ import com.hnu.backend.rag.vo.AnswerResponse;
 import com.hnu.backend.rag.vo.ModelInfoResponse;
 import com.hnu.backend.shared.error.ApiException;
 import java.util.List;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -49,6 +50,17 @@ public class RagService {
    * @return 回答、来源、实际引用和模型信息
    */
   public AnswerResponse ask(String question) {
+    return ask(question, null);
+  }
+
+  /**
+   * 根据问题和可选知识库范围生成回答。
+   *
+   * @param question 用户问题
+   * @param knowledgeBaseIds 允许检索的知识库；null 表示全部知识库
+   * @return 回答、来源、实际引用和模型信息
+   */
+  public AnswerResponse ask(String question, List<UUID> knowledgeBaseIds) {
     if (question == null
         || question.isBlank()
         || question.length() > config.getMaxQuestionChars()) {
@@ -56,7 +68,11 @@ public class RagService {
           "INVALID_QUESTION", "请输入非空问题，长度不能超过 " + config.getMaxQuestionChars() + " 字符");
     }
     long started = System.nanoTime();
-    var hits = retrieval.retrieve(question.strip());
+    String normalizedQuestion = question.strip();
+    var hits =
+        knowledgeBaseIds == null
+            ? retrieval.retrieve(normalizedQuestion)
+            : retrieval.retrieve(normalizedQuestion, knowledgeBaseIds);
     var context = contexts.build(hits);
     long retrieved = System.nanoTime();
     if (context.sources().isEmpty()) {
@@ -84,7 +100,8 @@ public class RagService {
       }
     }
     log.info(
-        "qa scope=all candidates={} sources={} citations={} provider={} model={} retrievalMs={} generationMs={} totalMs={}",
+        "qa scope={} candidates={} sources={} citations={} provider={} model={} retrievalMs={} generationMs={} totalMs={}",
+        knowledgeBaseIds == null ? "all" : knowledgeBaseIds.size(),
         hits.size(),
         context.sources().size(),
         citations.size(),
