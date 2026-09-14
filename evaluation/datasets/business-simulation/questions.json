@@ -1,0 +1,737 @@
+{
+  "schemaVersion": "1.0",
+  "corpusId": "xinglan-business-simulation",
+  "corpusVersion": "1.0",
+  "cases": [
+    {
+      "id": "biz001",
+      "split": "development",
+      "type": "single_fact",
+      "question": "公司的标准工作日、办公时间和午休时间分别是什么？",
+      "answerable": true,
+      "referenceAnswer": "标准工作日为周一至周五，办公时间为 09:20–18:20，午休为 12:10–13:10，均按员工工作地当地时间。",
+      "requiredEvidence": [
+        {"sourceFile": "01-company-calendar.md", "heading": "标准工作日", "text": "公司的标准工作日为周一至周五。标准办公时间为 09:20 至 18:20，午休时间为 12:10 至 13:10。办公时间以员工工作地的当地时间为准，不按总部时区换算。"}
+      ],
+      "tags": ["hr", "time", "multi_fact"]
+    },
+    {
+      "id": "biz002",
+      "split": "development",
+      "type": "boundary",
+      "question": "工作日恰好 09:25 签到会被记为迟到吗？",
+      "answerable": true,
+      "referenceAnswer": "不会。规则是 09:25 之后签到才记为迟到，09:20 至 09:25 属于五分钟宽限区间。",
+      "requiredEvidence": [
+        {"sourceFile": "02-attendance.md", "heading": "迟到与早退", "text": "员工在工作日 09:25 之后完成签到记为迟到。09:20 至 09:25 的五分钟为系统宽限区间，不扣减薪资，也不计入迟到次数。"}
+      ],
+      "tags": ["hr", "boundary", "time"]
+    },
+    {
+      "id": "biz003",
+      "split": "development",
+      "type": "single_fact",
+      "question": "转正员工每年有多少年假，未休年假最多能结转多少？",
+      "answerable": true,
+      "referenceAnswer": "转正员工每个自然年有 7 天带薪年假，最多结转 2 天到下一年，并须在下一年 3 月 31 日前使用。",
+      "requiredEvidence": [
+        {"sourceFile": "03-leave-policy.md", "heading": "年假资格", "text": "通过试用期的员工每个自然年享有 7 天带薪年假。试用期员工不能申请年假。"},
+        {"sourceFile": "03-leave-policy.md", "heading": "年假资格", "text": "未使用的年假最多可结转 2 天至下一自然年，结转部分必须在下一年 3 月 31 日前使用，超过该日期自动失效。"}
+      ],
+      "tags": ["hr", "leave", "multi_evidence"]
+    },
+    {
+      "id": "biz004",
+      "split": "development",
+      "type": "single_fact",
+      "question": "现行远程办公额度是多少，额度能否结转？",
+      "answerable": true,
+      "referenceAnswer": "符合条件的员工每两个自然周最多远程办公 3 天，按固定双周周期计算，不能跨周期结转。",
+      "requiredEvidence": [
+        {"sourceFile": "04-remote-work-current.md", "heading": "可用天数", "text": "符合条件的员工每两个自然周最多远程办公 3 天，不是每周 3 天。额度按连续两个周一至周日的固定周期计算，不跨周期结转。"}
+      ],
+      "tags": ["hr", "remote", "current_policy"]
+    },
+    {
+      "id": "biz005",
+      "split": "development",
+      "type": "versioned_fact",
+      "question": "2026 年 6 月 15 日，当时有效的远程办公试行额度是多少？",
+      "answerable": true,
+      "referenceAnswer": "当时适用版本 2.1，通过试用期的员工每周最多远程办公 1 天，通常安排在周三。",
+      "requiredEvidence": [
+        {"sourceFile": "05-remote-work-archived.md", "heading": "历史规则", "text": "在本试行版本下，通过试用期的员工每周最多远程办公 1 天，通常安排在周三。"},
+        {"sourceFile": "05-remote-work-archived.md", "heading": "重要说明", "text": "本文件已被 XL-HR-033 版本 3.0 完整替代，不得用于判断 2026 年 7 月 1 日及之后的远程办公资格和额度。"}
+      ],
+      "tags": ["hr", "remote", "historical", "date"]
+    },
+    {
+      "id": "biz006",
+      "split": "development",
+      "type": "multi_fact",
+      "question": "国内出差在一线城市和其他城市的住宿上限分别是多少？上限包含早餐吗？",
+      "answerable": true,
+      "referenceAnswer": "一线城市每人每晚 680 元，其他城市 480 元；上限包含房费和酒店服务费，不包含单独列示的早餐费。",
+      "requiredEvidence": [
+        {"sourceFile": "06-travel-policy.md", "heading": "住宿上限", "text": "一线城市住宿上限为每人每晚 680 元，其他城市为每人每晚 480 元。住宿上限包含房费和酒店服务费，不包含单独列示的早餐费。"}
+      ],
+      "tags": ["travel", "amount", "multi_fact"]
+    },
+    {
+      "id": "biz007",
+      "split": "development",
+      "type": "boundary",
+      "question": "一张金额正好为 1,000 元的发票需要验真吗？",
+      "answerable": true,
+      "referenceAnswer": "需要。单张发票达到 1,000 元就必须验真，999.99 元才不触发。",
+      "requiredEvidence": [
+        {"sourceFile": "07-expense-policy.md", "heading": "必要材料", "text": "单张发票金额达到 1,000 元时，应在系统中完成发票验真。恰好 1,000 元需要验真，999.99 元不触发该要求。"}
+      ],
+      "tags": ["expense", "boundary", "amount"]
+    },
+    {
+      "id": "biz008",
+      "split": "development",
+      "type": "boundary",
+      "question": "含税总额恰好 50,000 元的采购至少需要几家报价，由谁审批？",
+      "answerable": true,
+      "referenceAnswer": "至少需要 3 家报价，由直属负责人和采购经理审批；恰好 50,000 元仍属于第二档。",
+      "requiredEvidence": [
+        {"sourceFile": "08-procurement-policy.md", "heading": "金额分级", "text": "| 超过 5,000 元且不超过 50,000 元 | 3 | 直属负责人、采购经理 |"},
+        {"sourceFile": "08-procurement-policy.md", "heading": "金额分级", "text": "恰好 50,000 元属于第二档；恰好 200,000 元属于第三档，均不进入更高一档。"}
+      ],
+      "tags": ["procurement", "boundary", "approval"]
+    },
+    {
+      "id": "biz009",
+      "split": "development",
+      "type": "multi_fact",
+      "question": "处理客户数据的供应商属于什么风险等级，需要哪些额外审批，准入有效期多久？",
+      "answerable": true,
+      "referenceAnswer": "属于 V3；除基础审批外必须由法务和信息安全负责人联合批准，准入有效期为 12 个月。",
+      "requiredEvidence": [
+        {"sourceFile": "09-vendor-onboarding.md", "heading": "风险分级", "text": "V3 包括处理客户数据、生产凭据或核心系统的供应商。"},
+        {"sourceFile": "09-vendor-onboarding.md", "heading": "风险分级", "text": "V1 由采购经理批准，V2 还需业务部门负责人批准，V3 必须增加法务和信息安全负责人联合批准。"},
+        {"sourceFile": "09-vendor-onboarding.md", "heading": "有效期与复审", "text": "V1、V2 准入有效期为 24 个月，V3 有效期为 12 个月。"}
+      ],
+      "tags": ["vendor", "security", "multi_evidence"]
+    },
+    {
+      "id": "biz010",
+      "split": "development",
+      "type": "multi_fact",
+      "question": "备用笔记本最长借多久，可以延期几次、最多延长多久？",
+      "answerable": true,
+      "referenceAnswer": "单次最长借用 45 个自然日，最多延期一次，延长期不超过 15 个自然日。",
+      "requiredEvidence": [
+        {"sourceFile": "10-it-asset-loan.md", "heading": "资产类别与期限", "text": "备用笔记本单次最长借用 45 个自然日，测试手机单次最长借用 30 个自然日，投影设备单次最长借用 7 个自然日。"},
+        {"sourceFile": "10-it-asset-loan.md", "heading": "资产类别与期限", "text": "备用笔记本最多延期一次，延长期不超过 15 个自然日；测试手机和投影设备不能延期。"}
+      ],
+      "tags": ["it", "asset", "duration"]
+    },
+    {
+      "id": "biz011",
+      "split": "development",
+      "type": "single_fact",
+      "question": "临时生产写权限最长有效多久，需要谁审批？",
+      "answerable": true,
+      "referenceAnswer": "最长有效 8 小时，需要直属负责人、系统所有者和信息安全负责人批准。",
+      "requiredEvidence": [
+        {"sourceFile": "11-account-access.md", "heading": "账号开通", "text": "普通权限由直属负责人和系统所有者审批；生产写权限还需信息安全负责人批准。临时生产写权限最长有效 8 小时，到期自动回收。"}
+      ],
+      "tags": ["iam", "security", "approval"]
+    },
+    {
+      "id": "biz012",
+      "split": "development",
+      "type": "identifier",
+      "question": "安全事件编号前缀是什么，正式报告要通过哪些渠道？",
+      "answerable": true,
+      "referenceAnswer": "编号前缀是 XSI-26-；应发送至 soc@xinglan.example.test，并在星舟服务台提交 SEC-INCIDENT。",
+      "requiredEvidence": [
+        {"sourceFile": "12-security-incident.md", "heading": "事件编号与报告渠道", "text": "安全事件编号前缀为 `XSI-26-`。"},
+        {"sourceFile": "12-security-incident.md", "heading": "事件编号与报告渠道", "text": "报告邮箱为 `soc@xinglan.example.test`，同时应在星舟服务台提交 `SEC-INCIDENT`。仅发送群聊消息不视为完成报告。"}
+      ],
+      "tags": ["security", "identifier", "email"]
+    },
+    {
+      "id": "biz013",
+      "split": "development",
+      "type": "identifier",
+      "question": "D4 数据跨系统传输要走什么工单，下载链接最多有效多久？",
+      "answerable": true,
+      "referenceAnswer": "使用 DATA-D4-XFER 工单和安全团队批准的托管通道，下载链接最长有效 2 小时。",
+      "requiredEvidence": [
+        {"sourceFile": "13-data-classification.md", "heading": "存储与传输", "text": "D4 的跨系统传输必须使用安全团队批准的托管通道，审批工单类型为 `DATA-D4-XFER`，下载链接最长有效 2 小时。"}
+      ],
+      "tags": ["data", "security", "identifier"]
+    },
+    {
+      "id": "biz014",
+      "split": "development",
+      "type": "multi_fact",
+      "question": "星河版的年单价、单文件上限、审计日志期限和 API 月调用量分别是多少？",
+      "answerable": true,
+      "referenceAnswer": "未税单价 780 元/用户/年，单文件上限 2 GiB，审计日志 180 天，API 每月 100,000 次。",
+      "requiredEvidence": [
+        {"sourceFile": "14-product-plans.md", "heading": "套餐对比", "text": "| 星河版 | 780 元/用户/年 | 2 GiB | 180 天 | 100,000 次 |"}
+      ],
+      "tags": ["product", "table", "exact_values"]
+    },
+    {
+      "id": "biz015",
+      "split": "development",
+      "type": "boundary",
+      "question": "首次购买后第 7 个自然日申请退款，但已经用了 1,001 次 API，能否全额退款？",
+      "answerable": true,
+      "referenceAnswer": "不能。第 7 日仍在期限内，但超过 1,000 次 API 调用属于退款例外。",
+      "requiredEvidence": [
+        {"sourceFile": "15-billing-refund.md", "heading": "退款", "text": "首次购买的客户可以在服务开通后的 7 个自然日内申请全额退款，但已经使用超过 1,000 次 API 调用的除外。第 7 个自然日仍在申请期内，第 8 日不再适用无理由退款。"}
+      ],
+      "tags": ["billing", "boundary", "exception"]
+    },
+    {
+      "id": "biz016",
+      "split": "development",
+      "type": "identifier",
+      "question": "技术故障工单必须填写什么，租户编号是什么格式？",
+      "answerable": true,
+      "referenceAnswer": "必须包含租户编号、发生时间、受影响功能、请求追踪号和复现步骤；租户编号格式为 XT- 加 8 位数字。",
+      "requiredEvidence": [
+        {"sourceFile": "16-support-intake.md", "heading": "必填信息", "text": "技术故障工单必须包含租户编号、发生时间、受影响功能、请求追踪号和复现步骤。租户编号格式为 `XT-` 加 8 位数字，例如 `XT-00427190`。"}
+      ],
+      "tags": ["support", "identifier", "required_fields"]
+    },
+    {
+      "id": "biz017",
+      "split": "development",
+      "type": "multi_fact",
+      "question": "P1 工单的首次响应、状态更新频率和目标恢复时间分别是多少？",
+      "answerable": true,
+      "referenceAnswer": "首次响应 1 小时，每 2 小时更新一次，目标恢复时间 8 小时。",
+      "requiredEvidence": [
+        {"sourceFile": "17-service-sla.md", "heading": "响应目标", "text": "| P1 | 1 小时 | 每 2 小时 | 8 小时 |"}
+      ],
+      "tags": ["support", "sla", "table"]
+    },
+    {
+      "id": "biz018",
+      "split": "development",
+      "type": "multi_fact",
+      "question": "常规生产发布窗口是什么时候？月末财务关账日能否发布普通变更？",
+      "answerable": true,
+      "referenceAnswer": "窗口是每周二和周四 20:00–22:00；每月最后一个工作日除 P0 修复外不得发布。",
+      "requiredEvidence": [
+        {"sourceFile": "18-release-change.md", "heading": "常规发布窗口", "text": "常规生产发布窗口为每周二和周四 20:00 至 22:00。每月最后一个工作日为财务关账冻结期，除 P0 修复外不得发布。"}
+      ],
+      "tags": ["engineering", "release", "time"]
+    },
+    {
+      "id": "biz019",
+      "split": "development",
+      "type": "boundary",
+      "question": "项目验收提交后恰好经过 5 个工作日还没处理，可以按制度向 PMO 催办吗？",
+      "answerable": true,
+      "referenceAnswer": "不可以。制度要求超过 5 个工作日才可以催办，恰好 5 个工作日不满足。",
+      "requiredEvidence": [
+        {"sourceFile": "19-project-acceptance.md", "heading": "验收流程", "text": "超过 5 个工作日未处理时，项目负责人可以向 PMO 发起催办；恰好经过 5 个工作日时尚不满足“超过”。"}
+      ],
+      "tags": ["project", "boundary", "approval"]
+    },
+    {
+      "id": "biz020",
+      "split": "development",
+      "type": "multi_fact",
+      "question": "新员工的信息安全培训和产品基础培训分别要在多久内完成？",
+      "answerable": true,
+      "referenceAnswer": "信息安全基础培训在入职后 5 个工作日内完成，产品基础培训在 20 个自然日内完成。",
+      "requiredEvidence": [
+        {"sourceFile": "20-training-certification.md", "heading": "入职必修", "text": "新员工应在入职后 5 个工作日内完成信息安全基础培训，在入职后 20 个自然日内完成产品基础培训。两个期限的日期口径不同。"}
+      ],
+      "tags": ["training", "time", "day_semantics"]
+    },
+    {
+      "id": "biz021",
+      "split": "development",
+      "type": "multi_fact",
+      "question": "外部访客进入研发安全区有什么要求？",
+      "answerable": true,
+      "referenceAnswer": "申请至少提前 1 个工作日；进入研发安全区后须由接待人全程陪同，且不能携带未经登记的摄影设备。",
+      "requiredEvidence": [
+        {"sourceFile": "21-facilities-visitors.md", "heading": "访客", "text": "访客申请应至少提前 1 个工作日提交，填写姓名、单位、到访时间、接待人和访问区域。"},
+        {"sourceFile": "21-facilities-visitors.md", "heading": "访客", "text": "进入研发安全区的外部访客必须全程由接待人陪同，且不得携带未经登记的摄影设备。"}
+      ],
+      "tags": ["facilities", "visitor", "multi_evidence"]
+    },
+    {
+      "id": "biz022",
+      "split": "development",
+      "type": "identifier",
+      "question": "报销咨询、供应商准入和安全运营中心的邮箱分别是什么？",
+      "answerable": true,
+      "referenceAnswer": "分别是 expense@xinglan.example.test、vendor-risk@xinglan.example.test 和 soc@xinglan.example.test。",
+      "requiredEvidence": [
+        {"sourceFile": "22-contacts-directory.md", "heading": "财务与采购", "text": "- 报销咨询：`expense@xinglan.example.test`"},
+        {"sourceFile": "22-contacts-directory.md", "heading": "财务与采购", "text": "- 供应商准入：`vendor-risk@xinglan.example.test`"},
+        {"sourceFile": "22-contacts-directory.md", "heading": "IT 与安全", "text": "- 安全运营中心：`soc@xinglan.example.test`"}
+      ],
+      "tags": ["contact", "email", "multi_evidence"]
+    },
+    {
+      "id": "biz023",
+      "split": "development",
+      "type": "single_fact",
+      "question": "合同正本和审批记录保留多久，从什么时候开始算？",
+      "answerable": true,
+      "referenceAnswer": "自合同终止之日起保留 10 年，期限从合同终止的次日开始计算。",
+      "requiredEvidence": [
+        {"sourceFile": "23-record-retention.md", "heading": "保留期限", "text": "合同正本和合同审批记录自合同终止之日起保留 10 年。"},
+        {"sourceFile": "23-record-retention.md", "heading": "起算点", "text": "保留期限从制度指定事件的次日开始计算，不一律从记录创建日计算。"}
+      ],
+      "tags": ["legal", "retention", "date"]
+    },
+    {
+      "id": "biz024",
+      "split": "development",
+      "type": "multi_fact",
+      "question": "C1 系统的 RTO 和 RPO 分别是多少，它们分别表示什么？",
+      "answerable": true,
+      "referenceAnswer": "C1 的 RTO 为 2 小时，表示目标恢复耗时；RPO 为 15 分钟，表示可接受的数据回退窗口。",
+      "requiredEvidence": [
+        {"sourceFile": "24-business-continuity.md", "heading": "系统等级", "text": "| C1 | 2 小时 | 15 分钟 |"},
+        {"sourceFile": "24-business-continuity.md", "heading": "系统等级", "text": "RTO 表示目标恢复耗时，RPO 表示可接受的数据回退窗口，两者不能互换。"}
+      ],
+      "tags": ["bcm", "rto", "rpo", "table"]
+    },
+    {
+      "id": "biz025",
+      "split": "development",
+      "type": "noise_robustness",
+      "question": "月报中提到的远程三天建议已经成为公司制度了吗？",
+      "answerable": true,
+      "referenceAnswer": "没有。连续三天线上结对只是活动反馈和员工建议，月报明确说明它不是已批准的远程办公额度。",
+      "requiredEvidence": [
+        {"sourceFile": "25-internal-newsletter.md", "heading": "编者说明", "text": "本月报用于分享团队动态、活动回顾和员工投稿，不制定或修改公司制度。"},
+        {"sourceFile": "25-internal-newsletter.md", "heading": "远程协作周回顾", "text": "这只是活动反馈，不是公司已经批准的远程办公额度。"}
+      ],
+      "tags": ["noise", "authority", "remote"]
+    },
+    {
+      "id": "biz026",
+      "split": "development",
+      "type": "boundary",
+      "question": "报价折扣正好 22% 需要哪些人审批？",
+      "answerable": true,
+      "referenceAnswer": "需要销售总监和财务负责人审批，不需要进入超过 22% 的商务委员会档位。",
+      "requiredEvidence": [
+        {"sourceFile": "26-sales-contract-guide.md", "heading": "折扣审批", "text": "恰好 8% 由销售经理审批，恰好 15% 由销售总监审批，恰好 22% 需要销售总监和财务负责人审批。"}
+      ],
+      "tags": ["sales", "boundary", "approval"]
+    },
+    {
+      "id": "biz027",
+      "split": "development",
+      "type": "multi_fact",
+      "question": "P0 和 P1 客户事故分别要在恢复后多久完成复盘？行动项必须包含什么？",
+      "answerable": true,
+      "referenceAnswer": "P0 在恢复后 3 个工作日内，P1 在 5 个工作日内；行动项必须有负责人和截止日期，并具有可验收内容。",
+      "requiredEvidence": [
+        {"sourceFile": "27-customer-incident-playbook.md", "heading": "第七步：关闭与复盘", "text": "P0 在恢复后 3 个工作日内完成复盘，P1 在恢复后 5 个工作日内完成复盘。"},
+        {"sourceFile": "27-customer-incident-playbook.md", "heading": "第七步：关闭与复盘", "text": "行动项必须有负责人和截止日期。“加强关注”“持续优化”不是可验收的行动项。"}
+      ],
+      "tags": ["incident", "postmortem", "multi_evidence"]
+    },
+    {
+      "id": "biz028",
+      "split": "development",
+      "type": "boundary",
+      "question": "灰度发布后 P95 延迟连续 10 分钟恰好增加 30%，是否已经触发“超过 30%”这项暂停条件？",
+      "answerable": true,
+      "referenceAnswer": "没有触发“超过 30%”这一条件；但仍可以因其他风险主动暂停。",
+      "requiredEvidence": [
+        {"sourceFile": "28-engineering-operations-handbook.md", "heading": "发布执行", "text": "如果关键错误率较发布前基线增加超过 2 个百分点，或 P95 延迟连续 10 分钟增加超过 30%，应暂停扩大范围并评估回滚。恰好增加 30% 尚未满足“超过 30%”，但仍可基于其他风险主动暂停。"}
+      ],
+      "tags": ["engineering", "boundary", "latency"]
+    },
+    {
+      "id": "biz029",
+      "split": "development",
+      "type": "boundary",
+      "question": "制度要求“超过 3 个工作日”时，恰好经过 3 个工作日算满足吗？",
+      "answerable": true,
+      "referenceAnswer": "不满足；“超过 N 个工作日”不包括恰好 N 个工作日。",
+      "requiredEvidence": [
+        {"sourceFile": "01-company-calendar.md", "heading": "日期口径", "text": "制度写明“超过 N 个工作日”时，恰好经过 N 个工作日不满足该条件。"}
+      ],
+      "tags": ["boundary", "day_semantics"]
+    },
+    {
+      "id": "biz030",
+      "split": "development",
+      "type": "multi_fact",
+      "question": "漏打卡后第 7 个工作日提交补卡，需要哪些审批？第 11 个工作日还能申请吗？",
+      "answerable": true,
+      "referenceAnswer": "第 7 个工作日提交需要直属负责人审批并由人力运营复核；超过 10 个工作日原则上不再受理，因此第 11 个工作日原则上不能申请。",
+      "requiredEvidence": [
+        {"sourceFile": "02-attendance.md", "heading": "漏打卡与补卡", "text": "漏打卡应在漏卡发生后的 3 个工作日内提交补卡申请，由直属负责人审批。超过 3 个工作日但不超过 10 个工作日的申请，还需人力运营复核；超过 10 个工作日的申请原则上不再受理。"}
+      ],
+      "tags": ["attendance", "boundary", "approval"]
+    },
+    {
+      "id": "biz031",
+      "split": "development",
+      "type": "boundary",
+      "question": "连续请 5 天和 6 天年假，审批要求有什么不同？",
+      "answerable": true,
+      "referenceAnswer": "5 天由直属负责人审批；6 天除直属负责人批准外，还需要部门负责人复核。",
+      "requiredEvidence": [
+        {"sourceFile": "03-leave-policy.md", "heading": "年假审批", "text": "连续申请超过 5 天的，应至少提前 10 个工作日提交，在直属负责人批准后还需部门负责人复核。恰好 5 天不需要部门负责人复核，6 天需要。"}
+      ],
+      "tags": ["leave", "boundary", "approval"]
+    },
+    {
+      "id": "biz032",
+      "split": "development",
+      "type": "semantic_precision",
+      "question": "远程办公是每周最多 3 天吗？",
+      "answerable": true,
+      "referenceAnswer": "不是，是每两个自然周最多 3 天。",
+      "requiredEvidence": [
+        {"sourceFile": "04-remote-work-current.md", "heading": "可用天数", "text": "符合条件的员工每两个自然周最多远程办公 3 天，不是每周 3 天。"}
+      ],
+      "tags": ["remote", "semantic_precision", "negation"]
+    },
+    {
+      "id": "biz033",
+      "split": "test",
+      "type": "boundary",
+      "question": "国内出差预算正好 8,000 元，需要成本中心负责人复核吗？",
+      "answerable": true,
+      "referenceAnswer": "不需要，由直属负责人审批即可；只有超过 8,000 元才需要成本中心负责人复核。",
+      "requiredEvidence": [
+        {"sourceFile": "06-travel-policy.md", "heading": "出差申请", "text": "预算不超过 8,000 元的，由直属负责人审批；预算超过 8,000 元的，在直属负责人批准后还需成本中心负责人复核。恰好 8,000 元不触发成本中心复核。"}
+      ],
+      "tags": ["travel", "boundary", "approval"]
+    },
+    {
+      "id": "biz034",
+      "split": "test",
+      "type": "boundary",
+      "question": "采购含税总额正好 200,000 元是否必须公开招采？",
+      "answerable": true,
+      "referenceAnswer": "不是。恰好 200,000 元属于第三档；只有超过 200,000 元才公开招采。",
+      "requiredEvidence": [
+        {"sourceFile": "08-procurement-policy.md", "heading": "金额分级", "text": "| 超过 50,000 元且不超过 200,000 元 | 3 | 部门负责人、采购经理、财务负责人 |"},
+        {"sourceFile": "08-procurement-policy.md", "heading": "金额分级", "text": "| 超过 200,000 元 | 公开招采 | 采购委员会 |"},
+        {"sourceFile": "08-procurement-policy.md", "heading": "金额分级", "text": "恰好 50,000 元属于第二档；恰好 200,000 元属于第三档，均不进入更高一档。"}
+      ],
+      "tags": ["procurement", "boundary", "amount"]
+    },
+    {
+      "id": "biz035",
+      "split": "test",
+      "type": "boundary",
+      "question": "P0 安全事件在发现后的第 16 分钟才报告，算按时吗？",
+      "answerable": true,
+      "referenceAnswer": "不算。P0 要求 15 分钟内报告，第 16 分钟已经超时。",
+      "requiredEvidence": [
+        {"sourceFile": "12-security-incident.md", "heading": "事件等级", "text": "| P0 | 大规模客户数据泄露、核心生产密钥公开 | 发现后 15 分钟内 |"},
+        {"sourceFile": "12-security-incident.md", "heading": "事件等级", "text": "“15 分钟内”包含第 15 分钟；在第 16 分钟报告已经超时。"}
+      ],
+      "tags": ["security", "boundary", "incident"]
+    },
+    {
+      "id": "biz036",
+      "split": "test",
+      "type": "boundary",
+      "question": "发票账期客户恰好逾期 15 个工作日，可以按规则暂停服务吗？",
+      "answerable": true,
+      "referenceAnswer": "不可以。规则是超过 15 个工作日才可以暂停，恰好 15 个工作日不满足。",
+      "requiredEvidence": [
+        {"sourceFile": "15-billing-refund.md", "heading": "欠费", "text": "发票账期客户逾期超过 5 个工作日时，系统发送暂停预警；逾期超过 15 个工作日时可以暂停服务。恰好逾期 15 个工作日尚未满足“超过 15 个工作日”。"}
+      ],
+      "tags": ["billing", "boundary", "suspension"]
+    },
+    {
+      "id": "biz037",
+      "split": "test",
+      "type": "cross_document",
+      "question": "一线城市出差住宿报销的金额上限、提交期限和必要住宿材料是什么？",
+      "answerable": true,
+      "referenceAnswer": "上限为每人每晚 680 元；应在行程结束后 12 个工作日内提交；必须同时提供发票和酒店住宿清单。",
+      "requiredEvidence": [
+        {"sourceFile": "06-travel-policy.md", "heading": "住宿上限", "text": "一线城市住宿上限为每人每晚 680 元，其他城市为每人每晚 480 元。"},
+        {"sourceFile": "07-expense-policy.md", "heading": "提交时限", "text": "差旅费用应在行程结束后的 12 个工作日内提交。"},
+        {"sourceFile": "07-expense-policy.md", "heading": "必要材料", "text": "住宿报销必须同时提供发票和酒店住宿清单。"}
+      ],
+      "tags": ["travel", "expense", "cross_document"]
+    },
+    {
+      "id": "biz038",
+      "split": "test",
+      "type": "cross_document",
+      "question": "采购一个 80,000 元、会处理客户数据的供应商服务，采购审批和供应商风险审批分别需要谁？",
+      "answerable": true,
+      "referenceAnswer": "采购属于超过 50,000 且不超过 200,000 元档，需要部门负责人、采购经理和财务负责人审批；供应商属于 V3，还必须由法务和信息安全负责人联合批准。",
+      "requiredEvidence": [
+        {"sourceFile": "08-procurement-policy.md", "heading": "金额分级", "text": "| 超过 50,000 元且不超过 200,000 元 | 3 | 部门负责人、采购经理、财务负责人 |"},
+        {"sourceFile": "09-vendor-onboarding.md", "heading": "风险分级", "text": "V3 包括处理客户数据、生产凭据或核心系统的供应商。"},
+        {"sourceFile": "09-vendor-onboarding.md", "heading": "风险分级", "text": "V1 由采购经理批准，V2 还需业务部门负责人批准，V3 必须增加法务和信息安全负责人联合批准。"}
+      ],
+      "tags": ["procurement", "vendor", "cross_document", "approval"]
+    },
+    {
+      "id": "biz039",
+      "split": "test",
+      "type": "cross_document",
+      "question": "备用笔记本最长能借多久，负责资产借用的邮箱是什么？",
+      "answerable": true,
+      "referenceAnswer": "最长 45 个自然日，资产组邮箱为 it-assets@xinglan.example.test。",
+      "requiredEvidence": [
+        {"sourceFile": "10-it-asset-loan.md", "heading": "资产类别与期限", "text": "备用笔记本单次最长借用 45 个自然日，测试手机单次最长借用 30 个自然日，投影设备单次最长借用 7 个自然日。"},
+        {"sourceFile": "22-contacts-directory.md", "heading": "IT 与安全", "text": "- IT 资产组：`it-assets@xinglan.example.test`"}
+      ],
+      "tags": ["it", "asset", "contact", "cross_document"]
+    },
+    {
+      "id": "biz040",
+      "split": "test",
+      "type": "cross_document",
+      "question": "有人打电话索要一次性验证码，应如何判断并通过什么正式渠道报告？",
+      "answerable": true,
+      "referenceAnswer": "公司人员不会电话索要一次性验证码，应视为可疑事件；发送至 soc@xinglan.example.test，并在服务台提交 SEC-INCIDENT。",
+      "requiredEvidence": [
+        {"sourceFile": "11-account-access.md", "heading": "多因素认证", "text": "任何工作人员都不会通过电话索要一次性验证码。收到此类请求应按《安全事件响应规范》报告。"},
+        {"sourceFile": "12-security-incident.md", "heading": "事件编号与报告渠道", "text": "报告邮箱为 `soc@xinglan.example.test`，同时应在星舟服务台提交 `SEC-INCIDENT`。仅发送群聊消息不视为完成报告。"}
+      ],
+      "tags": ["iam", "security", "cross_document"]
+    },
+    {
+      "id": "biz041",
+      "split": "test",
+      "type": "cross_document",
+      "question": "星海版客户已有 P1 工单时可以打哪个热线，正式首次响应目标是多少？",
+      "answerable": true,
+      "referenceAnswer": "可以拨打 400-019-7626；P1 的正式首次响应目标是 1 小时。",
+      "requiredEvidence": [
+        {"sourceFile": "16-support-intake.md", "heading": "支持渠道", "text": "星海版客户可以拨打紧急热线 `400-019-7626`。热线仅用于已经创建并获得工单号的 P0 或 P1 事件。"},
+        {"sourceFile": "17-service-sla.md", "heading": "响应目标", "text": "| P1 | 1 小时 | 每 2 小时 | 8 小时 |"}
+      ],
+      "tags": ["support", "sla", "cross_document", "identifier"]
+    },
+    {
+      "id": "biz042",
+      "split": "test",
+      "type": "cross_document",
+      "question": "C1 系统发生客户 P0 故障时，客户 SLA 中的 15 分钟和 4 小时，以及连续性规范中的 2 小时，分别代表什么？",
+      "answerable": true,
+      "referenceAnswer": "15 分钟是客户 P0 首次响应目标；2 小时是 C1 的 RTO；4 小时是客户 P0 的目标恢复时间。它们不是同一个指标。",
+      "requiredEvidence": [
+        {"sourceFile": "17-service-sla.md", "heading": "响应目标", "text": "| P0 | 15 分钟 | 每 30 分钟 | 4 小时 |"},
+        {"sourceFile": "17-service-sla.md", "heading": "响应目标", "text": "首次响应是支持人员确认受理，不等于故障恢复。目标恢复时间是服务目标，不构成所有情况下的强制解决期限。"},
+        {"sourceFile": "24-business-continuity.md", "heading": "系统等级", "text": "| C1 | 2 小时 | 15 分钟 |"},
+        {"sourceFile": "24-business-continuity.md", "heading": "系统等级", "text": "RTO 表示目标恢复耗时，RPO 表示可接受的数据回退窗口，两者不能互换。"}
+      ],
+      "tags": ["sla", "bcm", "cross_document", "metric_disambiguation"]
+    },
+    {
+      "id": "biz043",
+      "split": "test",
+      "type": "cross_document",
+      "question": "按标准价购买 30 个星河版用户一年，未税总价是多少？如果折扣 10%，最低由谁审批？",
+      "answerable": true,
+      "referenceAnswer": "标准未税总价为 23,400 元；10% 折扣超过 8% 且不超过 15%，最低由销售总监审批。",
+      "requiredEvidence": [
+        {"sourceFile": "14-product-plans.md", "heading": "套餐对比", "text": "| 星河版 | 780 元/用户/年 | 2 GiB | 180 天 | 100,000 次 |"},
+        {"sourceFile": "26-sales-contract-guide.md", "heading": "折扣审批", "text": "| 超过 8% 且不超过 15% | 销售总监 |"}
+      ],
+      "tags": ["product", "sales", "arithmetic", "cross_document"]
+    },
+    {
+      "id": "biz044",
+      "split": "test",
+      "type": "cross_document",
+      "question": "涉及客户个人数据的合同和供应商分别需要哪些额外控制？",
+      "answerable": true,
+      "referenceAnswer": "合同需签署 DPA-CN-2026.1 并由隐私负责人复核；处理客户数据的供应商属于 V3，必须由法务和信息安全负责人联合批准。",
+      "requiredEvidence": [
+        {"sourceFile": "26-sales-contract-guide.md", "heading": "合同模板与非标准条款", "text": "涉及客户个人数据时还应签署数据处理附件，附件编号为 `DPA-CN-2026.1`，并由隐私负责人复核。"},
+        {"sourceFile": "09-vendor-onboarding.md", "heading": "风险分级", "text": "V3 包括处理客户数据、生产凭据或核心系统的供应商。"},
+        {"sourceFile": "09-vendor-onboarding.md", "heading": "风险分级", "text": "V1 由采购经理批准，V2 还需业务部门负责人批准，V3 必须增加法务和信息安全负责人联合批准。"}
+      ],
+      "tags": ["sales", "vendor", "privacy", "cross_document"]
+    },
+    {
+      "id": "biz045",
+      "split": "test",
+      "type": "version_conflict",
+      "question": "现在员工远程办公是每周最多 1 天还是每两个自然周最多 3 天？",
+      "answerable": true,
+      "referenceAnswer": "现行规则是每两个自然周最多 3 天；每周最多 1 天是已于 2026 年 7 月 1 日废止的旧规则。",
+      "requiredEvidence": [
+        {"sourceFile": "04-remote-work-current.md", "heading": "可用天数", "text": "符合条件的员工每两个自然周最多远程办公 3 天，不是每周 3 天。"},
+        {"sourceFile": "05-remote-work-archived.md", "heading": "重要说明", "text": "本文件已被 XL-HR-033 版本 3.0 完整替代，不得用于判断 2026 年 7 月 1 日及之后的远程办公资格和额度。"}
+      ],
+      "tags": ["remote", "version_conflict", "authority"]
+    },
+    {
+      "id": "biz046",
+      "split": "test",
+      "type": "noise_robustness",
+      "question": "公司是否已经发布提供无限 API 调用的“星云版”？",
+      "answerable": true,
+      "referenceAnswer": "没有。“星云版”只是月报中的概念投票，尚未正式发布；现行套餐也没有无限 API 调用。",
+      "requiredEvidence": [
+        {"sourceFile": "25-internal-newsletter.md", "heading": "产品创意角", "text": "目前公司没有正式发布名为“星云版”的套餐，也没有任何现行套餐提供无限 API 调用。"},
+        {"sourceFile": "14-product-plans.md", "heading": "套餐对比", "text": "“星河版”和“星海版”是不同套餐。星河版不包含 730 天审计日志，星海版也不是无限 API 调用。"}
+      ],
+      "tags": ["product", "noise", "negation"]
+    },
+    {
+      "id": "biz047",
+      "split": "test",
+      "type": "noise_robustness",
+      "question": "P1 的正式首次响应承诺是不是 12 分钟？",
+      "answerable": true,
+      "referenceAnswer": "不是。12 分钟只是月报中的个人案例，正式 P1 首次响应目标为 1 小时。",
+      "requiredEvidence": [
+        {"sourceFile": "25-internal-newsletter.md", "heading": "客户支持之星", "text": "支持工程师林澈在一次 P1 故障中 12 分钟完成首次回复，早于服务等级目标。12 分钟是个人案例，不是新的 P1 首次响应承诺。"},
+        {"sourceFile": "17-service-sla.md", "heading": "响应目标", "text": "| P1 | 1 小时 | 每 2 小时 | 8 小时 |"}
+      ],
+      "tags": ["sla", "noise", "authority"]
+    },
+    {
+      "id": "biz048",
+      "split": "test",
+      "type": "cross_document",
+      "question": "P1 客户事故的记录要保留多久，事故复盘要在恢复后多久完成？",
+      "answerable": true,
+      "referenceAnswer": "相关工单和复盘报告保留 7 年；P1 复盘应在恢复后 5 个工作日内完成。",
+      "requiredEvidence": [
+        {"sourceFile": "23-record-retention.md", "heading": "保留期限", "text": "P0、P1 事件相关工单和复盘报告自事件关闭之日起保留 7 年。"},
+        {"sourceFile": "27-customer-incident-playbook.md", "heading": "第七步：关闭与复盘", "text": "P0 在恢复后 3 个工作日内完成复盘，P1 在恢复后 5 个工作日内完成复盘。"}
+      ],
+      "tags": ["incident", "retention", "cross_document"]
+    },
+    {
+      "id": "biz049",
+      "split": "development",
+      "type": "unanswerable",
+      "question": "员工每年的固定涨薪比例是多少？",
+      "answerable": false,
+      "referenceAnswer": "现有资料未规定固定涨薪比例。",
+      "requiredEvidence": [],
+      "tags": ["unanswerable", "hr", "compensation"]
+    },
+    {
+      "id": "biz050",
+      "split": "development",
+      "type": "unanswerable",
+      "question": "星澜科技的 CEO 叫什么名字？",
+      "answerable": false,
+      "referenceAnswer": "现有资料未提供 CEO 姓名。",
+      "requiredEvidence": [],
+      "tags": ["unanswerable", "company"]
+    },
+    {
+      "id": "biz051",
+      "split": "development",
+      "type": "unanswerable",
+      "question": "员工产假一共有多少天？",
+      "answerable": false,
+      "referenceAnswer": "现有资料没有产假天数规定，不能根据年假或病假推断。",
+      "requiredEvidence": [],
+      "tags": ["unanswerable", "hr", "leave"]
+    },
+    {
+      "id": "biz052",
+      "split": "development",
+      "type": "unanswerable",
+      "question": "国际出差到东京的住宿上限是多少？",
+      "answerable": false,
+      "referenceAnswer": "现有资料只规定国内差旅，没有东京或国际差旅住宿标准。",
+      "requiredEvidence": [],
+      "tags": ["unanswerable", "travel", "scope"]
+    },
+    {
+      "id": "biz053",
+      "split": "development",
+      "type": "unanswerable",
+      "question": "国内出差每天的餐饮补贴是多少钱？",
+      "answerable": false,
+      "referenceAnswer": "现有资料没有规定餐饮补贴金额。",
+      "requiredEvidence": [],
+      "tags": ["unanswerable", "travel", "allowance"]
+    },
+    {
+      "id": "biz054",
+      "split": "development",
+      "type": "unanswerable",
+      "question": "员工商业保险每年可以报销多少牙科费用？",
+      "answerable": false,
+      "referenceAnswer": "现有资料没有商业保险或牙科报销规则。",
+      "requiredEvidence": [],
+      "tags": ["unanswerable", "benefit"]
+    },
+    {
+      "id": "biz055",
+      "split": "development",
+      "type": "unanswerable",
+      "question": "办公室访客 Wi-Fi 的密码是什么？",
+      "answerable": false,
+      "referenceAnswer": "现有资料没有提供访客 Wi-Fi 密码。",
+      "requiredEvidence": [],
+      "tags": ["unanswerable", "facilities", "security"]
+    },
+    {
+      "id": "biz056",
+      "split": "development",
+      "type": "unanswerable",
+      "question": "星澜科技上海办公室的详细地址是什么？",
+      "answerable": false,
+      "referenceAnswer": "现有资料没有提供上海办公室地址。",
+      "requiredEvidence": [],
+      "tags": ["unanswerable", "facilities", "address"]
+    },
+    {
+      "id": "biz057",
+      "split": "test",
+      "type": "unanswerable",
+      "question": "供应商发票验收后公司会在几天内付款？",
+      "answerable": false,
+      "referenceAnswer": "现有资料规定了供应商准入和采购审批，但没有规定供应商付款时限。",
+      "requiredEvidence": [],
+      "tags": ["unanswerable", "vendor", "payment"]
+    },
+    {
+      "id": "biz058",
+      "split": "test",
+      "type": "unanswerable",
+      "question": "星芽版是否支持单点登录 SSO？",
+      "answerable": false,
+      "referenceAnswer": "现有套餐资料没有说明单点登录能力。",
+      "requiredEvidence": [],
+      "tags": ["unanswerable", "product", "feature"]
+    },
+    {
+      "id": "biz059",
+      "split": "test",
+      "type": "unanswerable",
+      "question": "客户数据默认存储在哪个云区域？",
+      "answerable": false,
+      "referenceAnswer": "现有资料没有规定默认数据存储区域。",
+      "requiredEvidence": [],
+      "tags": ["unanswerable", "data", "region"]
+    },
+    {
+      "id": "biz060",
+      "split": "test",
+      "type": "unanswerable",
+      "question": "2027 年星河版会涨价到多少？",
+      "answerable": false,
+      "referenceAnswer": "现有资料只包含 2026.09 的现行价格，不能推断 2027 年价格。",
+      "requiredEvidence": [],
+      "tags": ["unanswerable", "product", "future"]
+    }
+  ]
+}

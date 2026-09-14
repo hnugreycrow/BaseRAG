@@ -46,10 +46,12 @@
 
 ## 建议导入方式
 
-将 28 份编号文档分别上传到一个干净知识库，不要与原来的 `employee-handbook.md` 混用。评测时保存本目录的 Git commit，并记录分块参数、Embedding 模型、生成模型和 Top K。
+将 28 份编号文档分别上传到一个干净知识库，不要上传 `README.md`、`evaluation-spec.md` 或 `questions.json`，也不要与原来的 `employee-handbook.md` 混用。评测时保存本目录的 Git commit，并记录分块参数、Embedding 模型、生成模型和 Top K。
 
 `05-remote-work-archived.md` 和 `25-internal-newsletter.md` 是有意保留的干扰文档，不应删除。前者用于测试版本判断，后者用于测试非规范性内容是否错误进入答案。
 
 ## 标注约定
 
-后续问题集中的每道题至少应记录：`question`、`answerable`、`referenceAnswer`、`requiredEvidence`、`sourceFiles`、`sourceHeadings` 和问题类别。必要证据应引用最小、连续的原文，不要只记录关键词。
+配套的 `questions.json` 包含 60 道金标准问题，分为 40 道开发题和 20 道留出测试题。字段、评分方式和运行纪律见 `evaluation-spec.md`。
+
+在仓库根目录运行 `./scripts/validate-business-dataset.ps1`，可以检查题号、分组、可回答性以及每条必要证据对应的文件、标题和原文。必要证据应始终引用最小、连续的原文，不要只记录关键词。
