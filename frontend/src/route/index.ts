@@ -7,6 +7,16 @@ export const router = createRouter({
   routes: [
     {
       path: '/',
+      redirect: '/chat',
+    },
+    {
+      path: '/chat/:conversationId?',
+      name: 'chat',
+      component: () => import('../views/ConversationView.vue'),
+      meta: { title: '知识问答' },
+    },
+    {
+      path: '/admin',
       component: AdminLayout,
       children: [
         {
@@ -22,12 +32,6 @@ export const router = createRouter({
           meta: { title: '知识库', section: '' },
         },
         {
-          path: 'conversations',
-          name: 'conversations',
-          component: () => import('../views/ConversationView.vue'),
-          meta: { title: '问答会话', section: '智能问答' },
-        },
-        {
           path: 'models',
           name: 'models',
           component: () => import('../views/ModelView.vue'),
@@ -35,9 +39,15 @@ export const router = createRouter({
         },
       ],
     },
+    // 兼容早期后台地址，统一引导到新的页面结构。
+    { path: '/conversations', redirect: '/chat' },
+    { path: '/knowledge-bases', redirect: '/admin/knowledge-bases' },
+    { path: '/models', redirect: '/admin/models' },
+    { path: '/admin/conversations', redirect: '/chat' },
+    { path: '/admin/documents', redirect: '/admin/knowledge-bases' },
     {
       path: '/:pathMatch(.*)*',
-      redirect: '/',
+      redirect: '/chat',
     },
   ],
   scrollBehavior: () => ({ top: 0 }),

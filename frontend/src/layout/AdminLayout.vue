@@ -66,7 +66,6 @@ function handleMenuButton() {
         </div>
 
         <div class="topbar-actions">
-          <span class="mode-chip"><i></i>本地模式</span>
           <el-dropdown trigger="click">
             <button class="profile" type="button">
               <span class="profile-avatar">JA</span>
@@ -193,25 +192,6 @@ function handleMenuButton() {
   gap: 10px;
 }
 
-.mode-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 7px 10px;
-  color: #647188;
-  font-size: 11px;
-  background: #f7f9fc;
-  border: 1px solid #e7ebf2;
-  border-radius: 8px;
-}
-
-.mode-chip i {
-  width: 6px;
-  height: 6px;
-  background: var(--color-success);
-  border-radius: 50%;
-}
-
 .profile {
   gap: 9px;
   margin-left: 4px;
@@ -303,7 +283,6 @@ function handleMenuButton() {
 
   .breadcrumb > span,
   .breadcrumb > i,
-  .mode-chip,
   .profile-copy,
   .profile .el-icon {
     display: none;

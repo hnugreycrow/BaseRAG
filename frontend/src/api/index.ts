@@ -1,2 +1,3 @@
 export { ApiRequestError, getErrorMessage, http, request, type ApiResponse } from './http'
+export * from './conversation'
 export * from './knowledgeBase'

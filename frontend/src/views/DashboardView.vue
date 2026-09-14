@@ -5,21 +5,21 @@ const capabilities = [
   {
     title: '整理知识',
     description: '创建知识库并导入 Markdown 文档，构建可检索的内容空间。',
-    path: '/knowledge-bases',
+    path: '/admin/knowledge-bases',
     action: '管理知识库',
     icon: Collection,
   },
   {
     title: '开始问答',
     description: '基于已就绪的文档发起多轮问答，并核对回答来源。',
-    path: '/conversations',
+    path: '/chat',
     action: '进入会话',
     icon: ChatDotRound,
   },
   {
     title: '连接模型',
     description: '查看当前 Chat 与 Embedding 模型的本地配置状态。',
-    path: '/models',
+    path: '/admin/models',
     action: '查看模型',
     icon: Connection,
   },
@@ -45,7 +45,7 @@ const capabilities = [
         <span class="panel-label">推荐流程</span>
         <h2>从第一份 Markdown 开始</h2>
         <p>创建知识库，导入文档并完成分块后，即可进入问答会话。</p>
-        <el-button type="primary" @click="$router.push('/knowledge-bases')">
+        <el-button type="primary" @click="$router.push('/admin/knowledge-bases')">
           创建知识库
           <el-icon><ArrowRight /></el-icon>
         </el-button>

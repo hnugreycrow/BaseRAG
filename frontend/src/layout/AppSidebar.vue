@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChatDotRound, Collection, Cpu, HomeFilled } from '@element-plus/icons-vue'
+import { ArrowRight, ChatDotRound, Collection, Cpu, HomeFilled } from '@element-plus/icons-vue'
 import type { Component } from 'vue'
 import { useRoute } from 'vue-router'
 
@@ -19,16 +19,15 @@ interface MenuItem {
 
 const route = useRoute()
 const menuItems: MenuItem[] = [
-  { label: '工作台', path: '/', icon: HomeFilled },
-  { label: '知识库', path: '/knowledge-bases', icon: Collection },
-  { label: '问答会话', path: '/conversations', icon: ChatDotRound },
-  { label: '模型配置', path: '/models', icon: Cpu },
+  { label: '工作台', path: '/admin', icon: HomeFilled },
+  { label: '知识库', path: '/admin/knowledge-bases', icon: Collection },
+  { label: '模型配置', path: '/admin/models', icon: Cpu },
 ]
 </script>
 
 <template>
   <aside class="sidebar" :class="{ 'is-collapsed': collapsed }">
-    <RouterLink class="brand" to="/" aria-label="返回 JAgent 工作台" @click="emit('navigate')">
+    <RouterLink class="brand" to="/admin" aria-label="返回 JAgent 工作台" @click="emit('navigate')">
       <span class="brand-mark" aria-hidden="true">
         <i></i>
         <i></i>
@@ -39,6 +38,17 @@ const menuItems: MenuItem[] = [
         <strong>JAgent</strong>
         <small>KNOWLEDGE STUDIO</small>
       </span>
+    </RouterLink>
+
+    <RouterLink class="chat-entry" to="/chat" @click="emit('navigate')">
+      <span class="chat-entry-icon"
+        ><el-icon><ChatDotRound /></el-icon
+      ></span>
+      <span v-show="!collapsed" class="chat-entry-copy">
+        <strong>进入知识问答</strong>
+        <small>基于已导入资料提问</small>
+      </span>
+      <el-icon v-show="!collapsed" class="chat-entry-arrow"><ArrowRight /></el-icon>
     </RouterLink>
 
     <div v-show="!collapsed" class="menu-caption">工作空间</div>
@@ -55,14 +65,6 @@ const menuItems: MenuItem[] = [
         <template #title>{{ item.label }}</template>
       </el-menu-item>
     </el-menu>
-
-    <div class="runtime" :title="collapsed ? '本地服务' : undefined">
-      <span class="runtime-signal" aria-hidden="true"></span>
-      <span v-show="!collapsed" class="runtime-copy">
-        <strong>本地工作区</strong>
-        <small>数据保留在当前环境</small>
-      </span>
-    </div>
   </aside>
 </template>
 
@@ -151,6 +153,64 @@ const menuItems: MenuItem[] = [
   white-space: nowrap;
 }
 
+.chat-entry {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 2px 25px;
+  padding: 9px 10px;
+  color: #e9edff;
+  background: rgb(66 99 235 / 18%);
+  border: 1px solid rgb(125 148 255 / 18%);
+  border-radius: 10px;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease;
+}
+
+.chat-entry:hover {
+  background: rgb(66 99 235 / 27%);
+  border-color: rgb(125 148 255 / 30%);
+}
+
+.chat-entry-icon {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  flex: 0 0 30px;
+  place-items: center;
+  color: #ffffff;
+  background: #4263eb;
+  border-radius: 8px;
+}
+
+.chat-entry-copy {
+  min-width: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.chat-entry-copy strong {
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.chat-entry-copy small {
+  margin-top: 3px;
+  overflow: hidden;
+  color: #8f9fbd;
+  font-size: 9px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.chat-entry-arrow {
+  color: #8296bd;
+  font-size: 11px;
+}
+
 .menu-caption {
   margin: 0 14px 9px;
   color: #6f7e99;
@@ -234,9 +294,15 @@ const menuItems: MenuItem[] = [
 }
 
 .is-collapsed .brand,
-.is-collapsed .runtime {
+.is-collapsed .runtime,
+.is-collapsed .chat-entry {
   justify-content: center;
   margin-inline: 0;
+}
+
+.is-collapsed .chat-entry {
+  margin-bottom: 25px;
+  padding-inline: 0;
 }
 
 .is-collapsed .sidebar-menu :deep(.el-menu-item) {
