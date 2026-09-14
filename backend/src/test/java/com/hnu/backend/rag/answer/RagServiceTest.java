@@ -17,8 +17,14 @@ class RagServiceTest {
   private final RetrievalService retrieval = mock(RetrievalService.class);
   private final ChatClient chat = mock(ChatClient.class);
   private final ContextBuilder contexts = new ContextBuilder(config);
+  private final PromptAssemblyStage prompts = new PromptAssemblyStage(contexts);
   private final RagService service =
-      new RagService(retrieval, contexts, new PromptAssemblyStage(contexts), chat, config);
+      new RagService(
+          retrieval,
+          contexts,
+          prompts,
+          new AnswerStage(new ChatAnswerGenerator(chat), prompts),
+          config);
 
   @Test
   void emptyRetrievalDoesNotCallGeneration() {
@@ -33,21 +39,21 @@ class RagServiceTest {
   void repairsInvalidCitationOnceAndReturnsActualContext() {
     var hit = ContextAndCitationsTest.hit("员工年假为五天。");
     when(retrieval.retrieve("年假？")).thenReturn(List.of(hit));
-    when(chat.generate(anyString(), anyString()))
+    when(chat.stream(anyString(), anyString(), any(), any()))
         .thenReturn(generation("五天 [S99]"), generation("五天 [S1]"));
     var result = service.ask("年假？");
     assertEquals(List.of("S1"), result.citations());
     assertEquals(hit.getContent(), result.sources().getFirst().content());
     assertEquals("qwen-plus-latest", result.modelInfo().model());
-    verify(chat, times(2)).generate(anyString(), contains(hit.getContent()));
+    verify(chat, times(2)).stream(anyString(), contains(hit.getContent()), any(), any());
   }
 
   @Test
   void secondIllegalCitationFailsInsteadOfReturningAnswer() {
     when(retrieval.retrieve(anyString())).thenReturn(List.of(ContextAndCitationsTest.hit("依据")));
-    when(chat.generate(anyString(), anyString())).thenReturn(generation("[S99]"));
+    when(chat.stream(anyString(), anyString(), any(), any())).thenReturn(generation("[S99]"));
     assertThrows(ApiException.class, () -> service.ask("问题"));
-    verify(chat, times(2)).generate(anyString(), anyString());
+    verify(chat, times(2)).stream(anyString(), anyString(), any(), any());
   }
 
   @Test

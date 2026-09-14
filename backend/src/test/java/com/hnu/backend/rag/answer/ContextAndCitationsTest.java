@@ -46,4 +46,24 @@ public class ContextAndCitationsTest {
           IllegalArgumentException.class, () -> Citations.validate(answer, context.sources()));
     }
   }
+
+  @Test
+  void validatesKnowledgeAndToolReferencesIndependently() {
+    var context = new ContextBuilder(new RagProperties()).build(List.of(hit("依据")));
+
+    Citations.Validation result =
+        Citations.validate("答案 [S1][S1]，根据工具 T1 和 T1。", context.sources(), List.of("T1"));
+
+    assertEquals(List.of("S1"), result.citations());
+    assertEquals(List.of("T1"), result.toolReferences());
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> Citations.validate("答案 [S99]，工具 T1。", context.sources(), List.of("T1")));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> Citations.validate("答案 [S1]，工具 T99。", context.sources(), List.of("T1")));
+    assertEquals(
+        List.of(),
+        Citations.validate("T1 加权并不是工具引用。", context.sources(), List.of()).toolReferences());
+  }
 }

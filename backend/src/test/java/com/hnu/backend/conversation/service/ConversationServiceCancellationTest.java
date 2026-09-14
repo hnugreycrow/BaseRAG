@@ -8,11 +8,15 @@ import static org.mockito.Mockito.*;
 import com.hnu.backend.configuration.ConversationProperties;
 import com.hnu.backend.configuration.RagProperties;
 import com.hnu.backend.conversation.entity.Conversation;
+import com.hnu.backend.conversation.entity.GenerationAttempt;
 import com.hnu.backend.conversation.entity.Message;
 import com.hnu.backend.conversation.mapper.ConversationMapper;
 import com.hnu.backend.conversation.mapper.GenerationAttemptMapper;
 import com.hnu.backend.conversation.mapper.MessageMapper;
 import com.hnu.backend.model.client.ChatClient;
+import com.hnu.backend.model.config.AiProperties;
+import com.hnu.backend.rag.answer.AnswerStage;
+import com.hnu.backend.rag.answer.ChatAnswerGenerator;
 import com.hnu.backend.rag.answer.ContextBuilder;
 import com.hnu.backend.rag.deduplication.DeduplicationResult;
 import com.hnu.backend.rag.deduplication.DeduplicationStage;
@@ -40,6 +44,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -77,7 +82,7 @@ class ConversationServiceCancellationTest {
             deduplicationStage,
             rerankStage,
             prompts,
-            chat,
+            new AnswerStage(new ChatAnswerGenerator(chat), prompts),
             rag,
             config,
             tx);
@@ -159,6 +164,8 @@ class ConversationServiceCancellationTest {
                 null,
                 null,
                 0));
+    when(chat.stream(anyString(), anyString(), any(), any()))
+        .thenReturn(new ChatClient.Generation("无法确认", "chat", "test", "model"));
     runTransactionsWithResultImmediately();
     runTransactionsImmediately();
 
@@ -182,7 +189,6 @@ class ConversationServiceCancellationTest {
     when(rag.getMaxQuestionChars()).thenReturn(2000);
     when(conversationContext.prepare(any(Conversation.class), eq(1), eq("你好")))
         .thenReturn(preparedSystemChat("你好"));
-    when(messages.markStreaming(any(UUID.class))).thenReturn(1);
     when(chat.stream(anyString(), anyString(), any(), any()))
         .thenReturn(new ChatClient.Generation("你好，有什么可以帮你？", "chat", "test", "model"));
     runTransactionsWithResultImmediately();
@@ -249,7 +255,6 @@ class ConversationServiceCancellationTest {
                 null,
                 null,
                 0));
-    when(messages.markStreaming(any(UUID.class))).thenReturn(1);
     when(chat.stream(anyString(), anyString(), any(), any()))
         .thenReturn(new ChatClient.Generation("根据工具 T1，今天值班", "chat", "test", "model"));
     runTransactionsWithResultImmediately();
@@ -259,6 +264,56 @@ class ConversationServiceCancellationTest {
     verify(chat, timeout(2000)).stream(
         anyString(), contains("\"referenceId\":\"T1\""), any(), any());
     verify(messages, timeout(2000)).prepare(any(UUID.class), eq("查询今日排班"), eq("[]"));
+  }
+
+  @Test
+  void citationRepairInvalidatesFirstAttemptAndStreamsTheReplacement() {
+    UUID conversationId = UUID.randomUUID();
+    Conversation conversation = new Conversation();
+    conversation.setId(conversationId);
+    when(conversations.find(conversationId)).thenReturn(conversation);
+    when(messages.nextTurn(conversationId)).thenReturn(1);
+    when(rag.getMaxQuestionChars()).thenReturn(2000);
+    when(config.getCheckpointChars()).thenReturn(1000);
+    when(config.getCheckpointIntervalMs()).thenReturn(60_000L);
+    when(conversationContext.prepare(any(Conversation.class), eq(1), eq("你好")))
+        .thenReturn(preparedSystemChat("你好"));
+    when(messages.markStreaming(any(UUID.class))).thenReturn(1);
+    AiProperties.ModelTarget target =
+        new AiProperties.ModelTarget(
+            "chat", "test", "model", "http://localhost", "/chat", "", 1000, 0, false);
+    when(chat.stream(anyString(), anyString(), any(), any()))
+        .thenAnswer(
+            invocation -> {
+              ChatClient.StreamObserver observer = invocation.getArgument(2);
+              observer.started(target, "PRIMARY");
+              observer.delta("[S99]");
+              observer.completed(target, "[S99]", "stop");
+              return new ChatClient.Generation("[S99]", "chat", "test", "model");
+            })
+        .thenAnswer(
+            invocation -> {
+              ChatClient.StreamObserver observer = invocation.getArgument(2);
+              observer.started(target, "PRIMARY");
+              observer.delta("你好");
+              observer.completed(target, "你好", "stop");
+              return new ChatClient.Generation("你好", "chat", "test", "model");
+            });
+    runTransactionsWithResultImmediately();
+    runTransactionsImmediately();
+
+    service.ask(conversationId, UUID.randomUUID(), "你好", "request-id");
+
+    verify(messages, timeout(2000).times(1)).markStreaming(any(UUID.class));
+    verify(attempts, timeout(2000))
+        .invalidateCompleted(any(UUID.class), eq("INVALID_CITATIONS"), anyString());
+    verify(messages, timeout(2000)).checkpoint(any(UUID.class), eq(""));
+    verify(messages, timeout(2000)).complete(any(UUID.class), eq("你好"), eq("[]"), anyString());
+    ArgumentCaptor<GenerationAttempt> captured = ArgumentCaptor.forClass(GenerationAttempt.class);
+    verify(attempts, timeout(2000).times(2)).insert(captured.capture());
+    assertEquals(
+        List.of("PRIMARY", "CITATION_REPAIR"),
+        captured.getAllValues().stream().map(GenerationAttempt::getReason).toList());
   }
 
   private ConversationContextService.PreparedContext preparedMixed(String question) {

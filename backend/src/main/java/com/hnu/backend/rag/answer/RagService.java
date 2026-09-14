@@ -1,7 +1,6 @@
 package com.hnu.backend.rag.answer;
 
 import com.hnu.backend.configuration.RagProperties;
-import com.hnu.backend.model.client.ChatClient;
 import com.hnu.backend.rag.prompt.AssembledPrompt;
 import com.hnu.backend.rag.prompt.PromptAssemblyStage;
 import com.hnu.backend.rag.retrieval.RetrievalService;
@@ -21,7 +20,7 @@ public class RagService {
   private final RetrievalService retrieval;
   private final ContextBuilder contexts;
   private final PromptAssemblyStage prompts;
-  private final ChatClient chat;
+  private final AnswerStage answers;
   private final RagProperties config;
 
   /**
@@ -30,19 +29,19 @@ public class RagService {
    * @param retrieval 旧单问题知识检索服务
    * @param contexts 来源响应构造器
    * @param prompts 统一提示词组装阶段
-   * @param chat 模型客户端
+   * @param answers 统一最终回答阶段
    * @param config RAG 输入校验配置
    */
   public RagService(
       RetrievalService retrieval,
       ContextBuilder contexts,
       PromptAssemblyStage prompts,
-      ChatClient chat,
+      AnswerStage answers,
       RagProperties config) {
     this.retrieval = retrieval;
     this.contexts = contexts;
     this.prompts = prompts;
-    this.chat = chat;
+    this.answers = answers;
     this.config = config;
   }
 
@@ -81,41 +80,33 @@ public class RagService {
     var context = contexts.build(hits);
     long retrieved = System.nanoTime();
     AssembledPrompt prompt = prompts.assembleLegacy(normalizedQuestion, context);
-    if (!prompt.shouldGenerate()) {
-      return new AnswerResponse(
-          "现有资料不足以回答这个问题。请先导入包含相关内容的 Markdown 文档。", List.of(), List.of(), null);
-    }
-    ChatClient.Generation generation = chat.generate(prompt.systemPrompt(), prompt.userPrompt());
-    String answer = generation.content();
-    List<String> citations;
+    AnswerResult result;
+    AnswerGenerator.Control control = answers.newControl();
     try {
-      citations = Citations.validate(answer, prompt.sources());
-    } catch (IllegalArgumentException e) {
-      // 仅复用原始证据再生成一次，避免把错误回答注入修复提示并进一步污染输出。
-      AssembledPrompt repair = prompts.forCitationRepair(prompt);
-      generation = chat.generate(repair.systemPrompt(), repair.userPrompt());
-      answer = generation.content();
-      try {
-        citations = Citations.validate(answer, repair.sources());
-      } catch (IllegalArgumentException again) {
-        throw ApiException.upstream("INVALID_CITATIONS", "模型连续返回无效引用，请重试");
-      }
+      result = answers.execute(prompt, AnswerStage.noopObserver(), control);
+    } finally {
+      // 同步入口结束后主动释放潜在响应流；成功关闭不会改变已经返回的结果。
+      control.close();
     }
+    AnswerGenerator.Generation generation = result.generation();
     log.info(
         "qa scope={} candidates={} sources={} citations={} provider={} model={} retrievalMs={} generationMs={} totalMs={}",
         knowledgeBaseIds == null ? "all" : knowledgeBaseIds.size(),
         hits.size(),
-        prompt.sources().size(),
-        citations.size(),
-        generation.provider(),
-        generation.model(),
+        result.sources().size(),
+        result.citations().size(),
+        generation == null ? null : generation.provider(),
+        generation == null ? null : generation.model(),
         (retrieved - started) / 1_000_000,
         (System.nanoTime() - retrieved) / 1_000_000,
         (System.nanoTime() - started) / 1_000_000);
     return new AnswerResponse(
-        answer,
-        prompt.sources(),
-        citations,
-        new ModelInfoResponse(generation.id(), generation.provider(), generation.model()));
+        result.content(),
+        result.sources(),
+        result.citations(),
+        generation == null
+            ? null
+            : new ModelInfoResponse(
+                generation.modelId(), generation.provider(), generation.model()));
   }
 }

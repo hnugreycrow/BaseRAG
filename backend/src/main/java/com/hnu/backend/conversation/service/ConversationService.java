@@ -9,10 +9,9 @@ import com.hnu.backend.conversation.mapper.ConversationMapper;
 import com.hnu.backend.conversation.mapper.GenerationAttemptMapper;
 import com.hnu.backend.conversation.mapper.MessageMapper;
 import com.hnu.backend.conversation.vo.ConversationResponses;
-import com.hnu.backend.model.client.ChatClient;
-import com.hnu.backend.model.config.AiProperties;
-import com.hnu.backend.model.http.ModelHttpClient;
-import com.hnu.backend.rag.answer.Citations;
+import com.hnu.backend.rag.answer.AnswerGenerator;
+import com.hnu.backend.rag.answer.AnswerResult;
+import com.hnu.backend.rag.answer.AnswerStage;
 import com.hnu.backend.rag.deduplication.DeduplicationStage;
 import com.hnu.backend.rag.execution.ExecutionStage;
 import com.hnu.backend.rag.prompt.AssembledPrompt;
@@ -47,7 +46,7 @@ public class ConversationService {
   private final DeduplicationStage deduplicationStage;
   private final RerankStage rerankStage;
   private final PromptAssemblyStage prompts;
-  private final ChatClient chat;
+  private final AnswerStage answers;
   private final RagProperties rag;
   private final ConversationProperties config;
   private final TransactionTemplate tx;
@@ -70,7 +69,7 @@ public class ConversationService {
    * @param deduplicationStage 证据去重阶段
    * @param rerankStage 证据重排阶段
    * @param prompts 最终提示词组装阶段
-   * @param chat 支持流式输出的模型客户端
+   * @param answers 最终回答、引用校验和修复阶段
    * @param rag RAG 输入配置
    * @param config 会话检查点配置
    * @param tx 终态持久化事务模板
@@ -84,7 +83,7 @@ public class ConversationService {
       DeduplicationStage deduplicationStage,
       RerankStage rerankStage,
       PromptAssemblyStage prompts,
-      ChatClient chat,
+      AnswerStage answers,
       RagProperties rag,
       ConversationProperties config,
       TransactionTemplate tx) {
@@ -96,7 +95,7 @@ public class ConversationService {
     this.deduplicationStage = deduplicationStage;
     this.rerankStage = rerankStage;
     this.prompts = prompts;
-    this.chat = chat;
+    this.answers = answers;
     this.rag = rag;
     this.config = config;
     this.tx = tx;
@@ -440,7 +439,7 @@ public class ConversationService {
     SseEmitter emitter = new SseEmitter(0L);
     ActiveGeneration active =
         new ActiveGeneration(
-            conversation, user, assistant, requestId, emitter, new ModelHttpClient.StreamControl());
+            conversation, user, assistant, requestId, emitter, answers.newControl());
     activeByConversation.put(conversation.getId(), active);
     activeByGeneration.put(assistant.getId(), active);
     emitter.onCompletion(() -> disconnect(active));
@@ -509,32 +508,9 @@ public class ConversationService {
       ensureNotCancelled(active);
       active.assistant.setRetrievalQuery(standaloneQuestion);
       active.assistant.setSourcesJson(json.writeValueAsString(prompt.sources()));
-      if (!prompt.shouldGenerate()) {
-        String answer = "现有资料不足以回答这个问题。请先导入包含相关内容的 Markdown 文档。";
-        complete(active, answer, List.of(), null);
-        return;
-      }
-      ChatClient.Generation generation =
-          streamAnswer(active, prompt.systemPrompt(), prompt.userPrompt(), "PRIMARY");
-      List<String> citations;
-      try {
-        citations = Citations.validate(generation.content(), prompt.sources());
-      } catch (IllegalArgumentException invalid) {
-        failCurrentAttempt(active, "FAILED", "INVALID_CITATIONS", "模型返回了非法引用");
-        send(active.emitter, "reset", event("reason", "INVALID_CITATIONS"));
-        active.buffer.setLength(0);
-        messages.checkpoint(active.assistant.getId(), "");
-        AssembledPrompt repair = prompts.forCitationRepair(prompt);
-        generation =
-            streamAnswer(active, repair.systemPrompt(), repair.userPrompt(), "CITATION_REPAIR");
-        try {
-          citations = Citations.validate(generation.content(), repair.sources());
-        } catch (IllegalArgumentException again) {
-          failCurrentAttempt(active, "FAILED", "INVALID_CITATIONS", "模型连续返回非法引用");
-          throw ApiException.upstream("INVALID_CITATIONS", "模型连续返回无效引用，请重试");
-        }
-      }
-      complete(active, generation.content(), citations, generation);
+      AnswerResult answer =
+          answers.execute(prompt, new ConversationAnswerObserver(active), active.control);
+      complete(active, answer.content(), answer.citations(), answer.generation());
     } catch (ApiException e) {
       if (active.control.cancelled() || "GENERATION_CANCELLED".equals(e.code()))
         cancelTerminal(active);
@@ -572,9 +548,9 @@ public class ConversationService {
             active.user.getContent(),
             prepared.queryPlan(),
             prepared.routingPlan());
-    ChatClient.Generation generation =
-        streamAnswer(active, prompt.systemPrompt(), prompt.userPrompt(), "PRIMARY");
-    complete(active, generation.content(), List.of(), generation);
+    AnswerResult answer =
+        answers.execute(prompt, new ConversationAnswerObserver(active), active.control);
+    complete(active, answer.content(), answer.citations(), answer.generation());
   }
 
   /**
@@ -586,80 +562,90 @@ public class ConversationService {
     if (active.control.cancelled() || active.terminal.get()) throw ApiException.cancelled();
   }
 
-  /**
-   * 调用模型流式接口，并把供应商尝试、增量文本和失败状态同步到存储与 SSE。
-   *
-   * @param active 活动生成状态
-   * @param system 可信系统提示词
-   * @param prompt 结构化用户提示词
-   * @param baseReason 首次模型尝试原因
-   * @return 完整模型生成结果
-   */
-  private ChatClient.Generation streamAnswer(
-      ActiveGeneration active, String system, String prompt, String baseReason) {
-    ensureNotCancelled(active);
-    if (messages.markStreaming(active.assistant.getId()) == 0) throw ApiException.cancelled();
-    return chat.stream(
-        system,
-        prompt,
-        new ChatClient.StreamObserver() {
-          /** {@inheritDoc} */
-          @Override
-          public void started(AiProperties.ModelTarget target, String reason) {
-            ensureNotCancelled(active);
-            int index = active.attemptCounter.incrementAndGet();
-            GenerationAttempt attempt = new GenerationAttempt();
-            attempt.setId(UUID.randomUUID());
-            attempt.setAssistantMessageId(active.assistant.getId());
-            attempt.setAttemptIndex(index);
-            attempt.setReason(
-                "CITATION_REPAIR".equals(baseReason)
-                    ? baseReason
-                    : (index == 1 ? baseReason : "PROVIDER_FALLBACK"));
-            attempt.setModelId(target.id());
-            attempt.setProvider(target.provider());
-            attempt.setModel(target.model());
-            attempt.setStatus("STREAMING");
-            attempt.setContent("");
-            attempts.insert(attempt);
-            active.currentAttemptId = attempt.getId();
-            messages.setModelInfo(
-                active.assistant.getId(),
-                json.writeValueAsString(
-                    new ModelInfoResponse(target.id(), target.provider(), target.model())));
-          }
+  /** 把回答阶段的中立流事件映射为会话生成尝试、正文检查点和 SSE 事件。 */
+  private final class ConversationAnswerObserver implements AnswerStage.Observer {
+    private final ActiveGeneration active;
 
-          /** {@inheritDoc} */
-          @Override
-          public void delta(String text) {
-            ensureNotCancelled(active);
-            active.buffer.append(text);
-            send(active.emitter, "delta", event("text", text));
-            checkpoint(active);
-          }
+    /**
+     * 创建指定活动回答的事件适配器。
+     *
+     * @param active 活动生成状态
+     */
+    private ConversationAnswerObserver(ActiveGeneration active) {
+      this.active = active;
+    }
 
-          /** {@inheritDoc} */
-          @Override
-          public void completed(
-              AiProperties.ModelTarget target, String content, String finishReason) {
-            attempts.complete(active.currentAttemptId, content, finishReason);
-          }
+    /** {@inheritDoc} */
+    @Override
+    public void started(AnswerGenerator.ModelTarget target, AnswerGenerator.AttemptReason reason) {
+      ensureNotCancelled(active);
+      int index = active.attemptCounter.incrementAndGet();
+      // 消息状态只在首个候选开始时迁移一次；provider fallback 和引用修复沿用 STREAMING。
+      if (index == 1 && messages.markStreaming(active.assistant.getId()) == 0) {
+        throw ApiException.cancelled();
+      }
+      GenerationAttempt attempt = new GenerationAttempt();
+      attempt.setId(UUID.randomUUID());
+      attempt.setAssistantMessageId(active.assistant.getId());
+      attempt.setAttemptIndex(index);
+      attempt.setReason(reason.name());
+      attempt.setModelId(target.id());
+      attempt.setProvider(target.provider());
+      attempt.setModel(target.model());
+      attempt.setStatus("STREAMING");
+      attempt.setContent("");
+      attempts.insert(attempt);
+      active.currentAttemptId = attempt.getId();
+      messages.setModelInfo(
+          active.assistant.getId(),
+          json.writeValueAsString(
+              new ModelInfoResponse(target.id(), target.provider(), target.model())));
+    }
 
-          /** {@inheritDoc} */
-          @Override
-          public void failed(
-              AiProperties.ModelTarget target, String partialContent, ApiException error) {
-            if (active.currentAttemptId != null) {
-              attempts.fail(
-                  active.currentAttemptId,
-                  active.control.cancelled() ? "CANCELLED" : "FAILED",
-                  partialContent,
-                  error.code(),
-                  error.getMessage());
-            }
-          }
-        },
-        active.control);
+    /** {@inheritDoc} */
+    @Override
+    public void delta(String text) {
+      ensureNotCancelled(active);
+      active.buffer.append(text);
+      send(active.emitter, "delta", event("text", text));
+      checkpoint(active);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public void completed(AnswerGenerator.ModelTarget target, String content, String finishReason) {
+      attempts.complete(active.currentAttemptId, content, finishReason);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public void failed(
+        AnswerGenerator.ModelTarget target, String partialContent, ApiException error) {
+      if (active.currentAttemptId != null) {
+        attempts.fail(
+            active.currentAttemptId,
+            active.control.cancelled() ? "CANCELLED" : "FAILED",
+            partialContent,
+            error.code(),
+            error.getMessage());
+      }
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public void invalidReferences(String reasonCode, boolean repairScheduled) {
+      if (active.currentAttemptId != null) {
+        // 模型流已经正常结束，引用校验发生在其后，因此需要显式作废 COMPLETED 尝试。
+        attempts.invalidateCompleted(active.currentAttemptId, reasonCode, "模型返回了非法引用");
+      }
+      if (!repairScheduled) return;
+      // reset 之前同步清空数据库和检查点游标，避免修复流继续沿用首次正文的长度基线。
+      active.buffer.setLength(0);
+      messages.checkpoint(active.assistant.getId(), "");
+      active.lastCheckpointLength = 0;
+      active.lastCheckpointAt = System.currentTimeMillis();
+      send(active.emitter, "reset", event("reason", reasonCode));
+    }
   }
 
   /**
@@ -699,13 +685,13 @@ public class ConversationService {
    * @param active 活动生成状态
    * @param content 完整回答正文
    * @param citations 通过白名单校验的知识引用
-   * @param generation 实际模型元数据；固定兜底回答时为空
+   * @param generation 回答阶段返回的实际模型元数据；固定兜底回答时为空
    */
   private void complete(
       ActiveGeneration active,
       String content,
       List<String> citations,
-      ChatClient.Generation generation) {
+      AnswerGenerator.Generation generation) {
     if (active.control.cancelled()) {
       cancelTerminal(active);
       return;
@@ -717,7 +703,7 @@ public class ConversationService {
               ? null
               : json.writeValueAsString(
                   new ModelInfoResponse(
-                      generation.id(), generation.provider(), generation.model()));
+                      generation.modelId(), generation.provider(), generation.model()));
       tx.executeWithoutResult(
           ignored -> {
             int changed =
@@ -1086,7 +1072,7 @@ public class ConversationService {
     private Message assistant;
     private final String requestId;
     private final SseEmitter emitter;
-    private final ModelHttpClient.StreamControl control;
+    private final AnswerGenerator.Control control;
     private final AtomicBoolean terminal = new AtomicBoolean();
     private final AtomicBoolean running = new AtomicBoolean();
     private final AtomicInteger attemptCounter = new AtomicInteger();
@@ -1104,7 +1090,7 @@ public class ConversationService {
      * @param assistant 待生成回答
      * @param requestId HTTP 请求追踪 ID
      * @param emitter SSE 通道
-     * @param control 模型流控制器
+     * @param control 回答模型流控制器
      */
     private ActiveGeneration(
         Conversation conversation,
@@ -1112,7 +1098,7 @@ public class ConversationService {
         Message assistant,
         String requestId,
         SseEmitter emitter,
-        ModelHttpClient.StreamControl control) {
+        AnswerGenerator.Control control) {
       this.conversation = conversation;
       this.user = user;
       this.generationId = assistant.getId();
