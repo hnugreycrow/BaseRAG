@@ -6,4 +6,5 @@ public record RagEvaluationConfigResponse(
     int chunkMaxSize,
     int chunkOverlap,
     int topK,
-    int maxQuestionChars) {}
+    int maxQuestionChars,
+    int maxSubQuestions) {}

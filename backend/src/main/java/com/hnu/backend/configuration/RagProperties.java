@@ -10,6 +10,7 @@ import org.springframework.context.annotation.Configuration;
 @ConfigurationProperties(prefix = "rag")
 public class RagProperties {
   private Storage storage = new Storage();
+  private Pipeline pipeline = new Pipeline();
   private int chunkSize = 1400;
   private int chunkMinSize = 500;
   private int chunkMaxSize = 2000;
@@ -27,9 +28,16 @@ public class RagProperties {
         || chunkOverlap >= chunkSize
         || topK < 1
         || topK > 50
-        || maxQuestionChars < 1) {
+        || maxQuestionChars < 1
+        || pipeline.maxSubQuestions < 1
+        || pipeline.maxSubQuestions > 16) {
       throw new IllegalArgumentException("Invalid RAG size configuration");
     }
+  }
+
+  @Data
+  public static class Pipeline {
+    private int maxSubQuestions = 4;
   }
 
   @Data

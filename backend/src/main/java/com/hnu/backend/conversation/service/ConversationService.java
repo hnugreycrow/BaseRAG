@@ -352,15 +352,14 @@ public class ConversationService {
           conversationContext.prepare(
               active.conversation, active.user.getTurnIndex(), active.user.getContent());
       ensureNotCancelled(active);
-      var hits = retrieval.retrieve(prepared.retrievalQuery());
+      String standaloneQuestion = prepared.queryPlan().standaloneQuestion();
+      var hits = retrieval.retrieve(standaloneQuestion);
       ensureNotCancelled(active);
       var context = contexts.build(hits);
       messages.prepare(
-          active.assistant.getId(),
-          prepared.retrievalQuery(),
-          json.writeValueAsString(context.sources()));
+          active.assistant.getId(), standaloneQuestion, json.writeValueAsString(context.sources()));
       ensureNotCancelled(active);
-      active.assistant.setRetrievalQuery(prepared.retrievalQuery());
+      active.assistant.setRetrievalQuery(standaloneQuestion);
       active.assistant.setSourcesJson(json.writeValueAsString(context.sources()));
       if (context.sources().isEmpty()) {
         String answer = "现有资料不足以回答这个问题。请先导入包含相关内容的 Markdown 文档。";

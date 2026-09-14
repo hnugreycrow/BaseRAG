@@ -15,6 +15,7 @@ class RagEvaluationControllerTest {
     rag.setChunkOverlap(100);
     rag.setTopK(8);
     rag.setMaxQuestionChars(1500);
+    rag.getPipeline().setMaxSubQuestions(6);
 
     var result = new RagEvaluationController(rag).config();
 
@@ -24,5 +25,6 @@ class RagEvaluationControllerTest {
     assertEquals(100, result.chunkOverlap());
     assertEquals(8, result.topK());
     assertEquals(1500, result.maxQuestionChars());
+    assertEquals(6, result.maxSubQuestions());
   }
 }

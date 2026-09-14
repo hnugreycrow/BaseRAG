@@ -27,6 +27,7 @@ public class RagEvaluationController {
         rag.getChunkMaxSize(),
         rag.getChunkOverlap(),
         rag.getTopK(),
-        rag.getMaxQuestionChars());
+        rag.getMaxQuestionChars(),
+        rag.getPipeline().getMaxSubQuestions());
   }
 }

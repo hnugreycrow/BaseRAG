@@ -7,14 +7,17 @@ import static org.mockito.Mockito.*;
 
 import com.hnu.backend.configuration.ConversationProperties;
 import com.hnu.backend.configuration.RagProperties;
+import com.hnu.backend.conversation.entity.Conversation;
 import com.hnu.backend.conversation.entity.Message;
 import com.hnu.backend.conversation.mapper.ConversationMapper;
 import com.hnu.backend.conversation.mapper.GenerationAttemptMapper;
 import com.hnu.backend.conversation.mapper.MessageMapper;
 import com.hnu.backend.model.client.ChatClient;
+import com.hnu.backend.rag.model.QueryPlan;
 import com.hnu.backend.rag.service.RetrievalService;
 import com.hnu.backend.rag.support.ContextBuilder;
 import com.hnu.backend.shared.error.ApiException;
+import java.util.List;
 import java.util.UUID;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.AfterEach;
@@ -25,6 +28,7 @@ import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @ExtendWith(MockitoExtension.class)
@@ -106,6 +110,28 @@ class ConversationServiceCancellationTest {
     verify(tx, never()).executeWithoutResult(any());
   }
 
+  @Test
+  void retrievesAndPersistsTheStandaloneQuestionFromTheQueryPlan() {
+    UUID conversationId = UUID.randomUUID();
+    Conversation conversation = new Conversation();
+    conversation.setId(conversationId);
+    when(conversations.find(conversationId)).thenReturn(conversation);
+    when(messages.nextTurn(conversationId)).thenReturn(1);
+    when(rag.getMaxQuestionChars()).thenReturn(2000);
+    when(conversationContext.prepare(any(Conversation.class), eq(1), eq("原问题")))
+        .thenReturn(
+            new ConversationContextService.PreparedContext("历史", QueryPlan.fallback("改写后的独立问题")));
+    when(retrieval.retrieve("改写后的独立问题")).thenReturn(List.of());
+    when(contexts.build(List.of())).thenReturn(new ContextBuilder.Context("", List.of()));
+    runTransactionsWithResultImmediately();
+    runTransactionsImmediately();
+
+    service.ask(conversationId, UUID.randomUUID(), "原问题", "request-id");
+
+    verify(retrieval, timeout(2000)).retrieve("改写后的独立问题");
+    verify(messages, timeout(2000)).prepare(any(UUID.class), eq("改写后的独立问题"), eq("[]"));
+  }
+
   private Message assistant(UUID conversationId, UUID generationId, String status) {
     Message message = new Message();
     message.setId(generationId);
@@ -125,5 +151,14 @@ class ConversationServiceCancellationTest {
             })
         .when(tx)
         .executeWithoutResult(any());
+  }
+
+  private void runTransactionsWithResultImmediately() {
+    when(tx.execute(any()))
+        .thenAnswer(
+            invocation -> {
+              TransactionCallback<?> callback = invocation.getArgument(0);
+              return callback.doInTransaction(mock(TransactionStatus.class));
+            });
   }
 }
