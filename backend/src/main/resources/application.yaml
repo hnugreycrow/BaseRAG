@@ -38,6 +38,7 @@ ai:
       api-key: "${BAILIAN_API_KEY:}"
       endpoints:
         chat: /compatible-mode/v1/chat/completions
+        rerank: /compatible-api/v1/reranks
     siliconflow:
       url: https://api.siliconflow.cn
       api-key: "${SILICONFLOW_API_KEY:}"
@@ -48,12 +49,15 @@ ai:
       api-key: "${DEEPSEEK_API_KEY:}"
       endpoints:
         chat: /chat/completions
+
   selection:
     failure-threshold: 2
     open-duration-ms: 30000
     max-retries: 2
+
   stream:
     message-chunk-size: 1
+
   chat:
     default-tier: standard
     candidates:
@@ -67,6 +71,7 @@ ai:
       standard:
         candidates: [deepseek-flash, qwen3.8-flash]
         timeout-ms: 30000
+
   embedding:
     default-model: qwen-emb-8b
     batch-size: 16
@@ -78,36 +83,63 @@ ai:
         dimension: ${EMBEDDING_DIMENSIONS:1536}
         priority: 1
 
+  rerank:
+    default-model: qwen3-rerank
+    timeout-ms: 8000
+    candidates:
+      - id: qwen3-rerank
+        provider: bailian
+        model: qwen3-rerank
+        priority: 1
+      - id: rerank-noop
+        provider: noop
+        model: noop
+        priority: 100
+
 rag:
   # Semantic blocks are packed near the target; small tails may grow up to max-size.
   pipeline:
     max-sub-questions: 4
+
+    deduplication:
+      overlap-threshold: 0.85
+
+    rerank:
+      enabled: true
+      max-input-candidates: 40
+      selected-evidence: 10
+
     routing:
       confidence-threshold: 0.70
       timeout-ms: 5000
+
     mcp:
       enabled: false
       allow-list: []
       timeout-ms: 3000
       max-output-chars: 6000
+
   search:
     default-top-k: 10
     recall-budget: 20
+
     channels:
       timeout-ms: 15000
       vector:
         enabled: true
+
     fusion:
       strategy: rrf
       rrf-k: 20
-      rerank-candidate-limit: 40
       channel-weights:
         vector: 1.0
+
   chunk-size: 1400
   chunk-min-size: 500
   chunk-max-size: 2000
   chunk-overlap: 180
   max-question-chars: 2000
+
   storage:
     endpoint: "${RUSTFS_ENDPOINT:http://localhost:9000}"
     access-key: jagent-local

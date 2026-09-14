@@ -114,7 +114,7 @@ public class ExecutionStage {
         results.stream().flatMap(result -> result.candidates().stream()).toList();
     List<EvidenceCandidate> merged =
         candidateMerge.mergeAndSelect(
-            allCandidates, knowledgeQuestionIds, snapshot.rerankCandidateLimit());
+            allCandidates, knowledgeQuestionIds, snapshot.rerankInputLimit());
     log.info(
         "execution completed subQuestions={} successful={} candidatesBeforeMerge={} candidatesAfterMerge={}",
         results.size(),
@@ -124,17 +124,6 @@ public class ExecutionStage {
         allCandidates.size(),
         merged.size());
     return new ExecutionResult(merged, results, snapshot);
-  }
-
-  /** 在重排阶段尚未接入时，按同一覆盖规则选出当前可进入回答上下文的候选。 */
-  public List<EvidenceCandidate> selectForAnswer(ExecutionResult result) {
-    List<String> knowledgeQuestionIds =
-        result.subQuestions().stream()
-            .filter(execution -> execution.intent() == IntentType.KNOWLEDGE_RETRIEVAL)
-            .map(SubQuestionExecution::subQuestionId)
-            .toList();
-    return candidateMerge.mergeAndSelect(
-        result.candidates(), knowledgeQuestionIds, result.budget().defaultTopK());
   }
 
   @PreDestroy

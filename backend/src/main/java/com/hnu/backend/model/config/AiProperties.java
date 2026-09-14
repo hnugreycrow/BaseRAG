@@ -16,6 +16,7 @@ public class AiProperties {
   private Stream stream = new Stream();
   private Chat chat = new Chat();
   private Embedding embedding = new Embedding();
+  private Rerank rerank = new Rerank();
 
   @PostConstruct
   void validate() {
@@ -25,12 +26,14 @@ public class AiProperties {
         || selection.maxRetries > 3
         || stream.messageChunkSize < 1
         || embedding.batchSize < 1
-        || embedding.batchSize > 128) {
+        || embedding.batchSize > 128
+        || rerank.timeoutMs < 1) {
       throw new IllegalArgumentException("Invalid AI selection, stream or batch configuration");
     }
     chatModels();
     embeddingModels();
     embeddingModel();
+    rerankModels();
   }
 
   public List<ModelTarget> chatModels() {
@@ -70,6 +73,26 @@ public class AiProperties {
     return embedding.candidates.stream().map(candidate -> embeddingModel(candidate.id)).toList();
   }
 
+  /**
+   * 返回重排模型的实际尝试顺序：默认模型始终优先，其余候选按优先级和 ID 稳定排列。
+   *
+   * <p>noop 是本地确定性降级哨兵，不代表一次真实模型调用。
+   */
+  public List<ModelTarget> rerankModels() {
+    Map<String, Candidate> indexed = index(rerank.candidates);
+    Candidate primary = indexed.get(rerank.defaultModel);
+    if (primary == null) {
+      throw new IllegalArgumentException("Unknown rerank default model: " + rerank.defaultModel);
+    }
+    List<Candidate> ordered = new ArrayList<>();
+    ordered.add(primary);
+    rerank.candidates.stream()
+        .filter(candidate -> !candidate.id.equals(rerank.defaultModel))
+        .sorted(Comparator.comparingInt(Candidate::getPriority).thenComparing(Candidate::getId))
+        .forEach(ordered::add);
+    return ordered.stream().map(this::resolveRerank).toList();
+  }
+
   private Map<String, Candidate> index(List<Candidate> candidates) {
     Map<String, Candidate> indexed = new LinkedHashMap<>();
     for (Candidate candidate : candidates) {
@@ -97,6 +120,7 @@ public class AiProperties {
         switch (capability) {
           case "chat" -> provider.endpoints.chat;
           case "embedding" -> provider.endpoints.embedding;
+          case "rerank" -> provider.endpoints.rerank;
           default -> throw new IllegalArgumentException("Unsupported AI capability: " + capability);
         };
     if (provider.url == null
@@ -132,6 +156,20 @@ public class AiProperties {
         candidate.supportsThinking);
   }
 
+  private ModelTarget resolveRerank(Candidate candidate) {
+    if (candidate == null) {
+      throw new IllegalArgumentException("Unknown rerank candidate");
+    }
+    // noop 不访问网络，因此刻意不要求在 providers 下配置地址、端点或密钥。
+    if ("noop".equals(candidate.provider) && "noop".equals(candidate.model)) {
+      return new ModelTarget(candidate.id, "noop", "noop", "", "", "", rerank.timeoutMs, 0, false);
+    }
+    if ("noop".equals(candidate.provider) || "noop".equals(candidate.model)) {
+      throw new IllegalArgumentException("Incomplete noop rerank candidate: " + candidate.id);
+    }
+    return resolve(candidate, candidate.id, "rerank", rerank.timeoutMs, 0);
+  }
+
   public record ModelTarget(
       String id,
       String provider,
@@ -154,6 +192,7 @@ public class AiProperties {
   public static class Endpoints {
     private String chat = "";
     private String embedding = "";
+    private String rerank = "";
   }
 
   @Data
@@ -187,6 +226,13 @@ public class AiProperties {
     private List<Candidate> candidates = new ArrayList<>();
     private int batchSize = 16;
     private int timeoutMs = 60_000;
+  }
+
+  @Data
+  public static class Rerank {
+    private String defaultModel = "";
+    private List<Candidate> candidates = new ArrayList<>();
+    private int timeoutMs = 8_000;
   }
 
   @Data

@@ -38,6 +38,14 @@ public class RagProperties {
         || pipeline.mcp.timeoutMs < 1
         || pipeline.mcp.maxOutputChars < 1
         || pipeline.mcp.allowList.stream().anyMatch(name -> name == null || name.isBlank())
+        || !Double.isFinite(pipeline.deduplication.overlapThreshold)
+        || pipeline.deduplication.overlapThreshold <= 0
+        || pipeline.deduplication.overlapThreshold > 1
+        || pipeline.rerank.maxInputCandidates < 1
+        || pipeline.rerank.maxInputCandidates > 500
+        || pipeline.rerank.selectedEvidence < 1
+        || pipeline.rerank.selectedEvidence < pipeline.maxSubQuestions
+        || pipeline.rerank.selectedEvidence > pipeline.rerank.maxInputCandidates
         || search.defaultTopK < 1
         || search.defaultTopK > 50
         || search.recallBudget < 0
@@ -45,8 +53,6 @@ public class RagProperties {
         || search.channels.timeoutMs < 1
         || !"rrf".equalsIgnoreCase(search.fusion.strategy)
         || search.fusion.rrfK < 1
-        || (search.fusion.rerankCandidateLimit > 0
-            && search.fusion.rerankCandidateLimit < search.defaultTopK)
         || !Double.isFinite(search.fusion.channelWeights.vector)
         || search.fusion.channelWeights.vector <= 0) {
       throw new IllegalArgumentException("Invalid RAG configuration");
@@ -58,6 +64,8 @@ public class RagProperties {
     private int maxSubQuestions = 4;
     private Routing routing = new Routing();
     private Mcp mcp = new Mcp();
+    private Deduplication deduplication = new Deduplication();
+    private Rerank rerank = new Rerank();
   }
 
   @Data
@@ -72,6 +80,18 @@ public class RagProperties {
     private List<String> allowList = new ArrayList<>();
     private int timeoutMs = 3000;
     private int maxOutputChars = 6000;
+  }
+
+  @Data
+  public static class Deduplication {
+    private double overlapThreshold = 0.85;
+  }
+
+  @Data
+  public static class Rerank {
+    private boolean enabled = true;
+    private int maxInputCandidates = 40;
+    private int selectedEvidence = 8;
   }
 
   @Data
@@ -102,7 +122,6 @@ public class RagProperties {
   public static class Fusion {
     private String strategy = "rrf";
     private int rrfK = 20;
-    private int rerankCandidateLimit = 40;
     private ChannelWeights channelWeights = new ChannelWeights();
   }
 

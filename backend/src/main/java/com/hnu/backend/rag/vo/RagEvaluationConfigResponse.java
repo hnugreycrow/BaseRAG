@@ -11,13 +11,16 @@ package com.hnu.backend.rag.vo;
  * @param recallBudget 每个子问题在整个向量通道保留的召回数
  * @param channelTimeoutMs 单个向量检索子问题的超时时间
  * @param rrfK RRF 融合平滑常数
- * @param rerankCandidateLimit 融合后为重排保留的候选上限
+ * @param rerankCandidateLimit 去重后为专用重排模型保留的候选上限
  * @param vectorEnabled 向量通道是否启用
  * @param maxQuestionChars 用户问题最大字符数
  * @param maxSubQuestions 最大子问题数
  * @param routingConfidenceThreshold 意图路由置信度阈值
  * @param routingTimeoutMs 意图路由超时时间
  * @param mcpEnabled MCP 工具路由总开关
+ * @param deduplicationOverlapThreshold 相邻分块近似去重的重叠率阈值
+ * @param rerankEnabled 专用重排模型是否启用
+ * @param selectedEvidence 最终进入回答上下文的证据数上限
  */
 public record RagEvaluationConfigResponse(
     int chunkSize,
@@ -34,4 +37,7 @@ public record RagEvaluationConfigResponse(
     int maxSubQuestions,
     double routingConfidenceThreshold,
     int routingTimeoutMs,
-    boolean mcpEnabled) {}
+    boolean mcpEnabled,
+    double deduplicationOverlapThreshold,
+    boolean rerankEnabled,
+    int selectedEvidence) {}

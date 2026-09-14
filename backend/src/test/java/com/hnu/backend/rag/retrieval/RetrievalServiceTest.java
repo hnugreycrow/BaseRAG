@@ -97,6 +97,16 @@ class RetrievalServiceTest {
   private SearchHit hit(UUID chunkId, double similarity) {
     SearchHit hit = new SearchHit();
     hit.setChunkId(chunkId);
+    hit.setKnowledgeBaseId(UUID.randomUUID());
+    hit.setKnowledgeBaseName("知识库");
+    hit.setDocumentId(UUID.randomUUID());
+    hit.setVersionId(UUID.randomUUID());
+    hit.setDocumentName("文档.md");
+    hit.setChunkIndex(0);
+    hit.setContent("正文");
+    hit.setHeading("标题");
+    hit.setLineStart(1);
+    hit.setLineEnd(2);
     hit.setSimilarity(similarity);
     return hit;
   }

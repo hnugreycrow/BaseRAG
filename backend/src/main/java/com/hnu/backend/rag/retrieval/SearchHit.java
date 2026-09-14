@@ -11,6 +11,7 @@ public class SearchHit {
   private UUID documentId;
   private UUID versionId;
   private String documentName;
+  private int chunkIndex;
   private String content;
   private String heading;
   private int lineStart;

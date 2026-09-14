@@ -14,7 +14,9 @@ import com.hnu.backend.model.config.AiProperties;
 import com.hnu.backend.model.http.ModelHttpClient;
 import com.hnu.backend.rag.answer.Citations;
 import com.hnu.backend.rag.answer.ContextBuilder;
+import com.hnu.backend.rag.deduplication.DeduplicationStage;
 import com.hnu.backend.rag.execution.ExecutionStage;
+import com.hnu.backend.rag.rerank.RerankStage;
 import com.hnu.backend.rag.vo.ModelInfoResponse;
 import com.hnu.backend.rag.vo.SourceResponse;
 import com.hnu.backend.shared.error.ApiException;
@@ -55,6 +57,8 @@ public class ConversationService {
   private final GenerationAttemptMapper attempts;
   private final ConversationContextService conversationContext;
   private final ExecutionStage executionStage;
+  private final DeduplicationStage deduplicationStage;
+  private final RerankStage rerankStage;
   private final ContextBuilder contexts;
   private final ChatClient chat;
   private final RagProperties rag;
@@ -74,6 +78,8 @@ public class ConversationService {
       GenerationAttemptMapper attempts,
       ConversationContextService conversationContext,
       ExecutionStage executionStage,
+      DeduplicationStage deduplicationStage,
+      RerankStage rerankStage,
       ContextBuilder contexts,
       ChatClient chat,
       RagProperties rag,
@@ -84,6 +90,8 @@ public class ConversationService {
     this.attempts = attempts;
     this.conversationContext = conversationContext;
     this.executionStage = executionStage;
+    this.deduplicationStage = deduplicationStage;
+    this.rerankStage = rerankStage;
     this.contexts = contexts;
     this.chat = chat;
     this.rag = rag;
@@ -367,8 +375,16 @@ public class ConversationService {
           executionStage.execute(
               prepared.queryPlan(), prepared.routingPlan(), null, active.control::cancelled);
       ensureNotCancelled(active);
-      var selectedCandidates = executionStage.selectForAnswer(execution);
-      var context = contexts.buildEvidence(selectedCandidates);
+      var deduplicated = deduplicationStage.execute(execution.candidates(), execution.budget());
+      ensureNotCancelled(active);
+      var reranked =
+          rerankStage.execute(
+              prepared.queryPlan(),
+              execution,
+              deduplicated.candidates(),
+              active.control::cancelled);
+      ensureNotCancelled(active);
+      var context = contexts.buildEvidence(reranked.selectedCandidates());
       messages.prepare(
           active.assistant.getId(), standaloneQuestion, json.writeValueAsString(context.sources()));
       ensureNotCancelled(active);

@@ -147,58 +147,6 @@ class ExecutionStageTest {
         .retrieveCandidates(eq("Q1"), anyString(), isNull(), any(), any());
   }
 
-  @Test
-  void selectsDefaultTopKAndKeepsSubQuestionCoverageBeforeRerankingExists() {
-    RetrievalService retrieval = mock(RetrievalService.class);
-    McpToolExecutor tools = mock(McpToolExecutor.class);
-    RagProperties config = new RagProperties();
-    ExecutionStage stage = stage(retrieval, tools, config);
-    List<EvidenceCandidate> candidates = new ArrayList<>();
-    for (int index = 1; index <= 11; index++) {
-      candidates.add(
-          com.hnu.backend.rag.retrieval.CandidateMergeTest.candidate(
-              com.hnu.backend.rag.retrieval.CandidateMergeTest.id(index),
-              "Q1",
-              "model-a",
-              1 - index * .01,
-              index,
-              1.0 / (20 + index)));
-    }
-    EvidenceCandidate q2 =
-        com.hnu.backend.rag.retrieval.CandidateMergeTest.candidate(
-            com.hnu.backend.rag.retrieval.CandidateMergeTest.id(20), "Q2", "model-a", .1, 20, .001);
-    candidates.add(q2);
-    RagBudgetSnapshot budget = RagBudgetSnapshot.from(config);
-    ExecutionResult result =
-        new ExecutionResult(
-            candidates,
-            List.of(
-                new SubQuestionExecution(
-                    "Q1",
-                    IntentType.KNOWLEDGE_RETRIEVAL,
-                    SubQuestionExecution.Status.SUCCESS,
-                    List.of(),
-                    null,
-                    "RETRIEVAL_COMPLETED",
-                    1),
-                new SubQuestionExecution(
-                    "Q2",
-                    IntentType.KNOWLEDGE_RETRIEVAL,
-                    SubQuestionExecution.Status.SUCCESS,
-                    List.of(),
-                    null,
-                    "RETRIEVAL_COMPLETED",
-                    1)),
-            budget);
-
-    List<EvidenceCandidate> selected = stage.selectForAnswer(result);
-
-    assertEquals(10, selected.size());
-    assertEquals(
-        true,
-        selected.stream().anyMatch(candidate -> candidate.sourceSubQuestionIds().contains("Q2")));
-  }
-
   private ExecutionStage stage(
       RetrievalService retrieval, McpToolExecutor tools, RagProperties config) {
     ExecutionStage stage = new ExecutionStage(retrieval, tools, new CandidateMerge(), config);

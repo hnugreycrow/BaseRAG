@@ -14,12 +14,16 @@ import com.hnu.backend.conversation.mapper.GenerationAttemptMapper;
 import com.hnu.backend.conversation.mapper.MessageMapper;
 import com.hnu.backend.model.client.ChatClient;
 import com.hnu.backend.rag.answer.ContextBuilder;
+import com.hnu.backend.rag.deduplication.DeduplicationResult;
+import com.hnu.backend.rag.deduplication.DeduplicationStage;
 import com.hnu.backend.rag.execution.CancellationToken;
 import com.hnu.backend.rag.execution.ExecutionResult;
 import com.hnu.backend.rag.execution.ExecutionStage;
 import com.hnu.backend.rag.execution.RagBudgetSnapshot;
 import com.hnu.backend.rag.planning.QueryPlan;
 import com.hnu.backend.rag.planning.SubQuestion;
+import com.hnu.backend.rag.rerank.RerankResult;
+import com.hnu.backend.rag.rerank.RerankStage;
 import com.hnu.backend.rag.routing.IntentRoute;
 import com.hnu.backend.rag.routing.IntentType;
 import com.hnu.backend.rag.routing.RoutingPlan;
@@ -47,6 +51,8 @@ class ConversationServiceCancellationTest {
   @Mock private GenerationAttemptMapper attempts;
   @Mock private ConversationContextService conversationContext;
   @Mock private ExecutionStage executionStage;
+  @Mock private DeduplicationStage deduplicationStage;
+  @Mock private RerankStage rerankStage;
   @Mock private ContextBuilder contexts;
   @Mock private ChatClient chat;
   @Mock private RagProperties rag;
@@ -64,6 +70,8 @@ class ConversationServiceCancellationTest {
             attempts,
             conversationContext,
             executionStage,
+            deduplicationStage,
+            rerankStage,
             contexts,
             chat,
             rag,
@@ -133,7 +141,20 @@ class ConversationServiceCancellationTest {
         new ExecutionResult(List.of(), List.of(), RagBudgetSnapshot.from(new RagProperties()));
     when(executionStage.execute(any(), any(), isNull(), any(CancellationToken.class)))
         .thenReturn(empty);
-    when(executionStage.selectForAnswer(empty)).thenReturn(List.of());
+    when(deduplicationStage.execute(empty.candidates(), empty.budget()))
+        .thenReturn(new DeduplicationResult(List.of(), 0, 0, 0));
+    when(rerankStage.execute(any(), eq(empty), eq(List.of()), any(CancellationToken.class)))
+        .thenReturn(
+            new RerankResult(
+                List.of(),
+                List.of(),
+                RerankResult.Status.EMPTY,
+                "NO_RERANK_INPUT",
+                null,
+                null,
+                null,
+                null,
+                0));
     when(contexts.buildEvidence(List.of())).thenReturn(new ContextBuilder.Context("", List.of()));
     runTransactionsWithResultImmediately();
     runTransactionsImmediately();
@@ -142,6 +163,9 @@ class ConversationServiceCancellationTest {
 
     verify(executionStage, timeout(2000))
         .execute(any(), any(), isNull(), any(CancellationToken.class));
+    verify(deduplicationStage, timeout(2000)).execute(empty.candidates(), empty.budget());
+    verify(rerankStage, timeout(2000))
+        .execute(any(), eq(empty), eq(List.of()), any(CancellationToken.class));
     verify(messages, timeout(2000)).prepare(any(UUID.class), eq("改写后的独立问题"), eq("[]"));
   }
 

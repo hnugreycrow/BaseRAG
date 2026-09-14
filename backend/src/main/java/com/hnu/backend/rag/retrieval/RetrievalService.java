@@ -110,6 +110,7 @@ public class RetrievalService {
         double contribution = budget.vectorWeight() / (budget.rrfK() + rank);
         RetrievalAttribution attribution =
             new RetrievalAttribution(
+                hit.getChunkId(),
                 subQuestionId,
                 binding.model(),
                 hit.getSimilarity(),
@@ -134,10 +135,23 @@ public class RetrievalService {
         hit.getDocumentId(),
         hit.getVersionId(),
         hit.getDocumentName(),
+        hit.getChunkIndex(),
         hit.getContent(),
         hit.getHeading(),
         hit.getLineStart(),
         hit.getLineEnd(),
+        List.of(
+            new EvidenceSource(
+                hit.getChunkId(),
+                hit.getKnowledgeBaseId(),
+                hit.getKnowledgeBaseName(),
+                hit.getDocumentId(),
+                hit.getVersionId(),
+                hit.getDocumentName(),
+                hit.getChunkIndex(),
+                hit.getHeading(),
+                hit.getLineStart(),
+                hit.getLineEnd())),
         List.of(attribution),
         attribution.fusionContribution());
   }
@@ -150,6 +164,7 @@ public class RetrievalService {
     hit.setDocumentId(candidate.documentId());
     hit.setVersionId(candidate.versionId());
     hit.setDocumentName(candidate.documentName());
+    hit.setChunkIndex(candidate.chunkIndex());
     hit.setContent(candidate.content());
     hit.setHeading(candidate.heading());
     hit.setLineStart(candidate.lineStart());

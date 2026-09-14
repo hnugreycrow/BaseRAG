@@ -42,7 +42,19 @@ class RagPropertiesTest {
     assertThrows(IllegalArgumentException.class, properties::validate);
 
     properties = new RagProperties();
-    properties.getSearch().getFusion().setRerankCandidateLimit(9);
+    properties.getPipeline().getRerank().setMaxInputCandidates(0);
+    assertThrows(IllegalArgumentException.class, properties::validate);
+
+    properties = new RagProperties();
+    properties.getPipeline().getRerank().setSelectedEvidence(41);
+    assertThrows(IllegalArgumentException.class, properties::validate);
+
+    properties = new RagProperties();
+    properties.getPipeline().getRerank().setSelectedEvidence(3);
+    assertThrows(IllegalArgumentException.class, properties::validate);
+
+    properties = new RagProperties();
+    properties.getPipeline().getDeduplication().setOverlapThreshold(0);
     assertThrows(IllegalArgumentException.class, properties::validate);
 
     properties = new RagProperties();

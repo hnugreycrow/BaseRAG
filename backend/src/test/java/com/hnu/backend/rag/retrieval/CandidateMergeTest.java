@@ -61,20 +61,28 @@ public class CandidateMergeTest {
       double contribution) {
     RetrievalAttribution attribution =
         new RetrievalAttribution(
-            subQuestionId, model, rawSimilarity, rank, RetrievalChannel.VECTOR, contribution);
+            id, subQuestionId, model, rawSimilarity, rank, RetrievalChannel.VECTOR, contribution);
+    UUID knowledgeBaseId = UUID.randomUUID();
+    UUID documentId = UUID.randomUUID();
+    UUID versionId = UUID.randomUUID();
+    EvidenceSource source =
+        new EvidenceSource(
+            id, knowledgeBaseId, "知识库", documentId, versionId, "文档.md", 0, "标题", 1, 2);
     return new EvidenceCandidate(
         id,
         id,
         Set.of(subQuestionId),
-        UUID.randomUUID(),
+        knowledgeBaseId,
         "知识库",
-        UUID.randomUUID(),
-        UUID.randomUUID(),
+        documentId,
+        versionId,
         "文档.md",
+        0,
         "正文",
         "标题",
         1,
         2,
+        List.of(source),
         List.of(attribution),
         contribution);
   }

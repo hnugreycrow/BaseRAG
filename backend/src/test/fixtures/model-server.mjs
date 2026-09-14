@@ -16,6 +16,17 @@ http.createServer(async (req, res) => {
         embedding: Array.from({ length: body.dimensions }, (_, dimension) => base[dimension] ?? 0.1),
       }
     }) }))
+  } else if (req.url === '/compatible-api/v1/reranks') {
+    res.end(JSON.stringify({
+      object: 'list',
+      results: body.documents.map((_, index) => ({
+        index,
+        relevance_score: 1 - index / Math.max(body.documents.length, 1),
+      })),
+      model: body.model,
+      id: 'test-rerank-request',
+      usage: { total_tokens: 42 },
+    }))
   } else if (req.url === '/v1/chat/completions') {
     const content = '[测试替身，非真实模型回答] 试用期员工暂不能申请年假。[S1]'
     if (body.stream) {

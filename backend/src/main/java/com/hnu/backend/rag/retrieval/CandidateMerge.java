@@ -52,6 +52,7 @@ public class CandidateMerge {
   private static final class Accumulator {
     private final EvidenceCandidate representative;
     private final Set<String> sourceSubQuestionIds = new LinkedHashSet<>();
+    private final Set<EvidenceSource> sources = new LinkedHashSet<>();
     private final Set<RetrievalAttribution> attributions = new LinkedHashSet<>();
 
     private Accumulator(EvidenceCandidate representative) {
@@ -60,6 +61,7 @@ public class CandidateMerge {
 
     private void add(EvidenceCandidate candidate) {
       sourceSubQuestionIds.addAll(candidate.sourceSubQuestionIds());
+      sources.addAll(candidate.sources());
       attributions.addAll(candidate.attributions());
     }
 
@@ -76,10 +78,12 @@ public class CandidateMerge {
           representative.documentId(),
           representative.versionId(),
           representative.documentName(),
+          representative.chunkIndex(),
           representative.content(),
           representative.heading(),
           representative.lineStart(),
           representative.lineEnd(),
+          new ArrayList<>(sources),
           new ArrayList<>(attributions),
           score);
     }

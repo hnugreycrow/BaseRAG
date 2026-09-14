@@ -9,7 +9,10 @@ import com.hnu.backend.configuration.RagProperties;
  * @param defaultTopK 当前没有重排器时最终进入回答上下文的候选数
  * @param recallBudget 每个子问题在整个向量通道中最多保留的召回数
  * @param channelTimeoutMs 单个向量检索子问题的超时时间
- * @param rerankCandidateLimit 融合后为后续重排保留的候选上限，小于等于零表示不截断
+ * @param deduplicationOverlapThreshold 相邻分块被视为近似重复的字符三元组重叠率阈值
+ * @param rerankEnabled 本次执行是否调用专用重排模型
+ * @param rerankInputLimit 去重后最多提交给重排模型的候选数
+ * @param selectedEvidenceLimit 最终允许进入回答上下文的证据数
  * @param rrfK RRF 平滑常数，数值越小越强调头部名次
  * @param vectorWeight 向量通道参与 RRF 融合时的权重
  * @param vectorEnabled 是否启用向量检索通道
@@ -19,7 +22,10 @@ public record RagBudgetSnapshot(
     int defaultTopK,
     int recallBudget,
     int channelTimeoutMs,
-    int rerankCandidateLimit,
+    double deduplicationOverlapThreshold,
+    boolean rerankEnabled,
+    int rerankInputLimit,
+    int selectedEvidenceLimit,
     int rrfK,
     double vectorWeight,
     boolean vectorEnabled) {
@@ -31,7 +37,10 @@ public record RagBudgetSnapshot(
         search.getDefaultTopK(),
         search.effectiveRecallBudget(),
         search.getChannels().getTimeoutMs(),
-        search.getFusion().getRerankCandidateLimit(),
+        properties.getPipeline().getDeduplication().getOverlapThreshold(),
+        properties.getPipeline().getRerank().isEnabled(),
+        properties.getPipeline().getRerank().getMaxInputCandidates(),
+        properties.getPipeline().getRerank().getSelectedEvidence(),
         search.getFusion().getRrfK(),
         search.getFusion().getChannelWeights().getVector(),
         search.getChannels().getVector().isEnabled());

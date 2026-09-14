@@ -26,16 +26,19 @@ public class RagEvaluationController {
         rag.getChunkMinSize(),
         rag.getChunkMaxSize(),
         rag.getChunkOverlap(),
-        rag.getSearch().getDefaultTopK(),
+        rag.getPipeline().getRerank().getSelectedEvidence(),
         rag.getSearch().effectiveRecallBudget(),
         rag.getSearch().getChannels().getTimeoutMs(),
         rag.getSearch().getFusion().getRrfK(),
-        rag.getSearch().getFusion().getRerankCandidateLimit(),
+        rag.getPipeline().getRerank().getMaxInputCandidates(),
         rag.getSearch().getChannels().getVector().isEnabled(),
         rag.getMaxQuestionChars(),
         rag.getPipeline().getMaxSubQuestions(),
         rag.getPipeline().getRouting().getConfidenceThreshold(),
         rag.getPipeline().getRouting().getTimeoutMs(),
-        rag.getPipeline().getMcp().isEnabled());
+        rag.getPipeline().getMcp().isEnabled(),
+        rag.getPipeline().getDeduplication().getOverlapThreshold(),
+        rag.getPipeline().getRerank().isEnabled(),
+        rag.getPipeline().getRerank().getSelectedEvidence());
   }
 }

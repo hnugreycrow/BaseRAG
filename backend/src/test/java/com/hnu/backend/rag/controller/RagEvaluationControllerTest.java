@@ -17,7 +17,9 @@ class RagEvaluationControllerTest {
     rag.getSearch().setRecallBudget(18);
     rag.getSearch().getChannels().setTimeoutMs(9000);
     rag.getSearch().getFusion().setRrfK(30);
-    rag.getSearch().getFusion().setRerankCandidateLimit(36);
+    rag.getPipeline().getRerank().setMaxInputCandidates(36);
+    rag.getPipeline().getRerank().setSelectedEvidence(7);
+    rag.getPipeline().getDeduplication().setOverlapThreshold(0.9);
     rag.getSearch().getChannels().getVector().setEnabled(false);
     rag.setMaxQuestionChars(1500);
     rag.getPipeline().setMaxSubQuestions(6);
@@ -31,7 +33,7 @@ class RagEvaluationControllerTest {
     assertEquals(300, result.chunkMinSize());
     assertEquals(1200, result.chunkMaxSize());
     assertEquals(100, result.chunkOverlap());
-    assertEquals(8, result.topK());
+    assertEquals(7, result.topK());
     assertEquals(18, result.recallBudget());
     assertEquals(9000, result.channelTimeoutMs());
     assertEquals(30, result.rrfK());
@@ -42,5 +44,8 @@ class RagEvaluationControllerTest {
     assertEquals(0.8, result.routingConfidenceThreshold());
     assertEquals(4000, result.routingTimeoutMs());
     assertEquals(true, result.mcpEnabled());
+    assertEquals(0.9, result.deduplicationOverlapThreshold());
+    assertEquals(true, result.rerankEnabled());
+    assertEquals(7, result.selectedEvidence());
   }
 }
