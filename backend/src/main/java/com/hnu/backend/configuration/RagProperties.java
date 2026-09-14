@@ -135,7 +135,7 @@ public class RagProperties {
     private String endpoint;
     private String accessKey = "";
     private String secretKey = "";
-    private String bucket = "jagent";
+    private String bucket = "baserag";
     private String region = "us-east-1";
   }
 }

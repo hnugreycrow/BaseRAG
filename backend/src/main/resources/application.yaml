@@ -4,9 +4,9 @@ spring:
   profiles:
     default: local
   datasource:
-    url: "${DB_URL:jdbc:postgresql://localhost:5432/jagent}"
-    username: "${POSTGRES_USER:jagent}"
-    password: "${POSTGRES_PASSWORD:jagent-local-change-me}"
+    url: "${DB_URL:jdbc:postgresql://localhost:5432/baserag}"
+    username: "${POSTGRES_USER:baserag}"
+    password: "${POSTGRES_PASSWORD:baserag-local-change-me}"
     hikari:
       connection-timeout: 5000
       validation-timeout: 3000
@@ -142,9 +142,9 @@ rag:
 
   storage:
     endpoint: "${RUSTFS_ENDPOINT:http://localhost:9000}"
-    access-key: jagent-local
-    secret-key: jagent-local-secret-change-me
-    bucket: "${RUSTFS_BUCKET:jagent}"
+    access-key: baserag-local
+    secret-key: baserag-local-secret-change-me
+    bucket: "${RUSTFS_BUCKET:baserag}"
     region: us-east-1
 
 conversation:

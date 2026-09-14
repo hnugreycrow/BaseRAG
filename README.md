@@ -2,8 +2,6 @@
 
 BaseRAG 是一个本地运行的单用户 RAG 知识问答系统。当前版本支持 Markdown 知识库、手动分块与向量化、问题改写与子问题拆分、分预算向量检索、候选去重与模型重排、多轮会话、SSE 流式回答和来源审计。后端采用 Java 21、Spring Boot 4、MyBatis-Plus、PostgreSQL/pgvector 与 RustFS，前端采用 Vue 3。
 
-> 项目原名为 JAgent。为兼容已有本地数据，数据库、对象存储 bucket 和 Docker volume 的默认内部标识暂时保留为 `jagent`；这些标识不再作为产品名称使用。
-
 ## 当前范围
 
 - 支持创建知识库并绑定配置中的 Embedding 模型。
@@ -84,14 +82,14 @@ npm run build
 
 ```powershell
 # 根目录，先按启动步骤运行基础设施
-docker compose --env-file .env -f deploy/compose.yml exec -T postgres createdb -U jagent jagent_test
+docker compose --env-file .env -f deploy/compose.yml exec -T postgres createdb -U baserag baserag_test
 cd backend
 $env:RAG_INTEGRATION = 'true'
 ./mvnw.cmd test
 Remove-Item Env:RAG_INTEGRATION
 ```
 
-createdb 仅需首次执行；已存在时无需重建。测试默认连接独立 jagent_test 数据库、jagent-test bucket，使用 .env.example 中的本地演示凭据；若修改了凭据，需先在当前终端设置 POSTGRES_USER、POSTGRES_PASSWORD、RUSTFS_ACCESS_KEY、RUSTFS_SECRET_KEY、RUSTFS_ENDPOINT；数据库可通过 TEST_DB_URL 指定。测试不删除数据，只创建带随机 UUID 的测试记录。生成与 Embedding 在集成测试中是明确的 Mockito 替身，RustFS 文件写入及读回、PostgreSQL 和 pgvector 为真实服务。
+createdb 仅需首次执行；已存在时无需重建。测试默认连接独立 baserag_test 数据库、baserag-test bucket，使用 .env.example 中的本地演示凭据；若修改了凭据，需先在当前终端设置 POSTGRES_USER、POSTGRES_PASSWORD、RUSTFS_ACCESS_KEY、RUSTFS_SECRET_KEY、RUSTFS_ENDPOINT；数据库可通过 TEST_DB_URL 指定。测试不删除数据，只创建带随机 UUID 的测试记录。生成与 Embedding 在集成测试中是明确的 Mockito 替身，RustFS 文件写入及读回、PostgreSQL 和 pgvector 为真实服务。
 
 真实模型验收另执行：
 

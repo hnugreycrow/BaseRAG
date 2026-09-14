@@ -56,7 +56,7 @@
 | Maven Wrapper 编译 | 通过；修复原 Wrapper 的 PowerShell Target 空值错误 |
 | 后端测试 | 23 项通过，0 失败、0 错误、0 跳过（启用 RAG_INTEGRATION=true） |
 | 日常逻辑与 HTTP 单元测试 | 17 项通过 |
-| PostgreSQL / pgvector / RustFS 集成测试 | 6 项通过，实际数据库 jagent_test，bucket jagent-test |
+| PostgreSQL / pgvector / RustFS 集成测试 | 6 项通过，实际数据库 baserag_test，bucket baserag-test |
 | 前端 TypeScript 检查与 Vite 构建 | 通过 |
 | 后端 JAR 打包 | 通过，生成 backend/target/backend-0.0.1-SNAPSHOT.jar |
 | Docker Compose | PostgreSQL 17.11 / pgvector 0.8.6 与 RustFS 1.0.0-rc.4-glibc 启动成功 |

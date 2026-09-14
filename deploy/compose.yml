@@ -3,7 +3,7 @@ services:
   postgres:
     image: pgvector/pgvector:0.8.6-pg17-trixie
     environment:
-      POSTGRES_DB: jagent
+      POSTGRES_DB: baserag
       POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
     ports:
@@ -11,7 +11,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d jagent"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d baserag"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -31,10 +31,9 @@ services:
       - rustfs_data:/data
       - rustfs_logs:/logs
 volumes:
-  # Keep the legacy volume names so renaming the project does not hide existing local data.
   postgres_data:
-    name: jagent_postgres_data
+    name: baserag_postgres_data
   rustfs_data:
-    name: jagent_rustfs_data
+    name: baserag_rustfs_data
   rustfs_logs:
-    name: jagent_rustfs_logs
+    name: baserag_rustfs_logs

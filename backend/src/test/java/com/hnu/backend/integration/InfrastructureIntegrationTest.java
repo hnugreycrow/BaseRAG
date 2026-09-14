@@ -36,16 +36,16 @@ import software.amazon.awssdk.services.s3.S3Client;
 @EnabledIfEnvironmentVariable(named = "RAG_INTEGRATION", matches = "true")
 @SpringBootTest(
     properties = {
-      "spring.datasource.url=${TEST_DB_URL:jdbc:postgresql://localhost:5432/jagent_test}",
-      "spring.datasource.username=${POSTGRES_USER:jagent}",
-      "spring.datasource.password=${POSTGRES_PASSWORD:jagent-local-change-me}",
+      "spring.datasource.url=${TEST_DB_URL:jdbc:postgresql://localhost:5432/baserag_test}",
+      "spring.datasource.username=${POSTGRES_USER:baserag}",
+      "spring.datasource.password=${POSTGRES_PASSWORD:baserag-local-change-me}",
       "ai.embedding.candidates[0].id=qwen-emb-8b",
       "ai.embedding.candidates[0].provider=siliconflow",
       "ai.embedding.candidates[0].model=Qwen/Qwen3-Embedding-8B",
       "ai.embedding.candidates[0].dimension=2",
-      "rag.storage.access-key=${RUSTFS_ACCESS_KEY:jagent-local}",
-      "rag.storage.secret-key=${RUSTFS_SECRET_KEY:jagent-local-secret-change-me}",
-      "rag.storage.bucket=jagent-test"
+      "rag.storage.access-key=${RUSTFS_ACCESS_KEY:baserag-local}",
+      "rag.storage.secret-key=${RUSTFS_SECRET_KEY:baserag-local-secret-change-me}",
+      "rag.storage.bucket=baserag-test"
     })
 class InfrastructureIntegrationTest {
   @Autowired KnowledgeBaseMapper kbMapper;

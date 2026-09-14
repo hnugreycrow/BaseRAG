@@ -22,16 +22,16 @@
 
 ## 测试替身页面检查的复现方式
 
-本次浏览器检查使用隔离数据库 jagent_ui_test、bucket jagent-ui-test，后端 8081、前端 5174。普通应用使用 jagent、8080、5173。
+本次浏览器检查使用隔离数据库 baserag_ui_test、bucket baserag-ui-test，后端 8081、前端 5174。普通应用使用 baserag、8080、5173。
 
 测试协议服务位于 backend/src/test/fixtures/model-server.mjs，仅在手动运行 node 时启动，不打包进后端 JAR。固定回答带有“测试替身，非真实模型回答”标识，它只用于检查 HTTP、页面上传与来源交互。
 
 复现时创建独立测试数据库，并按 .env.example 制作单独的测试配置：
-- DB_URL 指向 jagent_ui_test，SERVER_PORT=8081。
+- DB_URL 指向 baserag_ui_test，SERVER_PORT=8081。
 - BAILIAN_URL 和 SILICONFLOW_URL 都设为 http://127.0.0.1:18090。
 - BAILIAN_CHAT_ENDPOINT=/v1/chat/completions，SILICONFLOW_EMBEDDING_ENDPOINT=/v1/embeddings。
 - BAILIAN_API_KEY 与 SILICONFLOW_API_KEY 可填写任意非空测试值，EMBEDDING_DIMENSIONS=11。
-- RUSTFS_BUCKET=jagent-ui-test，凭据与本地容器一致。
+- RUSTFS_BUCKET=baserag-ui-test，凭据与本地容器一致。
 - 单独运行 node backend/src/test/fixtures/model-server.mjs。
 - 通过 scripts/start-backend.ps1 -EnvFile 指向测试配置启动后端。
 - 在 frontend 终端设置 API_TARGET=http://127.0.0.1:8081，运行 npm run dev -- --port 5174。
