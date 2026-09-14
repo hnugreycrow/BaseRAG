@@ -1,13 +1,5 @@
 <script setup lang="ts">
-import {
-  ArrowLeft,
-  Collection,
-  Document,
-  Plus,
-  Refresh,
-  Search,
-  Upload,
-} from '@element-plus/icons-vue'
+import { ArrowLeft, Collection, Plus, Refresh, Search, Upload } from '@element-plus/icons-vue'
 
 import ChunkDetailDrawer from '../components/knowledge-base/ChunkDetailDrawer.vue'
 import ChunkTable from '../components/knowledge-base/ChunkTable.vue'
@@ -21,7 +13,6 @@ import { useKnowledgeBaseWorkspace } from '../components/knowledge-base/useKnowl
 const {
   chunkDetail,
   createDialogOpen,
-  currentCount,
   detailDrawerOpen,
   detailLoading,
   chunks,

@@ -1,6 +1,6 @@
-# JAgent Frontend
+# BaseRAG Frontend
 
-JAgent 的 Vue 3 + TypeScript 管理端，使用 Vite 构建。
+BaseRAG 的 Vue 3 + TypeScript 管理端，使用 Vite 构建。
 
 ## 技术栈
 

@@ -546,9 +546,9 @@ onBeforeUnmount(() => {
 
     <aside class="chat-sidebar" :class="{ 'is-open': mobileSidebarOpen }">
       <div class="sidebar-head">
-        <RouterLink class="brand" to="/chat" aria-label="JAgent 问答首页">
+        <RouterLink class="brand" to="/chat" aria-label="BaseRAG 问答首页">
           <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
-          <span><strong>JAgent</strong><small>知识问答</small></span>
+          <span><strong>BaseRAG</strong><small>知识问答</small></span>
         </RouterLink>
         <button
           class="mobile-close"
@@ -650,7 +650,7 @@ onBeforeUnmount(() => {
 
         <section v-else-if="isEmpty" class="welcome-state">
           <div class="welcome-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
-          <p class="welcome-eyebrow">JAGENT · GROUNDED ANSWERS</p>
+          <p class="welcome-eyebrow">BASERAG · GROUNDED ANSWERS</p>
           <h1>从你的资料中，<br />找到有依据的答案</h1>
           <p class="welcome-copy">回答会标注实际检索来源。你可以继续追问，也可以随时核对原文。</p>
           <div class="suggestion-grid" aria-label="问题示例">
@@ -919,7 +919,7 @@ onBeforeUnmount(() => {
             <el-icon><Position /></el-icon>
           </button>
         </div>
-        <p>JAgent 仅根据已导入资料回答，重要信息请通过来源原文核对。</p>
+        <p>BaseRAG 仅根据已导入资料回答，重要信息请通过来源原文核对。</p>
       </footer>
     </main>
 

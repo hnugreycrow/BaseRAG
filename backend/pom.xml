@@ -9,10 +9,10 @@
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>com.hnu</groupId>
-    <artifactId>backend</artifactId>
+    <artifactId>baserag-backend</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>backend</name>
-    <description>backend</description>
+    <name>BaseRAG Backend</name>
+    <description>Backend service for BaseRAG</description>
     <url/>
     <licenses>
         <license/>

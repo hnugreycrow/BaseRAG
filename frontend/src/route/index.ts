@@ -54,5 +54,5 @@ export const router = createRouter({
 })
 
 router.afterEach((to) => {
-  document.title = `${String(to.meta.title ?? '工作台')} · JAgent`
+  document.title = `${String(to.meta.title ?? '工作台')} · BaseRAG`
 })

@@ -30,7 +30,7 @@
 ## YAML 与前端分区改版验证（2026-09-12）
 
 - 后端配置迁移为 `application.yaml`，清理旧编译输出后，启用基础设施集成测试的 23 项后端测试全部通过。首次运行时 Docker 未启动，恢复服务后通过。
-- 前端改名 JAgent（包名 `jagent-web`），分为 `/chat`、`/admin` 和 `/admin/documents`；最终 TypeScript 检查与 Vite 构建通过。
+- 前端改名 BaseRAG（包名 `baserag-web`），分为 `/chat`、`/admin` 和 `/admin/documents`；最终 TypeScript 检查与 Vite 构建通过。
 - 浏览器历史验证覆盖管理页面上传 Markdown、文件搜索与状态筛选、提问、实际检索上下文、来源展开和 Escape 关闭；上传/手动分块的新交互需按本轮说明复验。
 - 390 × 844 测试视口下聊天页面无横向溢出；检查后补充了关闭状态侧栏的可见性样式，该小项仅完成构建验证。
 - 本轮浏览器成功链路仍使用明确标记的 HTTP 模型替身，PostgreSQL、pgvector 和 RustFS 为真实服务，不算真实模型验收。

@@ -1,4 +1,4 @@
-name: jagent
+name: baserag
 services:
   postgres:
     image: pgvector/pgvector:0.8.6-pg17-trixie
@@ -31,7 +31,10 @@ services:
       - rustfs_data:/data
       - rustfs_logs:/logs
 volumes:
+  # Keep the legacy volume names so renaming the project does not hide existing local data.
   postgres_data:
+    name: jagent_postgres_data
   rustfs_data:
+    name: jagent_rustfs_data
   rustfs_logs:
-
+    name: jagent_rustfs_logs

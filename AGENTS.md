@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-JAgent is a modular monolith with a Java 21/Spring Boot backend and a Vue 3/TypeScript frontend.
+BaseRAG is a modular monolith with a Java 21/Spring Boot backend and a Vue 3/TypeScript frontend.
 
 - `backend/src/main/java/com/hnu/backend/`: business modules such as `knowledgebase`, `document`, `rag`, `conversation`, and `model`.
 - `backend/src/main/resources/`: application configuration, Flyway migrations, and MyBatis XML mappers.

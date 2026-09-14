@@ -27,7 +27,12 @@ const menuItems: MenuItem[] = [
 
 <template>
   <aside class="sidebar" :class="{ 'is-collapsed': collapsed }">
-    <RouterLink class="brand" to="/admin" aria-label="返回 JAgent 工作台" @click="emit('navigate')">
+    <RouterLink
+      class="brand"
+      to="/admin"
+      aria-label="返回 BaseRAG 工作台"
+      @click="emit('navigate')"
+    >
       <span class="brand-mark" aria-hidden="true">
         <i></i>
         <i></i>
@@ -35,7 +40,7 @@ const menuItems: MenuItem[] = [
         <i></i>
       </span>
       <span v-show="!collapsed" class="brand-copy">
-        <strong>JAgent</strong>
+        <strong>BaseRAG</strong>
         <small>KNOWLEDGE STUDIO</small>
       </span>
     </RouterLink>

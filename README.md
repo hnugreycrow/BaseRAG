@@ -1,6 +1,8 @@
-# JAgent
+# BaseRAG
 
-JAgent 是一个本地运行的单用户 RAG 知识问答系统。当前版本支持 Markdown 知识库、手动分块与向量化、全库检索、多轮会话、SSE 流式回答和来源审计。后端采用 Java 21、Spring Boot 4、MyBatis-Plus、PostgreSQL/pgvector 与 RustFS，前端采用 Vue 3。
+BaseRAG 是一个本地运行的单用户 RAG 知识问答系统。当前版本支持 Markdown 知识库、手动分块与向量化、全库检索、多轮会话、SSE 流式回答和来源审计。后端采用 Java 21、Spring Boot 4、MyBatis-Plus、PostgreSQL/pgvector 与 RustFS，前端采用 Vue 3。
+
+> 项目原名为 JAgent。为兼容已有本地数据，数据库、对象存储 bucket 和 Docker volume 的默认内部标识暂时保留为 `jagent`；这些标识不再作为产品名称使用。
 
 ## 当前范围
 
@@ -61,7 +63,7 @@ JAgent 是一个本地运行的单用户 RAG 知识问答系统。当前版本�
 - /admin：唯一后台入口，以三级表格管理知识库、文档和当前生效版本的分块；新建知识库时从 YAML 候选中选择向量模型，文档上传后由用户手动开始分块，READY 文档也可重新分块并替换旧索引。
 - /admin/documents：兼容旧地址，自动跳转到 /admin。
 
-前端名称为 JAgent，npm 包名为 jagent-web。会话、消息、回答版本和当时的 sources/citations/modelInfo 保存到 PostgreSQL；URL 保留当前会话，刷新后可以恢复。多轮检索使用独立问题改写，生成上下文由持久化摘要、未摘要历史和最近 8 轮组成。后台沿用本地开发接口，尚未加入登录或管理权限。
+前端名称为 BaseRAG，npm 包名为 baserag-web。会话、消息、回答版本和当时的 sources/citations/modelInfo 保存到 PostgreSQL；URL 保留当前会话，刷新后可以恢复。多轮检索使用独立问题改写，生成上下文由持久化摘要、未摘要历史和最近 8 轮组成。后台沿用本地开发接口，尚未加入登录或管理权限。
 
 路由使用 HTML5 history。Vite 开发服务支持直接访问和刷新上述地址；将构建产物托管到其他 Web 服务时，需要将前端页面路由回退到 index.html，同时将 /api 请求转发到后端。
 

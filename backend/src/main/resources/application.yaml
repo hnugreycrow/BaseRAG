@@ -1,6 +1,6 @@
 spring:
   application:
-    name: jagent
+    name: baserag
   profiles:
     default: local
   datasource:
@@ -34,15 +34,15 @@ mybatis-plus:
 ai:
   providers:
     bailian:
-      url: "${BAILIAN_URL:https://dashscope.aliyuncs.com}"
-      api-key: "${BAILIAN_API_KEY:${CHAT_API_KEY:sk-ws-H.EIDXXPP.HwwU.MEQCIE7F0C3RBVHeLX373btLS2zWh8TzO_VyOe-Q1-dYPe0jAiBzzLRRyV_mX8oTUghPwTAfHEL6fGYd1CFmnPsHjQYEUQ}}"
+      url: https://dashscope.aliyuncs.com
+      api-key: "${BAILIAN_API_KEY:}"
       endpoints:
-        chat: "${BAILIAN_CHAT_ENDPOINT:/compatible-mode/v1/chat/completions}"
+        chat: /compatible-mode/v1/chat/completions
     siliconflow:
-      url: "${SILICONFLOW_URL:https://api.siliconflow.cn}"
+      url: https://api.siliconflow.cn
       api-key: "${SILICONFLOW_API_KEY:}"
       endpoints:
-        embedding: "${SILICONFLOW_EMBEDDING_ENDPOINT:/v1/embeddings}"
+        embedding: /v1/embeddings
     deepseek:
       url: https://api.deepseek.com
       api-key: "${DEEPSEEK_API_KEY:}"

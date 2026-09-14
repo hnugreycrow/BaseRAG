@@ -1,8 +1,8 @@
-# JAgent 系统架构
+# BaseRAG 系统架构
 
 ## 1. 文档目的
 
-本文描述 JAgent 当前已经实现的系统架构，包括：
+本文描述 BaseRAG 当前已经实现的系统架构，包括：
 
 - 系统边界
 - 技术栈
@@ -27,7 +27,7 @@
 
 ## 2. 系统定位与当前范围
 
-JAgent 是一个本地运行的 RAG 知识问答系统。
+BaseRAG 是一个本地运行的 RAG 知识问答系统。
 
 当前支持：
 
@@ -124,7 +124,7 @@ OpenAI Compatible Chat 和 Embedding 接口。
 ## 5. 仓库结构
 
 ​```text
-jagent/
+baserag/
 ├── backend/                 # Spring Boot 后端
 ├── frontend/                # Vue 前端
 ├── deploy/                  # Docker Compose
