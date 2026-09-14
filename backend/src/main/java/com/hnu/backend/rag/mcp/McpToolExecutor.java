@@ -25,6 +25,7 @@ public class McpToolExecutor {
   private static final Logger log = LoggerFactory.getLogger(McpToolExecutor.class);
   private static final Set<String> DEFAULT_SENSITIVE_FIELDS =
       Set.of("authorization", "password", "secret", "token", "apikey", "api_key");
+  private static final int MAX_ARGUMENT_SUMMARY_CHARS = 1000;
 
   private final McpToolRegistry registry;
   private final RagProperties config;
@@ -42,9 +43,19 @@ public class McpToolExecutor {
     McpToolRegistry.RoutingCheck check = registry.check(call.toolName(), call.arguments());
     if (check != McpToolRegistry.RoutingCheck.ALLOWED) {
       return observation(
-          call.toolName(), ToolObservation.Status.REJECTED, check.name(), "", false, startedAt);
+          call.toolName(),
+          argumentSummary(call.arguments(), Set.of()),
+          call.toolName(),
+          ToolObservation.Status.REJECTED,
+          check.name(),
+          "",
+          false,
+          startedAt);
     }
     McpToolRegistry.RegisteredTool registered = registry.resolve(call).orElseThrow();
+    String argumentsSummary =
+        argumentSummary(call.arguments(), registered.definition().sensitiveFields());
+    String auditSource = registered.gateway().getClass().getName() + "#" + call.toolName();
     Future<Object> future = executor.submit(() -> registered.gateway().invoke(call));
     try {
       Object raw = future.get(config.getPipeline().getMcp().getTimeoutMs(), TimeUnit.MILLISECONDS);
@@ -55,6 +66,8 @@ public class McpToolExecutor {
       ToolObservation observation =
           observation(
               call.toolName(),
+              argumentsSummary,
+              auditSource,
               ToolObservation.Status.SUCCESS,
               "TOOL_COMPLETED",
               content,
@@ -70,15 +83,36 @@ public class McpToolExecutor {
     } catch (TimeoutException e) {
       future.cancel(true);
       return observation(
-          call.toolName(), ToolObservation.Status.TIMEOUT, "TOOL_TIMEOUT", "", false, startedAt);
+          call.toolName(),
+          argumentsSummary,
+          auditSource,
+          ToolObservation.Status.TIMEOUT,
+          "TOOL_TIMEOUT",
+          "",
+          false,
+          startedAt);
     } catch (InterruptedException e) {
       future.cancel(true);
       Thread.currentThread().interrupt();
       return observation(
-          call.toolName(), ToolObservation.Status.FAILED, "TOOL_INTERRUPTED", "", false, startedAt);
+          call.toolName(),
+          argumentsSummary,
+          auditSource,
+          ToolObservation.Status.FAILED,
+          "TOOL_INTERRUPTED",
+          "",
+          false,
+          startedAt);
     } catch (ExecutionException | RuntimeException e) {
       return observation(
-          call.toolName(), ToolObservation.Status.FAILED, "TOOL_FAILED", "", false, startedAt);
+          call.toolName(),
+          argumentsSummary,
+          auditSource,
+          ToolObservation.Status.FAILED,
+          "TOOL_FAILED",
+          "",
+          false,
+          startedAt);
     }
   }
 
@@ -92,6 +126,14 @@ public class McpToolExecutor {
     Set<String> sensitive = new java.util.HashSet<>(DEFAULT_SENSITIVE_FIELDS);
     toolSensitiveFields.stream().map(name -> name.toLowerCase(Locale.ROOT)).forEach(sensitive::add);
     return json.writeValueAsString(redact(jsonValue, sensitive));
+  }
+
+  private String argumentSummary(Object value, Set<String> toolSensitiveFields) {
+    String safe = serializeRedacted(value, toolSensitiveFields);
+    // 参数摘要用于审计而非重放，固定硬上限可避免配置错误把大块用户输入写入结果。
+    return safe.length() > MAX_ARGUMENT_SUMMARY_CHARS
+        ? safeSubstring(safe, MAX_ARGUMENT_SUMMARY_CHARS)
+        : safe;
   }
 
   private Object redact(Object value, Set<String> sensitiveFields) {
@@ -124,13 +166,22 @@ public class McpToolExecutor {
 
   private ToolObservation observation(
       String toolName,
+      String argumentsSummary,
+      String auditSource,
       ToolObservation.Status status,
       String reasonCode,
       String content,
       boolean truncated,
       long startedAt) {
     return new ToolObservation(
-        toolName, status, reasonCode, content, truncated, elapsedMillis(startedAt));
+        toolName,
+        argumentsSummary,
+        auditSource,
+        status,
+        reasonCode,
+        content,
+        truncated,
+        elapsedMillis(startedAt));
   }
 
   private long elapsedMillis(long startedAt) {

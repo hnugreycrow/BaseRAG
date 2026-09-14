@@ -1,6 +1,8 @@
 package com.hnu.backend.rag.answer;
 
 import com.hnu.backend.configuration.RagProperties;
+import com.hnu.backend.rag.retrieval.EvidenceCandidate;
+import com.hnu.backend.rag.retrieval.RetrievalAttribution;
 import com.hnu.backend.rag.retrieval.SearchHit;
 import com.hnu.backend.rag.vo.SourceResponse;
 import java.util.ArrayList;
@@ -52,6 +54,40 @@ public class ContextBuilder {
               hit.getContent());
       String block = json.writeValueAsString(source) + "\n";
       text.append(block);
+      sources.add(source);
+    }
+    return new Context(text.toString(), List.copyOf(sources));
+  }
+
+  /** 将阶段四融合后的不可变候选转换为现有来源协议，保持 citationId 和前端字段兼容。 */
+  public Context buildEvidence(List<EvidenceCandidate> candidates) {
+    StringBuilder text = new StringBuilder();
+    List<SourceResponse> sources = new ArrayList<>();
+    Set<UUID> seen = new HashSet<>();
+    for (EvidenceCandidate candidate : candidates) {
+      if (!seen.add(candidate.chunkId())) continue;
+      String id = "S" + (sources.size() + 1);
+      // 对外兼容字段仍返回最佳原始相似度；候选排序已经只使用 RRF 融合分完成。
+      double rawSimilarity =
+          candidate.attributions().stream()
+              .mapToDouble(RetrievalAttribution::rawSimilarity)
+              .max()
+              .orElse(0);
+      SourceResponse source =
+          new SourceResponse(
+              id,
+              candidate.knowledgeBaseId(),
+              candidate.knowledgeBaseName(),
+              candidate.chunkId(),
+              candidate.documentId(),
+              candidate.versionId(),
+              candidate.documentName(),
+              candidate.heading(),
+              candidate.lineStart(),
+              candidate.lineEnd(),
+              rawSimilarity,
+              candidate.content());
+      text.append(json.writeValueAsString(source)).append('\n');
       sources.add(source);
     }
     return new Context(text.toString(), List.copyOf(sources));

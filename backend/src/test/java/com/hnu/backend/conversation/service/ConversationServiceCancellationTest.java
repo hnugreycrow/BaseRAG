@@ -14,9 +14,12 @@ import com.hnu.backend.conversation.mapper.GenerationAttemptMapper;
 import com.hnu.backend.conversation.mapper.MessageMapper;
 import com.hnu.backend.model.client.ChatClient;
 import com.hnu.backend.rag.answer.ContextBuilder;
+import com.hnu.backend.rag.execution.CancellationToken;
+import com.hnu.backend.rag.execution.ExecutionResult;
+import com.hnu.backend.rag.execution.ExecutionStage;
+import com.hnu.backend.rag.execution.RagBudgetSnapshot;
 import com.hnu.backend.rag.planning.QueryPlan;
 import com.hnu.backend.rag.planning.SubQuestion;
-import com.hnu.backend.rag.retrieval.RetrievalService;
 import com.hnu.backend.rag.routing.IntentRoute;
 import com.hnu.backend.rag.routing.IntentType;
 import com.hnu.backend.rag.routing.RoutingPlan;
@@ -43,7 +46,7 @@ class ConversationServiceCancellationTest {
   @Mock private MessageMapper messages;
   @Mock private GenerationAttemptMapper attempts;
   @Mock private ConversationContextService conversationContext;
-  @Mock private RetrievalService retrieval;
+  @Mock private ExecutionStage executionStage;
   @Mock private ContextBuilder contexts;
   @Mock private ChatClient chat;
   @Mock private RagProperties rag;
@@ -60,7 +63,7 @@ class ConversationServiceCancellationTest {
             messages,
             attempts,
             conversationContext,
-            retrieval,
+            executionStage,
             contexts,
             chat,
             rag,
@@ -126,14 +129,19 @@ class ConversationServiceCancellationTest {
     when(rag.getMaxQuestionChars()).thenReturn(2000);
     when(conversationContext.prepare(any(Conversation.class), eq(1), eq("原问题")))
         .thenReturn(preparedMixed("改写后的独立问题"));
-    when(retrieval.retrieve("改写后的独立问题")).thenReturn(List.of());
-    when(contexts.build(List.of())).thenReturn(new ContextBuilder.Context("", List.of()));
+    ExecutionResult empty =
+        new ExecutionResult(List.of(), List.of(), RagBudgetSnapshot.from(new RagProperties()));
+    when(executionStage.execute(any(), any(), isNull(), any(CancellationToken.class)))
+        .thenReturn(empty);
+    when(executionStage.selectForAnswer(empty)).thenReturn(List.of());
+    when(contexts.buildEvidence(List.of())).thenReturn(new ContextBuilder.Context("", List.of()));
     runTransactionsWithResultImmediately();
     runTransactionsImmediately();
 
     service.ask(conversationId, UUID.randomUUID(), "原问题", "request-id");
 
-    verify(retrieval, timeout(2000)).retrieve("改写后的独立问题");
+    verify(executionStage, timeout(2000))
+        .execute(any(), any(), isNull(), any(CancellationToken.class));
     verify(messages, timeout(2000)).prepare(any(UUID.class), eq("改写后的独立问题"), eq("[]"));
   }
 
@@ -156,7 +164,7 @@ class ConversationServiceCancellationTest {
 
     verify(chat, timeout(2000)).stream(anyString(), contains("你好"), any(), any());
     verify(messages, timeout(2000)).prepare(any(UUID.class), isNull(), eq("[]"));
-    verifyNoInteractions(retrieval);
+    verifyNoInteractions(executionStage);
   }
 
   private ConversationContextService.PreparedContext preparedMixed(String question) {

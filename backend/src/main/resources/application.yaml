@@ -90,11 +90,23 @@ rag:
       allow-list: []
       timeout-ms: 3000
       max-output-chars: 6000
+  search:
+    default-top-k: 10
+    recall-budget: 20
+    channels:
+      timeout-ms: 15000
+      vector:
+        enabled: true
+    fusion:
+      strategy: rrf
+      rrf-k: 20
+      rerank-candidate-limit: 40
+      channel-weights:
+        vector: 1.0
   chunk-size: 1400
   chunk-min-size: 500
   chunk-max-size: 2000
   chunk-overlap: 180
-  top-k: 5
   max-question-chars: 2000
   storage:
     endpoint: "${RUSTFS_ENDPOINT:http://localhost:9000}"

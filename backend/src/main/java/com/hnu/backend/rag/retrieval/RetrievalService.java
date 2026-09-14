@@ -2,31 +2,39 @@ package com.hnu.backend.rag.retrieval;
 
 import com.hnu.backend.configuration.RagProperties;
 import com.hnu.backend.model.client.EmbeddingClient;
+import com.hnu.backend.rag.execution.CancellationToken;
+import com.hnu.backend.rag.execution.RagBudgetSnapshot;
+import com.hnu.backend.rag.execution.StageBudget;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 
-/** 负责跨向量模型检索知识库分块，并统一归并、排序结果。 */
+/** 负责跨向量模型检索知识库分块，并按模型内名次统一归并、排序结果。 */
 @Service
 public class RetrievalService {
   private final EmbeddingClient embedding;
   private final RetrievalMapper retrieval;
   private final RagProperties config;
+  private final CandidateMerge candidateMerge;
 
   public RetrievalService(
-      EmbeddingClient embedding, RetrievalMapper retrieval, RagProperties config) {
+      EmbeddingClient embedding,
+      RetrievalMapper retrieval,
+      RagProperties config,
+      CandidateMerge candidateMerge) {
     this.embedding = embedding;
     this.retrieval = retrieval;
     this.config = config;
+    this.candidateMerge = candidateMerge;
   }
 
   /**
-   * 使用各知识库当前绑定的模型分别生成查询向量，再取全局相似度最高的结果。
+   * 使用各知识库当前绑定的模型分别生成查询向量，再按模型内名次融合结果。
    *
    * @param question 已规范化的检索问题
-   * @return 按相似度降序排列且不超过配置上限的候选分块
+   * @return 按 RRF 融合分排列且不超过最终 Top K 的候选分块
    */
   public List<SearchHit> retrieve(String question) {
     return retrieve(question, null);
@@ -37,41 +45,120 @@ public class RetrievalService {
    *
    * @param question 已规范化的检索问题
    * @param knowledgeBaseIds 允许检索的知识库；null 表示全部知识库
-   * @return 按相似度降序排列且不超过配置上限的候选分块
+   * @return 按 RRF 融合分排列且不超过最终 Top K 的候选分块
    */
   public List<SearchHit> retrieve(String question, List<UUID> knowledgeBaseIds) {
+    RagBudgetSnapshot snapshot = RagBudgetSnapshot.from(config);
+    return retrieveCandidates(
+            "Q1", question, knowledgeBaseIds, snapshot.forSubQuestion("Q1"), CancellationToken.NONE)
+        .stream()
+        .limit(snapshot.defaultTopK())
+        .map(this::toSearchHit)
+        .toList();
+  }
+
+  /**
+   * 为一个子问题执行完整向量通道召回，并保留各 Embedding 模型内的名次归因。
+   *
+   * <p>每个模型最多查询 recallBudget 条，随后先按 RRF 合并并再次截断到整个向量通道的 recallBudget， 因此模型数量增加不会线性放大该子问题进入全局融合的候选数。
+   */
+  public List<EvidenceCandidate> retrieveCandidates(
+      String subQuestionId,
+      String question,
+      List<UUID> knowledgeBaseIds,
+      StageBudget budget,
+      CancellationToken cancellationToken) {
     List<UUID> scope =
         knowledgeBaseIds == null ? null : knowledgeBaseIds.stream().distinct().toList();
     if (scope != null && scope.isEmpty()) return List.of();
-    List<SearchHit> candidates = new ArrayList<>();
+    if (!budget.vectorEnabled()) return List.of();
+    List<EvidenceCandidate> candidates = new ArrayList<>();
     var bindings =
         scope == null ? retrieval.activeModelBindings() : retrieval.activeModelBindingsIn(scope);
     for (var binding : bindings) {
+      cancellationToken.throwIfCancelled();
       float[] vector =
           embedding.embed(binding.model(), binding.dimensions(), List.of(question)).getFirst();
+      List<SearchHit> hits;
       if (scope == null) {
-        candidates.addAll(
+        hits =
             retrieval.searchAll(
                 EmbeddingClient.literal(vector),
                 binding.model(),
                 binding.dimensions(),
-                config.getTopK()));
+                budget.recallBudget());
       } else {
-        candidates.addAll(
+        hits =
             retrieval.searchIn(
                 scope,
                 EmbeddingClient.literal(vector),
                 binding.model(),
                 binding.dimensions(),
-                config.getTopK()));
+                budget.recallBudget());
+      }
+      cancellationToken.throwIfCancelled();
+      List<SearchHit> ranked =
+          hits.stream()
+              .sorted(
+                  Comparator.comparingDouble(SearchHit::getSimilarity)
+                      .reversed()
+                      .thenComparing(hit -> hit.getChunkId().toString()))
+              .toList();
+      for (int index = 0; index < ranked.size(); index++) {
+        int rank = index + 1;
+        SearchHit hit = ranked.get(index);
+        double contribution = budget.vectorWeight() / (budget.rrfK() + rank);
+        RetrievalAttribution attribution =
+            new RetrievalAttribution(
+                subQuestionId,
+                binding.model(),
+                hit.getSimilarity(),
+                rank,
+                RetrievalChannel.VECTOR,
+                contribution);
+        candidates.add(toCandidate(hit, subQuestionId, attribution));
       }
     }
-    return candidates.stream()
-        .sorted(
-            Comparator.comparingDouble(SearchHit::getSimilarity)
-                .reversed()
-                .thenComparing(hit -> hit.getChunkId().toString()))
-        .limit(config.getTopK())
-        .toList();
+    // 不同 Embedding 模型的原始相似度不可直接比较，只使用各自模型内名次产生的 RRF 分数合并。
+    return candidateMerge.mergeAndSelect(candidates, List.of(subQuestionId), budget.recallBudget());
+  }
+
+  private EvidenceCandidate toCandidate(
+      SearchHit hit, String subQuestionId, RetrievalAttribution attribution) {
+    return new EvidenceCandidate(
+        hit.getChunkId(),
+        hit.getChunkId(),
+        java.util.Set.of(subQuestionId),
+        hit.getKnowledgeBaseId(),
+        hit.getKnowledgeBaseName(),
+        hit.getDocumentId(),
+        hit.getVersionId(),
+        hit.getDocumentName(),
+        hit.getContent(),
+        hit.getHeading(),
+        hit.getLineStart(),
+        hit.getLineEnd(),
+        List.of(attribution),
+        attribution.fusionContribution());
+  }
+
+  private SearchHit toSearchHit(EvidenceCandidate candidate) {
+    SearchHit hit = new SearchHit();
+    hit.setKnowledgeBaseId(candidate.knowledgeBaseId());
+    hit.setKnowledgeBaseName(candidate.knowledgeBaseName());
+    hit.setChunkId(candidate.chunkId());
+    hit.setDocumentId(candidate.documentId());
+    hit.setVersionId(candidate.versionId());
+    hit.setDocumentName(candidate.documentName());
+    hit.setContent(candidate.content());
+    hit.setHeading(candidate.heading());
+    hit.setLineStart(candidate.lineStart());
+    hit.setLineEnd(candidate.lineEnd());
+    hit.setSimilarity(
+        candidate.attributions().stream()
+            .mapToDouble(RetrievalAttribution::rawSimilarity)
+            .max()
+            .orElse(0));
+    return hit;
   }
 }

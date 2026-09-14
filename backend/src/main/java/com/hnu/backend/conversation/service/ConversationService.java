@@ -14,7 +14,7 @@ import com.hnu.backend.model.config.AiProperties;
 import com.hnu.backend.model.http.ModelHttpClient;
 import com.hnu.backend.rag.answer.Citations;
 import com.hnu.backend.rag.answer.ContextBuilder;
-import com.hnu.backend.rag.retrieval.RetrievalService;
+import com.hnu.backend.rag.execution.ExecutionStage;
 import com.hnu.backend.rag.vo.ModelInfoResponse;
 import com.hnu.backend.rag.vo.SourceResponse;
 import com.hnu.backend.shared.error.ApiException;
@@ -54,7 +54,7 @@ public class ConversationService {
   private final MessageMapper messages;
   private final GenerationAttemptMapper attempts;
   private final ConversationContextService conversationContext;
-  private final RetrievalService retrieval;
+  private final ExecutionStage executionStage;
   private final ContextBuilder contexts;
   private final ChatClient chat;
   private final RagProperties rag;
@@ -73,7 +73,7 @@ public class ConversationService {
       MessageMapper messages,
       GenerationAttemptMapper attempts,
       ConversationContextService conversationContext,
-      RetrievalService retrieval,
+      ExecutionStage executionStage,
       ContextBuilder contexts,
       ChatClient chat,
       RagProperties rag,
@@ -83,7 +83,7 @@ public class ConversationService {
     this.messages = messages;
     this.attempts = attempts;
     this.conversationContext = conversationContext;
-    this.retrieval = retrieval;
+    this.executionStage = executionStage;
     this.contexts = contexts;
     this.chat = chat;
     this.rag = rag;
@@ -363,9 +363,12 @@ public class ConversationService {
         answerSystemChat(active, prepared.history());
         return;
       }
-      var hits = retrieval.retrieve(standaloneQuestion);
+      var execution =
+          executionStage.execute(
+              prepared.queryPlan(), prepared.routingPlan(), null, active.control::cancelled);
       ensureNotCancelled(active);
-      var context = contexts.build(hits);
+      var selectedCandidates = executionStage.selectForAnswer(execution);
+      var context = contexts.buildEvidence(selectedCandidates);
       messages.prepare(
           active.assistant.getId(), standaloneQuestion, json.writeValueAsString(context.sources()));
       ensureNotCancelled(active);

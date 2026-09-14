@@ -13,23 +13,30 @@ import org.junit.jupiter.api.Test;
 
 class RetrievalServiceTest {
   @Test
-  void embedsPerModelAndMergesGlobalTopK() {
+  void embedsPerModelAndMergesByRankInsteadOfRawSimilarity() {
     EmbeddingClient embedding = mock(EmbeddingClient.class);
     RetrievalMapper mapper = mock(RetrievalMapper.class);
     RagProperties config = new RagProperties();
-    config.setTopK(2);
+    config.getSearch().setDefaultTopK(2);
+    config.getSearch().setRecallBudget(2);
     var first = new EmbeddingBinding("model-a", 2);
     var second = new EmbeddingBinding("model-b", 3);
     when(mapper.activeModelBindings()).thenReturn(List.of(first, second));
     when(embedding.embed("model-a", 2, List.of("问题"))).thenReturn(List.of(new float[] {1, 0}));
     when(embedding.embed("model-b", 3, List.of("问题"))).thenReturn(List.of(new float[] {0, 1, 0}));
-    when(mapper.searchAll("[1.0, 0.0]", "model-a", 2, 2)).thenReturn(List.of(hit(.91), hit(.40)));
+    SearchHit modelAFirst = hit(id(1), .60);
+    SearchHit modelASecond = hit(id(4), .59);
+    SearchHit modelBFirst = hit(id(2), .99);
+    SearchHit modelBSecond = hit(id(3), .98);
+    when(mapper.searchAll("[1.0, 0.0]", "model-a", 2, 2))
+        .thenReturn(List.of(modelAFirst, modelASecond));
     when(mapper.searchAll("[0.0, 1.0, 0.0]", "model-b", 3, 2))
-        .thenReturn(List.of(hit(.95), hit(.80)));
+        .thenReturn(List.of(modelBFirst, modelBSecond));
 
-    var result = new RetrievalService(embedding, mapper, config).retrieve("问题");
+    var result =
+        new RetrievalService(embedding, mapper, config, new CandidateMerge()).retrieve("问题");
 
-    assertEquals(List.of(.95, .91), result.stream().map(SearchHit::getSimilarity).toList());
+    assertEquals(List.of(id(1), id(2)), result.stream().map(SearchHit::getChunkId).toList());
     verify(embedding).embed("model-a", 2, List.of("问题"));
     verify(embedding).embed("model-b", 3, List.of("问题"));
   }
@@ -39,16 +46,19 @@ class RetrievalServiceTest {
     EmbeddingClient embedding = mock(EmbeddingClient.class);
     RetrievalMapper mapper = mock(RetrievalMapper.class);
     RagProperties config = new RagProperties();
-    config.setTopK(2);
+    config.getSearch().setDefaultTopK(2);
+    config.getSearch().setRecallBudget(2);
     UUID first = UUID.randomUUID();
     UUID second = UUID.randomUUID();
     List<UUID> scope = List.of(first, second);
     var binding = new EmbeddingBinding("model-a", 2);
     when(mapper.activeModelBindingsIn(scope)).thenReturn(List.of(binding));
     when(embedding.embed("model-a", 2, List.of("问题"))).thenReturn(List.of(new float[] {1, 0}));
-    when(mapper.searchIn(scope, "[1.0, 0.0]", "model-a", 2, 2)).thenReturn(List.of(hit(.91)));
+    when(mapper.searchIn(scope, "[1.0, 0.0]", "model-a", 2, 2))
+        .thenReturn(List.of(hit(id(1), .91)));
 
-    var result = new RetrievalService(embedding, mapper, config).retrieve("问题", scope);
+    var result =
+        new RetrievalService(embedding, mapper, config, new CandidateMerge()).retrieve("问题", scope);
 
     assertEquals(List.of(.91), result.stream().map(SearchHit::getSimilarity).toList());
     verify(mapper).activeModelBindingsIn(scope);
@@ -63,16 +73,35 @@ class RetrievalServiceTest {
     RetrievalMapper mapper = mock(RetrievalMapper.class);
 
     var result =
-        new RetrievalService(embedding, mapper, new RagProperties()).retrieve("问题", List.of());
+        new RetrievalService(embedding, mapper, new RagProperties(), new CandidateMerge())
+            .retrieve("问题", List.of());
 
     assertTrue(result.isEmpty());
     verifyNoInteractions(embedding, mapper);
   }
 
-  private SearchHit hit(double similarity) {
+  @Test
+  void skipsAllVectorWorkWhenChannelIsDisabled() {
+    EmbeddingClient embedding = mock(EmbeddingClient.class);
+    RetrievalMapper mapper = mock(RetrievalMapper.class);
+    RagProperties config = new RagProperties();
+    config.getSearch().getChannels().getVector().setEnabled(false);
+
+    var result =
+        new RetrievalService(embedding, mapper, config, new CandidateMerge()).retrieve("问题");
+
+    assertTrue(result.isEmpty());
+    verifyNoInteractions(embedding, mapper);
+  }
+
+  private SearchHit hit(UUID chunkId, double similarity) {
     SearchHit hit = new SearchHit();
-    hit.setChunkId(UUID.randomUUID());
+    hit.setChunkId(chunkId);
     hit.setSimilarity(similarity);
     return hit;
+  }
+
+  private UUID id(long value) {
+    return new UUID(0, value);
   }
 }

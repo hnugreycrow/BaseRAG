@@ -75,6 +75,8 @@ class McpToolExecutorTest {
     assertFalse(result.content().contains("never-log-this"));
     assertFalse(result.content().contains("also-secret"));
     assertFalse(result.truncated());
+    assertTrue(result.argumentsSummary().contains("2026-09-14"));
+    assertTrue(result.auditSource().endsWith("#calendar.read"));
 
     config.getPipeline().getMcp().setMaxOutputChars(12);
     ToolObservation truncated = executor.execute(call);

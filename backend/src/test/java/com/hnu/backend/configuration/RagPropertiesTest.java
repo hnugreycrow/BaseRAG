@@ -28,4 +28,29 @@ class RagPropertiesTest {
     properties.getPipeline().getMcp().setAllowList(List.of(" "));
     assertThrows(IllegalArgumentException.class, properties::validate);
   }
+
+  @Test
+  void validatesSearchFunnelAndResolvesZeroRecallBudget() {
+    RagProperties properties = new RagProperties();
+    properties.getSearch().setRecallBudget(0);
+    properties.validate();
+    org.junit.jupiter.api.Assertions.assertEquals(
+        properties.getSearch().getDefaultTopK(), properties.getSearch().effectiveRecallBudget());
+
+    properties = new RagProperties();
+    properties.getSearch().setRecallBudget(9);
+    assertThrows(IllegalArgumentException.class, properties::validate);
+
+    properties = new RagProperties();
+    properties.getSearch().getFusion().setRerankCandidateLimit(9);
+    assertThrows(IllegalArgumentException.class, properties::validate);
+
+    properties = new RagProperties();
+    properties.getSearch().getFusion().setRrfK(0);
+    assertThrows(IllegalArgumentException.class, properties::validate);
+
+    properties = new RagProperties();
+    properties.getSearch().getFusion().getChannelWeights().setVector(Double.NaN);
+    assertThrows(IllegalArgumentException.class, properties::validate);
+  }
 }
