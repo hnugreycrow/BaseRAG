@@ -104,7 +104,7 @@ export const useConversationGenerationStore = defineStore('conversation-generati
   ) {
     if (isActive(conversationId)) return
 
-    const task: ConversationGenerationTask = {
+    tasks[conversationId] = {
       conversationId,
       user,
       assistant,
@@ -114,7 +114,9 @@ export const useConversationGenerationStore = defineStore('conversation-generati
       serverStarted: false,
       unread: false,
     }
-    tasks[conversationId] = task
+    // 后续必须通过 reactive 容器取回 Proxy。若继续使用上面的原始对象，
+    // delta 虽然会累加到 content，却不会触发组件更新和增量滚动。
+    const task = tasks[conversationId]!
 
     try {
       await stream((event) => handleEvent(task, event), task.controller.signal)
