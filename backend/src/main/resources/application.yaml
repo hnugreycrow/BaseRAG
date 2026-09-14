@@ -40,12 +40,12 @@ ai:
         chat: "${BAILIAN_CHAT_ENDPOINT:/compatible-mode/v1/chat/completions}"
     siliconflow:
       url: "${SILICONFLOW_URL:https://api.siliconflow.cn}"
-      api-key: "${SILICONFLOW_API_KEY:${EMBEDDING_API_KEY:sk-njfllpwuenomqsqkpcggyxxfyxerkreskeftsfzbcagugkbt}}"
+      api-key: "${SILICONFLOW_API_KEY:}"
       endpoints:
         embedding: "${SILICONFLOW_EMBEDDING_ENDPOINT:/v1/embeddings}"
     deepseek:
       url: https://api.deepseek.com
-      api-key: "${DEEPSEEK_API_KEY:${CHAT_API_KEY:sk-a1e8182db7cd461c88834dd28f8c1be1}}"
+      api-key: "${DEEPSEEK_API_KEY:}"
       endpoints:
         chat: /chat/completions
   selection:
