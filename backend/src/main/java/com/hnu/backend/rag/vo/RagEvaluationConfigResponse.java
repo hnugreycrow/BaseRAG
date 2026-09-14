@@ -7,4 +7,7 @@ public record RagEvaluationConfigResponse(
     int chunkOverlap,
     int topK,
     int maxQuestionChars,
-    int maxSubQuestions) {}
+    int maxSubQuestions,
+    double routingConfidenceThreshold,
+    int routingTimeoutMs,
+    boolean mcpEnabled) {}

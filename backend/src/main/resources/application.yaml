@@ -82,6 +82,14 @@ rag:
   # Semantic blocks are packed near the target; small tails may grow up to max-size.
   pipeline:
     max-sub-questions: 4
+    routing:
+      confidence-threshold: 0.70
+      timeout-ms: 5000
+    mcp:
+      enabled: false
+      allow-list: []
+      timeout-ms: 3000
+      max-output-chars: 6000
   chunk-size: 1400
   chunk-min-size: 500
   chunk-max-size: 2000

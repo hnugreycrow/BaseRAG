@@ -13,11 +13,17 @@ import com.hnu.backend.conversation.mapper.ConversationMapper;
 import com.hnu.backend.conversation.mapper.GenerationAttemptMapper;
 import com.hnu.backend.conversation.mapper.MessageMapper;
 import com.hnu.backend.model.client.ChatClient;
+import com.hnu.backend.rag.model.IntentRoute;
+import com.hnu.backend.rag.model.IntentType;
 import com.hnu.backend.rag.model.QueryPlan;
+import com.hnu.backend.rag.model.RoutingPlan;
+import com.hnu.backend.rag.model.RoutingReasonCode;
+import com.hnu.backend.rag.model.SubQuestion;
 import com.hnu.backend.rag.service.RetrievalService;
 import com.hnu.backend.rag.support.ContextBuilder;
 import com.hnu.backend.shared.error.ApiException;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.AfterEach;
@@ -119,8 +125,7 @@ class ConversationServiceCancellationTest {
     when(messages.nextTurn(conversationId)).thenReturn(1);
     when(rag.getMaxQuestionChars()).thenReturn(2000);
     when(conversationContext.prepare(any(Conversation.class), eq(1), eq("原问题")))
-        .thenReturn(
-            new ConversationContextService.PreparedContext("历史", QueryPlan.fallback("改写后的独立问题")));
+        .thenReturn(preparedMixed("改写后的独立问题"));
     when(retrieval.retrieve("改写后的独立问题")).thenReturn(List.of());
     when(contexts.build(List.of())).thenReturn(new ContextBuilder.Context("", List.of()));
     runTransactionsWithResultImmediately();
@@ -130,6 +135,61 @@ class ConversationServiceCancellationTest {
 
     verify(retrieval, timeout(2000)).retrieve("改写后的独立问题");
     verify(messages, timeout(2000)).prepare(any(UUID.class), eq("改写后的独立问题"), eq("[]"));
+  }
+
+  @Test
+  void systemChatSkipsRetrievalAndPersistsEmptySources() {
+    UUID conversationId = UUID.randomUUID();
+    Conversation conversation = new Conversation();
+    conversation.setId(conversationId);
+    when(conversations.find(conversationId)).thenReturn(conversation);
+    when(messages.nextTurn(conversationId)).thenReturn(1);
+    when(rag.getMaxQuestionChars()).thenReturn(2000);
+    when(conversationContext.prepare(any(Conversation.class), eq(1), eq("你好")))
+        .thenReturn(preparedSystemChat("你好"));
+    when(messages.markStreaming(any(UUID.class))).thenReturn(1);
+    when(chat.stream(anyString(), anyString(), any(), any()))
+        .thenReturn(new ChatClient.Generation("你好，有什么可以帮你？", "chat", "test", "model"));
+    runTransactionsWithResultImmediately();
+
+    service.ask(conversationId, UUID.randomUUID(), "你好", "request-id");
+
+    verify(chat, timeout(2000)).stream(anyString(), contains("你好"), any(), any());
+    verify(messages, timeout(2000)).prepare(any(UUID.class), isNull(), eq("[]"));
+    verifyNoInteractions(retrieval);
+  }
+
+  private ConversationContextService.PreparedContext preparedMixed(String question) {
+    QueryPlan plan =
+        new QueryPlan(
+            question, List.of(new SubQuestion("Q1", question), new SubQuestion("Q2", "你好")));
+    RoutingPlan routing =
+        new RoutingPlan(
+            List.of(
+                IntentRoute.knowledgeFallback("Q1", 1, RoutingReasonCode.KNOWLEDGE_SOURCE_REQUIRED),
+                new IntentRoute(
+                    "Q2",
+                    IntentType.SYSTEM_CHAT,
+                    1,
+                    null,
+                    Map.of(),
+                    RoutingReasonCode.GENERAL_CHAT)));
+    return new ConversationContextService.PreparedContext("历史", plan, routing);
+  }
+
+  private ConversationContextService.PreparedContext preparedSystemChat(String question) {
+    QueryPlan plan = QueryPlan.fallback(question);
+    RoutingPlan routing =
+        new RoutingPlan(
+            List.of(
+                new IntentRoute(
+                    "Q1",
+                    IntentType.SYSTEM_CHAT,
+                    1,
+                    null,
+                    Map.of(),
+                    RoutingReasonCode.GENERAL_CHAT)));
+    return new ConversationContextService.PreparedContext("历史", plan, routing);
   }
 
   private Message assistant(UUID conversationId, UUID generationId, String status) {

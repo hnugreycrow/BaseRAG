@@ -4,6 +4,8 @@ import com.hnu.backend.conversation.entity.Conversation;
 import com.hnu.backend.rag.model.MemoryTurn;
 import com.hnu.backend.rag.model.QueryPlan;
 import com.hnu.backend.rag.model.RagMemory;
+import com.hnu.backend.rag.model.RoutingPlan;
+import com.hnu.backend.rag.pipeline.stage.IntentRoutingStage;
 import com.hnu.backend.rag.pipeline.stage.MemoryStage;
 import com.hnu.backend.rag.pipeline.stage.QueryPlanningStage;
 import java.util.List;
@@ -13,18 +15,23 @@ import org.springframework.stereotype.Service;
 public class ConversationContextService {
   private final MemoryStage memoryStage;
   private final QueryPlanningStage queryPlanningStage;
+  private final IntentRoutingStage intentRoutingStage;
 
   public ConversationContextService(
-      MemoryStage memoryStage, QueryPlanningStage queryPlanningStage) {
+      MemoryStage memoryStage,
+      QueryPlanningStage queryPlanningStage,
+      IntentRoutingStage intentRoutingStage) {
     this.memoryStage = memoryStage;
     this.queryPlanningStage = queryPlanningStage;
+    this.intentRoutingStage = intentRoutingStage;
   }
 
   public PreparedContext prepare(Conversation conversation, int currentTurn, String question) {
     RagMemory memory = memoryStage.execute(conversation.getId(), currentTurn);
     String history = format(memory);
     QueryPlan queryPlan = queryPlanningStage.execute(memory, question);
-    return new PreparedContext(history, queryPlan);
+    RoutingPlan routingPlan = intentRoutingStage.execute(queryPlan);
+    return new PreparedContext(history, queryPlan, routingPlan);
   }
 
   private String format(RagMemory memory) {
@@ -50,5 +57,5 @@ public class ConversationContextService {
     return text.isEmpty() ? "（无）" : text.toString();
   }
 
-  public record PreparedContext(String history, QueryPlan queryPlan) {}
+  public record PreparedContext(String history, QueryPlan queryPlan, RoutingPlan routingPlan) {}
 }

@@ -28,6 +28,9 @@ public class RagEvaluationController {
         rag.getChunkOverlap(),
         rag.getTopK(),
         rag.getMaxQuestionChars(),
-        rag.getPipeline().getMaxSubQuestions());
+        rag.getPipeline().getMaxSubQuestions(),
+        rag.getPipeline().getRouting().getConfidenceThreshold(),
+        rag.getPipeline().getRouting().getTimeoutMs(),
+        rag.getPipeline().getMcp().isEnabled());
   }
 }

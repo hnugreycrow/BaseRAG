@@ -16,6 +16,9 @@ class RagEvaluationControllerTest {
     rag.setTopK(8);
     rag.setMaxQuestionChars(1500);
     rag.getPipeline().setMaxSubQuestions(6);
+    rag.getPipeline().getRouting().setConfidenceThreshold(0.8);
+    rag.getPipeline().getRouting().setTimeoutMs(4000);
+    rag.getPipeline().getMcp().setEnabled(true);
 
     var result = new RagEvaluationController(rag).config();
 
@@ -26,5 +29,8 @@ class RagEvaluationControllerTest {
     assertEquals(8, result.topK());
     assertEquals(1500, result.maxQuestionChars());
     assertEquals(6, result.maxSubQuestions());
+    assertEquals(0.8, result.routingConfidenceThreshold());
+    assertEquals(4000, result.routingTimeoutMs());
+    assertEquals(true, result.mcpEnabled());
   }
 }
