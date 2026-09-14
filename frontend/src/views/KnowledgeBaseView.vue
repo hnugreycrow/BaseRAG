@@ -133,11 +133,6 @@ const {
 
     <section class="table-panel">
       <div class="table-toolbar">
-        <div class="table-label">
-          <el-icon v-if="level === 'knowledge-bases'"><Collection /></el-icon>
-          <el-icon v-else><Document /></el-icon>
-          <strong>{{ currentCount }}</strong>
-        </div>
         <div class="toolbar-actions">
           <el-input v-model="query" :placeholder="searchPlaceholder" clearable class="search-input">
             <template #prefix
