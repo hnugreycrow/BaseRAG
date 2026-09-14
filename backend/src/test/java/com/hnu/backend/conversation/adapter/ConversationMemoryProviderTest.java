@@ -16,7 +16,7 @@ import com.hnu.backend.conversation.entity.Message;
 import com.hnu.backend.conversation.mapper.ConversationMapper;
 import com.hnu.backend.conversation.mapper.MessageMapper;
 import com.hnu.backend.model.client.ChatClient;
-import com.hnu.backend.rag.model.MemoryTurn;
+import com.hnu.backend.rag.memory.MemoryTurn;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;

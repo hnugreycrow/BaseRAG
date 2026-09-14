@@ -2,7 +2,7 @@
 
 ## 1. 设计结论
 
-后端保持单个 Spring Boot / Maven 模块，采用“按业务能力分包，包内使用直白职责目录”的模块化单体结构。当前业务规模不使用 `api/application/domain/infrastructure` 四层模板，避免只有一两个文件的抽象目录。
+后端保持单个 Spring Boot / Maven 模块，采用“按业务能力分包，包内使用直白职责目录”的模块化单体结构。RAG 内部按流水线阶段聚合相关模型、端口和实现，其他模块继续使用 Controller / Service / Mapper 等职责目录。当前业务规模不使用 `api/application/domain/infrastructure` 四层模板，避免只有一两个文件的抽象目录。
 
 顶层模块围绕 RAG 主链路划分：知识库、文档与索引、RAG 检索生成、会话交付、模型接入。Controller / Service / Mapper 分层仍是强制规则，DTO、VO、Entity 必须分离。
 
@@ -35,10 +35,13 @@ com.hnu.backend
 │  ├─ controller/             # /api/questions 兼容入口
 │  ├─ dto/
 │  ├─ vo/
-│  ├─ service/                # RagService、RetrievalService
-│  ├─ model/                  # SearchHit、EmbeddingBinding
-│  ├─ mapper/
-│  └─ support/                # 上下文构造与引用校验
+│  ├─ memory/                 # 会话记忆读取
+│  ├─ planning/               # 问题重写与子问题拆分
+│  ├─ routing/                # 意图识别与安全路由
+│  ├─ mcp/                    # MCP 注册、校验与执行
+│  ├─ retrieval/              # 向量检索及 MyBatis Mapper
+│  ├─ answer/                 # 上下文、生成与引用校验
+│  └─ support/                # 跨阶段通用值处理
 ├─ conversation/
 │  ├─ controller/
 │  ├─ dto/
@@ -63,6 +66,7 @@ src/main/resources
    ├─ knowledgebase/
    ├─ document/
    └─ rag/
+      └─ retrieval/
 ```
 
 测试目录镜像主代码包；真实 PostgreSQL、pgvector 与 RustFS 测试集中在 `integration/`。
@@ -83,12 +87,14 @@ src/main/resources
 ```text
 Controller → Service → Mapper
                     → Client / Storage
+RAG Stage → 所属阶段 Port / Model → 外部 Client / Adapter
 Mapper → Entity
 ```
 
 - Controller 只处理 HTTP、DTO 校验和 VO 输出，不编排业务流程。
 - Service 负责业务规则、事务和跨模块协作，不得依赖 Controller 或 DTO。
 - Mapper 只负责数据库访问，不包含业务判断。
+- RAG 阶段包拥有该阶段的模型、端口和实现；跨阶段依赖按 memory → planning → routing → execution/answer 的流水线方向流动。
 - Entity 只描述持久化数据，不直接作为 API 响应。
 - 非持久化内部数据使用模块内 `model`，不能随意放入 `shared`。
 - 跨模块调用对方 Service；禁止直接访问其他模块 Mapper。

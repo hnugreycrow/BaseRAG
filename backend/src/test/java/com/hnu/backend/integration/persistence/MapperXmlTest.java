@@ -10,7 +10,7 @@ import com.hnu.backend.document.mapper.DocumentChunkMapper;
 import com.hnu.backend.document.mapper.DocumentMapper;
 import com.hnu.backend.document.mapper.DocumentVersionMapper;
 import com.hnu.backend.knowledgebase.mapper.KnowledgeBaseMapper;
-import com.hnu.backend.rag.mapper.RetrievalMapper;
+import com.hnu.backend.rag.retrieval.RetrievalMapper;
 import com.hnu.backend.shared.persistence.UuidTypeHandler;
 import java.io.IOException;
 import java.io.InputStream;
@@ -30,7 +30,7 @@ class MapperXmlTest {
             new ExpectedMapper(
                 KnowledgeBaseMapper.class,
                 new String[] {"lock", "selectWithDocumentCount", "countWithDocumentCount"}),
-            "mapper/rag/RetrievalMapper.xml",
+            "mapper/rag/retrieval/RetrievalMapper.xml",
             new ExpectedMapper(
                 RetrievalMapper.class,
                 new String[] {

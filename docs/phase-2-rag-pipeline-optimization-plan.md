@@ -111,54 +111,63 @@ flowchart LR
 
 ```text
 com.hnu.backend.rag
-├── api
+├── api                              # 按 M1 需要创建
 │   ├── RagFacade.java
 │   ├── RagRequest.java
 │   ├── RagResult.java
 │   └── RagStreamObserver.java
-├── pipeline
+├── controller                       # HTTP 与本地评测入口
+├── dto                              # HTTP 请求
+├── vo                               # HTTP/跨模块响应
+├── memory                           # 阶段一：会话记忆
+│   ├── MemoryStage.java
+│   ├── MemoryProvider.java
+│   └── RagMemory.java
+├── planning                         # 阶段二：重写与拆分
+│   ├── QueryPlanningStage.java
+│   ├── QueryPlanner.java
+│   ├── ChatQueryPlanner.java
+│   └── QueryPlan.java
+├── routing                          # 阶段三：意图与路由
+│   ├── IntentRoutingStage.java
+│   ├── IntentClassifier.java
+│   ├── ChatIntentClassifier.java
+│   └── RoutingPlan.java
+├── execution                        # 阶段四：按需创建
 │   ├── RagPipeline.java
 │   ├── RagExecutionContext.java
-│   └── stage
-│       ├── MemoryStage.java
-│       ├── QueryPlanningStage.java
-│       ├── IntentRoutingStage.java
-│       ├── ExecutionStage.java
-│       ├── DeduplicationStage.java
-│       ├── RerankStage.java
-│       ├── PromptAssemblyStage.java
-│       └── AnswerStage.java
-├── model
-│   ├── RagMemory.java
-│   ├── QueryPlan.java
-│   ├── SubQuestion.java
-│   ├── IntentType.java
-│   ├── StageBudget.java
-│   ├── EvidenceCandidate.java
-│   ├── ToolObservation.java
-│   └── RagTrace.java
-├── port
-│   ├── MemoryProvider.java
-│   ├── QueryPlanner.java
-│   ├── IntentClassifier.java
+│   ├── ExecutionStage.java
+│   └── StageBudget.java
+├── retrieval                        # 知识检索能力
 │   ├── KnowledgeRetriever.java
+│   ├── RetrievalService.java
+│   ├── RetrievalMapper.java
+│   └── EvidenceCandidate.java
+├── mcp                              # MCP 注册、校验与执行
 │   ├── McpToolGateway.java
-│   ├── CandidateReranker.java
-│   └── AnswerGenerator.java
-├── adapter
-│   ├── memory
-│   ├── retrieval
-│   ├── mcp
-│   └── model
-├── service
+│   ├── McpToolRegistry.java
+│   ├── McpToolExecutor.java
+│   └── ToolObservation.java
+├── deduplication                    # 阶段五：按需创建
+│   └── DeduplicationStage.java
+├── rerank                           # 阶段五：按需创建
+│   ├── RerankStage.java
+│   └── CandidateReranker.java
+├── prompt                           # 阶段六：按需创建
+│   └── PromptAssemblyStage.java
+├── answer                           # 阶段七：回答与引用
+│   ├── AnswerStage.java
+│   ├── AnswerGenerator.java
 │   ├── RagService.java
-│   └── RetrievalService.java
+│   ├── ContextBuilder.java
+│   └── Citations.java
+├── trace                            # 审计实现时按需创建
+│   └── RagTrace.java
 └── support
-    ├── ContextBuilder.java
-    └── Citations.java
+    └── JsonValues.java
 ```
 
-现有 `service` 和 `support` 可以在迁移期间保留。新代码不得一次性重命名全部旧类；先通过门面包住旧实现，再逐阶段替换，以缩小回归范围。
+包按功能和流水线阶段聚合，每个阶段同时拥有自己的模型、端口和实现，避免同一能力分散在全局 `model`、`port`、`adapter` 和 `service` 中。尚无实际代码的阶段不创建空目录；先通过门面包住现有实现，再按里程碑逐阶段补齐。
 
 ### 4.2 核心入口
 

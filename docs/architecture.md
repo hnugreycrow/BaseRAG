@@ -140,7 +140,7 @@ baserag/
 
 ## 6. 后端模块划分
 
-后端采用“按业务能力分包，包内使用 Controller / Service / Mapper 等直白职责目录”的单体模块化结构。
+后端采用“按业务能力分包”的单体模块化结构。一般业务模块使用 Controller / Service / Mapper 等直白职责目录；RAG 内部按流水线阶段聚合相关模型、端口和实现。
 
 ​```text
 com.hnu.backend
@@ -164,9 +164,12 @@ com.hnu.backend
 │   ├── controller
 │   ├── dto
 │   ├── vo
-│   ├── service
-│   ├── model
-│   ├── mapper
+│   ├── memory
+│   ├── planning
+│   ├── routing
+│   ├── mcp
+│   ├── retrieval
+│   ├── answer
 │   └── support
 ├── conversation
 │   ├── controller
@@ -194,7 +197,7 @@ com.hnu.backend
 | model | Chat、Embedding、模型选择、重试和熔断 |
 | shared | 统一响应、全局异常、请求 ID、公共持久化能力 |
 
-Controller 只负责 HTTP 参数和响应；业务编排位于 service；数据库访问位于 mapper，模型与对象存储访问分别位于 client/http 和 storage。DTO、VO 与 Entity 分目录，跨模块只调用对方 Service。
+Controller 只负责 HTTP 参数和响应；一般业务编排位于 service，RAG 编排按流水线阶段组织；数据库访问位于 mapper 或所属 RAG 阶段包，模型与对象存储访问分别位于 client/http 和 storage。DTO、VO 与 Entity 分目录，跨模块通过公开 Service 或 RAG 端口协作。
 
 ---
 

@@ -1,13 +1,13 @@
 package com.hnu.backend.conversation.service;
 
 import com.hnu.backend.conversation.entity.Conversation;
-import com.hnu.backend.rag.model.MemoryTurn;
-import com.hnu.backend.rag.model.QueryPlan;
-import com.hnu.backend.rag.model.RagMemory;
-import com.hnu.backend.rag.model.RoutingPlan;
-import com.hnu.backend.rag.pipeline.stage.IntentRoutingStage;
-import com.hnu.backend.rag.pipeline.stage.MemoryStage;
-import com.hnu.backend.rag.pipeline.stage.QueryPlanningStage;
+import com.hnu.backend.rag.memory.MemoryStage;
+import com.hnu.backend.rag.memory.MemoryTurn;
+import com.hnu.backend.rag.memory.RagMemory;
+import com.hnu.backend.rag.planning.QueryPlan;
+import com.hnu.backend.rag.planning.QueryPlanningStage;
+import com.hnu.backend.rag.routing.IntentRoutingStage;
+import com.hnu.backend.rag.routing.RoutingPlan;
 import java.util.List;
 import org.springframework.stereotype.Service;
 
