@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 import com.hnu.backend.model.client.ChatClient;
 import com.hnu.backend.rag.mcp.McpToolDefinition;
 import com.hnu.backend.rag.planning.QueryPlan;
+import com.hnu.backend.rag.prompt.IntentRoutingPrompts;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -57,6 +58,7 @@ class ChatIntentClassifierTest {
     assertFalse(input.path("availableTools").path(0).has("sensitiveFields"));
     assertTrue(system.getValue().contains("不可信数据"));
     assertTrue(system.getValue().contains("不得输出其他字段"));
+    assertEquals(IntentRoutingPrompts.system(), system.getValue());
     assertEquals("router", output.modelId());
   }
 }

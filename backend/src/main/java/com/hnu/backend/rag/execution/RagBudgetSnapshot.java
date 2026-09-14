@@ -30,6 +30,12 @@ public record RagBudgetSnapshot(
     double vectorWeight,
     boolean vectorEnabled) {
 
+  /**
+   * 从当前配置冻结一份完整流水线预算。
+   *
+   * @param properties RAG 配置
+   * @return 本次执行不可变的预算快照
+   */
   public static RagBudgetSnapshot from(RagProperties properties) {
     RagProperties.Search search = properties.getSearch();
     return new RagBudgetSnapshot(
@@ -46,6 +52,12 @@ public record RagBudgetSnapshot(
         search.getChannels().getVector().isEnabled());
   }
 
+  /**
+   * 为单个子问题派生检索阶段预算。
+   *
+   * @param subQuestionId 子问题稳定 ID
+   * @return 只包含该子问题检索所需参数的预算
+   */
   public StageBudget forSubQuestion(String subQuestionId) {
     return new StageBudget(
         subQuestionId, recallBudget, channelTimeoutMs, rrfK, vectorWeight, vectorEnabled);

@@ -20,8 +20,11 @@ import com.hnu.backend.rag.execution.CancellationToken;
 import com.hnu.backend.rag.execution.ExecutionResult;
 import com.hnu.backend.rag.execution.ExecutionStage;
 import com.hnu.backend.rag.execution.RagBudgetSnapshot;
+import com.hnu.backend.rag.execution.SubQuestionExecution;
+import com.hnu.backend.rag.mcp.ToolObservation;
 import com.hnu.backend.rag.planning.QueryPlan;
 import com.hnu.backend.rag.planning.SubQuestion;
+import com.hnu.backend.rag.prompt.PromptAssemblyStage;
 import com.hnu.backend.rag.rerank.RerankResult;
 import com.hnu.backend.rag.rerank.RerankStage;
 import com.hnu.backend.rag.routing.IntentRoute;
@@ -53,13 +56,14 @@ class ConversationServiceCancellationTest {
   @Mock private ExecutionStage executionStage;
   @Mock private DeduplicationStage deduplicationStage;
   @Mock private RerankStage rerankStage;
-  @Mock private ContextBuilder contexts;
   @Mock private ChatClient chat;
   @Mock private RagProperties rag;
   @Mock private ConversationProperties config;
   @Mock private TransactionTemplate tx;
 
   private ConversationService service;
+  private final PromptAssemblyStage prompts =
+      new PromptAssemblyStage(new ContextBuilder(new RagProperties()));
 
   @BeforeEach
   void setUp() {
@@ -72,7 +76,7 @@ class ConversationServiceCancellationTest {
             executionStage,
             deduplicationStage,
             rerankStage,
-            contexts,
+            prompts,
             chat,
             rag,
             config,
@@ -155,7 +159,6 @@ class ConversationServiceCancellationTest {
                 null,
                 null,
                 0));
-    when(contexts.buildEvidence(List.of())).thenReturn(new ContextBuilder.Context("", List.of()));
     runTransactionsWithResultImmediately();
     runTransactionsImmediately();
 
@@ -191,6 +194,73 @@ class ConversationServiceCancellationTest {
     verifyNoInteractions(executionStage);
   }
 
+  @Test
+  void toolOnlyRouteGeneratesAnswerWithoutKnowledgeSources() {
+    UUID conversationId = UUID.randomUUID();
+    Conversation conversation = new Conversation();
+    conversation.setId(conversationId);
+    when(conversations.find(conversationId)).thenReturn(conversation);
+    when(messages.nextTurn(conversationId)).thenReturn(1);
+    when(rag.getMaxQuestionChars()).thenReturn(2000);
+    ConversationContextService.PreparedContext prepared = preparedTool("查询今日排班");
+    when(conversationContext.prepare(any(Conversation.class), eq(1), eq("查询今日排班")))
+        .thenReturn(prepared);
+    ToolObservation observation =
+        new ToolObservation(
+            "schedule.read",
+            "{}",
+            "test#schedule.read",
+            ToolObservation.Status.SUCCESS,
+            "TOOL_COMPLETED",
+            "今天值班",
+            false,
+            1);
+    ExecutionResult execution =
+        new ExecutionResult(
+            List.of(),
+            List.of(
+                new SubQuestionExecution(
+                    "Q1",
+                    IntentType.MCP_TOOL,
+                    SubQuestionExecution.Status.SUCCESS,
+                    List.of(),
+                    observation,
+                    "TOOL_COMPLETED",
+                    1)),
+            RagBudgetSnapshot.from(new RagProperties()));
+    when(executionStage.execute(
+            eq(prepared.queryPlan()),
+            eq(prepared.routingPlan()),
+            isNull(),
+            any(CancellationToken.class)))
+        .thenReturn(execution);
+    when(deduplicationStage.execute(List.of(), execution.budget()))
+        .thenReturn(new DeduplicationResult(List.of(), 0, 0, 0));
+    when(rerankStage.execute(
+            eq(prepared.queryPlan()), eq(execution), eq(List.of()), any(CancellationToken.class)))
+        .thenReturn(
+            new RerankResult(
+                List.of(),
+                List.of(),
+                RerankResult.Status.EMPTY,
+                "NO_RERANK_INPUT",
+                null,
+                null,
+                null,
+                null,
+                0));
+    when(messages.markStreaming(any(UUID.class))).thenReturn(1);
+    when(chat.stream(anyString(), anyString(), any(), any()))
+        .thenReturn(new ChatClient.Generation("根据工具 T1，今天值班", "chat", "test", "model"));
+    runTransactionsWithResultImmediately();
+
+    service.ask(conversationId, UUID.randomUUID(), "查询今日排班", "request-id");
+
+    verify(chat, timeout(2000)).stream(
+        anyString(), contains("\"referenceId\":\"T1\""), any(), any());
+    verify(messages, timeout(2000)).prepare(any(UUID.class), eq("查询今日排班"), eq("[]"));
+  }
+
   private ConversationContextService.PreparedContext preparedMixed(String question) {
     QueryPlan plan =
         new QueryPlan(
@@ -206,7 +276,7 @@ class ConversationServiceCancellationTest {
                     null,
                     Map.of(),
                     RoutingReasonCode.GENERAL_CHAT)));
-    return new ConversationContextService.PreparedContext("历史", plan, routing);
+    return new ConversationContextService.PreparedContext(emptyMemory(), plan, routing);
   }
 
   private ConversationContextService.PreparedContext preparedSystemChat(String question) {
@@ -221,7 +291,26 @@ class ConversationServiceCancellationTest {
                     null,
                     Map.of(),
                     RoutingReasonCode.GENERAL_CHAT)));
-    return new ConversationContextService.PreparedContext("历史", plan, routing);
+    return new ConversationContextService.PreparedContext(emptyMemory(), plan, routing);
+  }
+
+  private ConversationContextService.PreparedContext preparedTool(String question) {
+    QueryPlan plan = QueryPlan.fallback(question);
+    RoutingPlan routing =
+        new RoutingPlan(
+            List.of(
+                new IntentRoute(
+                    "Q1",
+                    IntentType.MCP_TOOL,
+                    1,
+                    "schedule.read",
+                    Map.of(),
+                    RoutingReasonCode.EXTERNAL_SOURCE_REQUIRED)));
+    return new ConversationContextService.PreparedContext(emptyMemory(), plan, routing);
+  }
+
+  private com.hnu.backend.rag.memory.RagMemory emptyMemory() {
+    return new com.hnu.backend.rag.memory.RagMemory("{}", 0, List.of(), List.of(), 0);
   }
 
   private Message assistant(UUID conversationId, UUID generationId, String status) {

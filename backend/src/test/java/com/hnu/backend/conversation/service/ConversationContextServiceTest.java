@@ -1,8 +1,6 @@
 package com.hnu.backend.conversation.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -30,7 +28,7 @@ class ConversationContextServiceTest {
       new ConversationContextService(new MemoryStage(memories), planning, routing);
 
   @Test
-  void formatsRagMemoryAndReturnsStructuredPlan() {
+  void returnsOriginalRagMemoryAndStructuredPlan() {
     Conversation conversation = conversation();
     RagMemory memory =
         new RagMemory(
@@ -49,9 +47,7 @@ class ConversationContextServiceTest {
 
     assertEquals(plan, prepared.queryPlan());
     assertEquals(routes, prepared.routingPlan());
-    assertTrue(prepared.history().contains("用户称：制度"));
-    assertTrue(prepared.history().contains("[轮次 4]"));
-    assertTrue(prepared.history().contains("[轮次 5]"));
+    assertEquals(memory, prepared.memory());
     verify(memories).load(conversation.getId(), 6);
     verify(planning).execute(memory, "它有什么要求？");
     verify(routing).execute(plan);
@@ -71,7 +67,7 @@ class ConversationContextServiceTest {
 
     assertEquals(plan, prepared.queryPlan());
     assertEquals(routes, prepared.routingPlan());
-    assertFalse(prepared.history().contains("[轮次"));
+    assertEquals(memory, prepared.memory());
     verify(planning).execute(memory, "原问题");
     verify(routing).execute(plan);
   }

@@ -6,6 +6,7 @@ import static org.mockito.Mockito.*;
 
 import com.hnu.backend.configuration.RagProperties;
 import com.hnu.backend.model.client.ChatClient;
+import com.hnu.backend.rag.prompt.PromptAssemblyStage;
 import com.hnu.backend.rag.retrieval.RetrievalService;
 import com.hnu.backend.shared.error.ApiException;
 import java.util.*;
@@ -15,8 +16,9 @@ class RagServiceTest {
   private final RagProperties config = new RagProperties();
   private final RetrievalService retrieval = mock(RetrievalService.class);
   private final ChatClient chat = mock(ChatClient.class);
+  private final ContextBuilder contexts = new ContextBuilder(config);
   private final RagService service =
-      new RagService(retrieval, new ContextBuilder(config), chat, config);
+      new RagService(retrieval, contexts, new PromptAssemblyStage(contexts), chat, config);
 
   @Test
   void emptyRetrievalDoesNotCallGeneration() {

@@ -16,11 +16,22 @@ import tools.jackson.databind.json.JsonMapper;
 /** 将检索结果转换为模型可消费的证据文本和前端可展示的来源列表。 */
 @Component
 public class ContextBuilder {
+  /**
+   * 同一批模型证据文本及其前端来源快照。
+   *
+   * @param text 旧兼容入口使用的 JSON Lines 证据文本
+   * @param sources 按引用编号排列的来源响应
+   */
   public record Context(String text, List<SourceResponse> sources) {}
 
   private final RagProperties config;
   private final JsonMapper json = JsonMapper.builder().build();
 
+  /**
+   * 创建来源上下文构造器。
+   *
+   * @param config RAG 配置；保留用于兼容现有构造契约
+   */
   public ContextBuilder(RagProperties config) {
     this.config = config;
   }
@@ -59,7 +70,12 @@ public class ContextBuilder {
     return new Context(text.toString(), List.copyOf(sources));
   }
 
-  /** 将阶段四融合后的不可变候选转换为现有来源协议，保持 citationId 和前端字段兼容。 */
+  /**
+   * 将阶段四融合后的不可变候选转换为现有来源协议。
+   *
+   * @param candidates 已按最终顺序排列的不可变证据候选
+   * @return 保持 citationId 和前端字段兼容的上下文
+   */
   public Context buildEvidence(List<EvidenceCandidate> candidates) {
     StringBuilder text = new StringBuilder();
     List<SourceResponse> sources = new ArrayList<>();

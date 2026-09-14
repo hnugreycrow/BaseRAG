@@ -17,10 +17,13 @@ import com.hnu.backend.conversation.mapper.ConversationMapper;
 import com.hnu.backend.conversation.mapper.MessageMapper;
 import com.hnu.backend.model.client.ChatClient;
 import com.hnu.backend.rag.memory.MemoryTurn;
+import com.hnu.backend.rag.prompt.MemorySummaryPrompts;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import tools.jackson.databind.json.JsonMapper;
 
 class ConversationMemoryProviderTest {
   private static final String VALID_SUMMARY =
@@ -69,6 +72,13 @@ class ConversationMemoryProviderTest {
     assertTrue(memory.unsummarizedTurns().isEmpty());
     assertEquals(List.of(9, 10, 11, 12, 13, 14, 15, 16), indexes(memory.recentTurns()));
     verify(conversations).updateSummary(eq(conversation.getId()), anyString(), eq(8), eq(0));
+    ArgumentCaptor<String> system = ArgumentCaptor.forClass(String.class);
+    ArgumentCaptor<String> user = ArgumentCaptor.forClass(String.class);
+    verify(chat).generate(system.capture(), user.capture());
+    assertEquals(MemorySummaryPrompts.system(), system.getValue());
+    var input = JsonMapper.builder().build().readTree(user.getValue());
+    assertTrue(input.path("oldSummary").isObject());
+    assertEquals(8, input.path("completedTurns").size());
   }
 
   @Test

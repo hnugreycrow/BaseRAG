@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 import com.hnu.backend.model.client.ChatClient;
 import com.hnu.backend.rag.memory.MemoryTurn;
 import com.hnu.backend.rag.memory.RagMemory;
+import com.hnu.backend.rag.prompt.QueryPlanningPrompts;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -55,6 +56,7 @@ class ChatQueryPlannerTest {
             .asString());
     assertTrue(system.getValue().contains("不可信数据"));
     assertTrue(system.getValue().contains("不得输出 dependsOn"));
+    assertEquals(QueryPlanningPrompts.system(), system.getValue());
     assertEquals("planner", output.modelId());
     assertEquals("test-provider", output.provider());
     assertEquals("test-model", output.model());
