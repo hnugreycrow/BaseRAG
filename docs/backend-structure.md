@@ -38,9 +38,13 @@ com.hnu.backend
 │  ├─ memory/                 # 会话记忆读取
 │  ├─ planning/               # 问题重写与子问题拆分
 │  ├─ routing/                # 意图识别与安全路由
+│  ├─ execution/              # 冻结预算与分子问题并发执行
 │  ├─ mcp/                    # MCP 注册、校验与执行
-│  ├─ retrieval/              # 向量检索及 MyBatis Mapper
-│  ├─ answer/                 # 上下文、生成与引用校验
+│  ├─ retrieval/              # 向量检索、RRF 融合及 MyBatis Mapper
+│  ├─ deduplication/          # 精确、正文与相邻重叠去重
+│  ├─ rerank/                 # 模型重排、证据截取与失败降级
+│  ├─ prompt/                 # 结构化提示词与资源加载
+│  ├─ answer/                 # 回答模型端口、流式生成与引用校验
 │  └─ support/                # 跨阶段通用值处理
 ├─ conversation/
 │  ├─ controller/
@@ -50,7 +54,7 @@ com.hnu.backend
 │  ├─ entity/
 │  └─ mapper/
 ├─ model/
-│  ├─ client/                 # Chat 与 Embedding 能力
+│  ├─ client/                 # Chat、Embedding 与 Rerank 能力
 │  ├─ http/                   # OpenAI Compatible HTTP 实现
 │  └─ config/
 └─ configuration/             # 跨模块运行参数和本地启动限制
@@ -62,6 +66,7 @@ com.hnu.backend
 src/main/resources
 ├─ application.yaml
 ├─ db/migration/
+├─ prompts/                   # 各模型阶段的 UTF-8 Markdown 提示词
 └─ mapper/
    ├─ knowledgebase/
    ├─ document/
@@ -77,9 +82,9 @@ src/main/resources
 | --- | --- |
 | `knowledgebase` | 知识库 CRUD、Embedding 模型绑定 |
 | `document` | 原文件、版本、分块、向量化和存储清理 |
-| `rag` | 查询向量、检索、上下文、生成和引用校验 |
+| `rag` | 会话记忆、问题规划、路由、执行预算、检索融合、去重、重排、提示词、回答和引用校验 |
 | `conversation` | 会话、消息、回答版本、SSE 和生成状态 |
-| `model` | Chat/Embedding 模型配置、调用、重试和熔断 |
+| `model` | Chat/Embedding/Rerank 模型配置、调用、重试和熔断 |
 | `shared` | 与具体业务无关的 Web、异常和持久化基础能力 |
 
 ## 4. 依赖规则
@@ -94,7 +99,7 @@ Mapper → Entity
 - Controller 只处理 HTTP、DTO 校验和 VO 输出，不编排业务流程。
 - Service 负责业务规则、事务和跨模块协作，不得依赖 Controller 或 DTO。
 - Mapper 只负责数据库访问，不包含业务判断。
-- RAG 阶段包拥有该阶段的模型、端口和实现；跨阶段依赖按 memory → planning → routing → execution/answer 的流水线方向流动。
+- RAG 阶段包拥有该阶段的模型、端口和实现；跨阶段依赖按 memory → planning → routing → execution → deduplication → rerank → prompt → answer 的流水线方向流动。
 - Entity 只描述持久化数据，不直接作为 API 响应。
 - 非持久化内部数据使用模块内 `model`，不能随意放入 `shared`。
 - 跨模块调用对方 Service；禁止直接访问其他模块 Mapper。

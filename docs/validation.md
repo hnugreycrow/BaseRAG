@@ -1,5 +1,14 @@
 # 本次实施验证记录
 
+## 模块化 RAG 流水线（2026-09-14）
+
+- 后端日常测试执行 120 项，111 项通过，9 项基础设施测试按 `RAG_INTEGRATION` 环境条件跳过，0 失败、0 错误；Spotless 格式校验通过。
+- 单元测试覆盖会话记忆、问题规划降级、三类意图路由、MCP 注册与安全执行、分子问题预算、RRF 合并、最低覆盖、三级去重、模型重排及确定性降级。
+- 提示词测试覆盖不可信数据区隔离、稳定 S/T 编号、无证据决策和不携带错误回答的引用修复输入。
+- 回答阶段测试覆盖流式模型适配、provider fallback、S/T 白名单校验、只修复一次、修复前取消，以及无证据时不调用模型。
+- 会话回归测试确认引用修复只执行一次 `PENDING → STREAMING`，首次非法 generation attempt 转为 `FAILED/INVALID_CITATIONS`，修复尝试记录为 `CITATION_REPAIR`，最终只保存修复后的正文。
+- 本轮没有启用真实模型、PostgreSQL、pgvector 或 RustFS，因此只能证明日常逻辑与协议回归通过，不能替代真实基础设施集成和回答质量评测。
+
 ## 持久化会话与 SSE（2026-09-13）
 
 - 后端日常测试 32 项全部通过；启用 RAG_INTEGRATION 后 PostgreSQL/pgvector/RustFS 集成测试 32 项全部通过。

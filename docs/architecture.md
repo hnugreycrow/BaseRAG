@@ -36,8 +36,11 @@ BaseRAG 是一个本地运行的 RAG 知识问答系统。
 - 上传 UTF-8 Markdown 文档
 - 手动触发分块与向量化
 - 使用 pgvector 检索全部知识库中的 READY 生效版本
-- 结合历史摘要和最近对话改写独立检索问题
-- 调用 OpenAI Compatible 模型生成回答
+- 使用持久化记忆改写问题，并在必要时拆分有限子问题
+- 对子问题进行知识检索、系统闲聊或内部 MCP 意图路由
+- 按子问题独立检索，使用 RRF 合并、三级去重和模型重排选择证据
+- 使用结构化提示词和 OpenAI Compatible 模型流式生成回答
+- 分别校验知识引用与工具标记，非法引用最多修复一次
 - 返回来源、引用和模型信息
 - 持久化多轮会话
 - 使用 SSE 流式返回回答
@@ -51,8 +54,8 @@ BaseRAG 是一个本地运行的 RAG 知识问答系统。
 - 异步文档处理任务
 - 用户选择一个或多个知识库作为检索范围
 - Redis 或消息队列
-- 混合检索和 Reranker
-- MCP、Tool Calling 和 Agent
+- 关键词混合检索、近似向量索引和知识图谱
+- 面向用户开放的 MCP、Tool Calling 和 Agent；现有 MCP 安全框架默认关闭且没有可用工具
 - 公网生产部署
 
 ---
@@ -68,6 +71,7 @@ flowchart LR
     RustFS[(RustFS / S3)]
     ChatModel[Chat Model API]
     EmbeddingModel[Embedding API]
+    RerankModel[Rerank Model API]
 
     User --> Frontend
     Frontend -->|REST / SSE| Backend
@@ -75,6 +79,7 @@ flowchart LR
     Backend --> RustFS
     Backend --> ChatModel
     Backend --> EmbeddingModel
+    Backend --> RerankModel
 ​```
 
 前端只与后端通信。模型密钥、数据库连接和对象存储凭据只由后端持有。
@@ -114,7 +119,7 @@ flowchart LR
 ### AI 接入
 
 系统不依赖 Spring AI 或 LangChain4j，而是通过自有 HTTP 客户端直接调用
-OpenAI Compatible Chat 和 Embedding 接口。
+OpenAI Compatible Chat、Embedding 和 Rerank 接口。
 
 模型候选、服务商、超时、重试和熔断参数由
 `backend/src/main/resources/application.yaml` 配置。
@@ -167,8 +172,12 @@ com.hnu.backend
 │   ├── memory
 │   ├── planning
 │   ├── routing
+│   ├── execution
 │   ├── mcp
 │   ├── retrieval
+│   ├── deduplication
+│   ├── rerank
+│   ├── prompt
 │   ├── answer
 │   └── support
 ├── conversation
@@ -192,9 +201,9 @@ com.hnu.backend
 | --- | --- |
 | knowledgebase | 知识库 CRUD、Embedding 模型绑定 |
 | document | 上传、存储、分块、向量化、文档版本切换 |
-| rag | 检索、上下文构建、生成、引用校验和单轮兼容问答 |
+| rag | 记忆、问题规划、路由、分预算执行、检索融合、去重、重排、提示词、回答和引用校验 |
 | conversation | 会话、消息、回答版本、SSE 和生成状态 |
-| model | Chat、Embedding、模型选择、重试和熔断 |
+| model | Chat、Embedding、Rerank、模型选择、重试和熔断 |
 | shared | 统一响应、全局异常、请求 ID、公共持久化能力 |
 
 Controller 只负责 HTTP 参数和响应；一般业务编排位于 service，RAG 编排按流水线阶段组织；数据库访问位于 mapper 或所属 RAG 阶段包，模型与对象存储访问分别位于 client/http 和 storage。DTO、VO 与 Entity 分目录，跨模块通过公开 Service 或 RAG 端口协作。
@@ -289,36 +298,52 @@ sequenceDiagram
 ​```mermaid
 flowchart TD
     Q[用户问题]
-    Rewrite[结合历史生成独立检索问题]
-    Bindings[读取 READY 文档的模型组合]
-    Embed[按模型生成 Query Embedding]
-    Search[pgvector 精确余弦检索]
-    Merge[合并并选取全局 Top K]
-    Context[构建带编号 JSON 上下文]
-    Generate[流式调用 Chat Model]
-    Validate[校验引用编号]
+    Memory[加载摘要、未摘要历史和最近轮次]
+    Plan[生成独立问题并按需拆分子问题]
+    Route[逐子问题意图识别与安全路由]
+    Execute[按冻结预算并发执行]
+    Search[按 Embedding 模型执行 pgvector 精确检索]
+    Merge[RRF 合并并保护子问题最低覆盖]
+    Deduplicate[分块 ID、正文和相邻重叠去重]
+    Rerank[模型重排与确定性失败降级]
+    Prompt[组装记忆、计划、证据、工具和回答目标]
+    Generate[AnswerStage 流式调用 Chat Model]
+    Validate[分别校验 S 知识引用与 T 工具标记]
     Persist[保存回答及来源快照]
     SSE[向前端发送 SSE]
 
-    Q --> Rewrite --> Bindings --> Embed --> Search
-    Search --> Merge --> Context --> Generate
+    Q --> Memory --> Plan --> Route --> Execute
+    Execute -->|知识型子问题| Search --> Merge --> Deduplicate --> Rerank --> Prompt
+    Execute -->|系统闲聊或工具观察| Prompt
+    Prompt --> Generate
     Generate --> Validate
     Validate -->|合法| Persist
-    Validate -->|非法| Repair[引用修复一次]
-    Repair --> Persist
+    Validate -->|首次非法| Repair[引用修复一次]
+    Repair --> Revalidate[再次校验引用]
+    Revalidate -->|合法| Persist
+    Revalidate -->|仍非法| Invalid[返回 INVALID_CITATIONS]
     Persist --> SSE
 ​```
 
-检索规则：
+流水线规则：
 
 - 只检索 READY 的当前生效文档版本。
 - 用户会话当前没有选择或授权范围，默认检索本地全部知识库；local profile 的单轮兼容接口可以显式限定知识库集合，用于隔离自动评测。
+- 规划模型最多生成 4 个子问题；简单问题保持一个子问题，非法规划稳定回退原问题。
+- 路由支持 `KNOWLEDGE_RETRIEVAL`、`MCP_TOOL` 和 `SYSTEM_CHAT`。MCP 默认关闭且允许列表为空，因此当前运行时不会执行外部工具。
 - 知识库绑定固定的 Embedding 模型和维度。
-- 不同模型分别生成问题向量并检索，再合并为全局 Top K。
-- 非首轮问题先结合历史上下文改写；改写失败时回退原问题。
+- 每个知识型子问题按不同 Embedding 模型分别生成问题向量并检索，不把多个问题拼成一个向量。
+- 候选按检索名次计算 RRF 融合分；不同模型的原始相似度不直接比较。
+- 合并与最终截取优先保留每个有效知识型子问题的至少一条候选，避免复合问题被单一主题占满。
+- 去重先处理相同分块，再处理规范化正文和同文档相邻高重叠分块，同时保留全部来源和子问题归因。
+- Reranker 只对输入候选评分，不能新增或修改证据；超时、失败、返回非法结果或 noop 时按 RRF 融合分确定性降级。
 - 当前使用精确余弦检索，没有 HNSW 或 IVFFlat。
-- sources 是实际送入模型的上下文。
+- 当前只有向量检索通道；RRF 已为增加关键词通道预留稳定融合接口，但混合检索尚未实现。
+- 提示词中的会话记忆、问题计划、知识证据、工具观察和原始问题是互相分隔的不可信数据区。
+- `AnswerGenerator` 隔离模型客户端，`AnswerStage` 统一处理流式生成、候选回退、取消、引用校验和一次修复。
+- sources 是实际送入最终回答模型的知识证据，而不是全部召回候选。
 - citations 是回答中经过编号校验的来源子集。
+- 工具标记使用 `T*` 独立校验，不写入现有前端 citations 字段。
 
 ---
 
@@ -337,7 +362,7 @@ SSE v1 事件：
 
 后端使用虚拟线程执行生成任务，并按字符数或时间间隔保存生成检查点。
 
-上下文由三部分组成：
+回答前加载的会话记忆由三部分组成：
 
 1. 已持久化的历史摘要
 2. 尚未进入摘要的旧消息
@@ -378,7 +403,7 @@ SSE v1 事件：
 - Spring Boot 应用
 - PostgreSQL/pgvector
 - RustFS
-- 外部 Chat 和 Embedding API
+- 外部 Chat、Embedding 和 Rerank API
 
 数据库和 RustFS 仅绑定 `127.0.0.1`。后端当前也只允许 local profile，
 不具备公网生产部署条件。
@@ -404,6 +429,9 @@ SSE v1 事件：
 ### 可审计性
 
 - 回答保存来源、引用、检索问题和模型快照。
+- 每个检索候选保留命中的子问题、Embedding 模型、原始相似度、检索名次、RRF 贡献和来源位置。
+- 重排结果保留模型信息、相关性分数、最终入选状态和稳定降级原因。
+- 主生成、供应商回退和引用修复分别保存 generation attempt；引用非法的已完成尝试会转为失败记录。
 - 文档后续删除或重新分块不会修改旧回答的来源快照。
 - 每个普通 HTTP 请求通过响应体、响应头和日志共享同一 request ID。
 
@@ -428,6 +456,8 @@ SSE v1 事件：
 | 仅支持 Markdown | 增加文本型 PDF |
 | 同步文档处理 | PostgreSQL 持久化后台任务 |
 | 单用户、全库检索 | 身份认证、所有权和授权后的检索范围 |
-| 精确向量检索 | 建立基线后评估混合检索和 Reranker |
+| 只有精确向量通道 | 建立基线后增加关键词通道并用现有 RRF 融合 |
+| Reranker 默认开启但缺少稳定质量基线 | 持久化评测运行，对比开启、关闭与降级结果后冻结配置 |
+| MCP 框架默认关闭且无可用工具 | 保持内部预留；只有需求、安全和权限协议获批后才开放只读工具 |
 | 进程内生成锁 | 多实例部署前改为数据库租约或分布式协调 |
 | 没有生产运维能力 | 健康检查、指标、备份恢复和内部部署 |
