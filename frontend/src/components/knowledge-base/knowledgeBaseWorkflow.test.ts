@@ -14,6 +14,8 @@ vi.mock('../../api', async () => ({
   getKnowledgeBase: vi.fn().mockResolvedValue({
     id: 'kb',
     name: '资料',
+    embeddingModelId: 'embed-id',
+    embeddingProvider: 'supplier',
     embeddingModel: 'embed',
     embeddingDimensions: 1024,
     documentCount: 1,
@@ -42,6 +44,8 @@ describe('real knowledge base workflow', () => {
     await workspace.openKnowledgeBase({
       id: 'kb',
       name: '资料',
+      embeddingModelId: 'embed-id',
+      embeddingProvider: 'supplier',
       embeddingModel: 'embed',
       embeddingDimensions: 1024,
       documentCount: 0,

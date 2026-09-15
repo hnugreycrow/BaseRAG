@@ -64,7 +64,12 @@ function submit() {
           placeholder="选择用于检索的向量模型"
           style="width: 100%"
         >
-          <el-option v-for="model in models" :key="model.id" :value="model.id" :label="model.model">
+          <el-option
+            v-for="model in models"
+            :key="model.id"
+            :value="model.id"
+            :label="`${model.provider} · ${model.model}`"
+          >
             <div class="model-option">
               <span>{{ model.model }}</span>
               <small>{{ model.provider }} · {{ model.dimensions }} 维</small>

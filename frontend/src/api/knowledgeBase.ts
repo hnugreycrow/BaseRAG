@@ -14,8 +14,10 @@ export interface EmbeddingModel {
 export interface KnowledgeBase {
   id: string
   name: string
-  embeddingModel: string
-  embeddingDimensions: number
+  embeddingModelId: string | null
+  embeddingProvider: string | null
+  embeddingModel: string | null
+  embeddingDimensions: number | null
   documentCount: number
   createdAt: string
 }

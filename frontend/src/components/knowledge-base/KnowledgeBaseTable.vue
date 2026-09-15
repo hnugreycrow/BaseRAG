@@ -48,9 +48,11 @@ function formatDate(value: string) {
       </el-table-column>
       <el-table-column label="向量模型" min-width="180">
         <template #default="{ row }">
-          <span class="model-name"
-            >{{ row.embeddingModel }} · {{ row.embeddingDimensions }} 维</span
+          <span v-if="row.embeddingProvider" class="model-name"
+            >{{ row.embeddingProvider }} · {{ row.embeddingModel }} ·
+            {{ row.embeddingDimensions }} 维</span
           >
+          <span v-else>未绑定</span>
         </template>
       </el-table-column>
       <el-table-column label="文档" width="110">
@@ -91,7 +93,10 @@ function formatDate(value: string) {
       <h3>
         <button @click="emit('open', row)">{{ row.name }}</button>
       </h3>
-      <p>{{ row.embeddingModel }} · {{ row.embeddingDimensions }} 维</p>
+      <p v-if="row.embeddingProvider">
+        {{ row.embeddingProvider }} · {{ row.embeddingModel }} · {{ row.embeddingDimensions }} 维
+      </p>
+      <p v-else>未绑定向量模型</p>
       <p>{{ row.documentCount }} 份文档 · {{ formatDate(row.createdAt) }}</p>
       <div class="card-actions">
         <el-button text @click="emit('open', row)">打开</el-button

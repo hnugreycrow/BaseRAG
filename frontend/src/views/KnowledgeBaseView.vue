@@ -87,8 +87,13 @@ const {
         />
         <div>
           <h1>{{ pageTitle }}</h1>
-          <span v-if="selectedKnowledgeBase && level !== 'knowledge-bases'" class="model-binding">
-            {{ selectedKnowledgeBase.embeddingModel }} ·
+          <span
+            v-if="selectedKnowledgeBase?.embeddingProvider && level !== 'knowledge-bases'"
+            class="model-binding"
+          >
+            {{ selectedKnowledgeBase.embeddingProvider }} ({{
+              selectedKnowledgeBase.embeddingModelId
+            }}) · {{ selectedKnowledgeBase.embeddingModel }} ·
             {{ selectedKnowledgeBase.embeddingDimensions }} 维
           </span>
         </div>
