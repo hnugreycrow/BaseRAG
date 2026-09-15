@@ -6,7 +6,7 @@ import java.util.Objects;
 /**
  * 为一次 RAG 请求加载的分层会话记忆。
  *
- * @param summary 已压缩的早期会话摘要
+ * @param summary 已压缩的早期会话话题摘要文本
  * @param summaryRevision 摘要的乐观锁版本号
  * @param unsummarizedTurns 尚未纳入摘要的历史轮次
  * @param recentTurns 直接注入提示词的最近轮次

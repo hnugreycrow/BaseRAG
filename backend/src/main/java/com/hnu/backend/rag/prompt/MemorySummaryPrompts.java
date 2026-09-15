@@ -8,11 +8,13 @@ public final class MemorySummaryPrompts {
   private MemorySummaryPrompts() {}
 
   /**
-   * 返回会话记忆摘要系统提示词。
+   * 返回带有摘要长度上限的系统提示词。
    *
+   * @param maxChars 摘要的 Unicode 字符上限
    * @return 不包含任何会话数据的可信系统指令
    */
-  public static String system() {
-    return SYSTEM;
+  public static String system(int maxChars) {
+    if (maxChars < 1) throw new IllegalArgumentException("maxChars must be positive");
+    return SYSTEM.replace("{summary_max_chars}", Integer.toString(maxChars));
   }
 }

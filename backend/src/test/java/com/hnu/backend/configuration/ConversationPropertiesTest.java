@@ -11,4 +11,11 @@ class ConversationPropertiesTest {
     properties.setSummaryBatchTurns(8);
     assertThrows(IllegalArgumentException.class, properties::validate);
   }
+
+  @Test
+  void rejectsNonPositiveSummaryLengthLimit() {
+    ConversationProperties properties = new ConversationProperties();
+    properties.setSummaryMaxChars(0);
+    assertThrows(IllegalArgumentException.class, properties::validate);
+  }
 }

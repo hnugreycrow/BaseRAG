@@ -87,7 +87,7 @@ class InfrastructureIntegrationTest {
     UUID ownerId = ownerId();
     conversationMapper.insert(ownerId, conversationId, "持久化测试");
     var conversation = conversationMapper.find(ownerId, conversationId);
-    assertEquals("{}", conversation.getSummaryJson());
+    assertEquals("", conversation.getSummaryText());
     assertTrue(
         conversationMapper.list(ownerId, "持久化", 10).stream()
             .anyMatch(item -> item.getId().equals(conversationId)));
@@ -136,11 +136,11 @@ class InfrastructureIntegrationTest {
     assertEquals(
         1,
         conversationMapper.updateSummary(
-            ownerId,
-            conversationId,
-            "{\"goalsAndTopics\":[]}",
-            1,
-            conversation.getSummaryRevision()));
+            ownerId, conversationId, "用户咨询了制度修订（当时已回答）", 1, conversation.getSummaryRevision()));
+    var summarized = conversationMapper.find(ownerId, conversationId);
+    assertEquals("用户咨询了制度修订（当时已回答）", summarized.getSummaryText());
+    assertEquals(1, summarized.getSummarizedThroughTurn());
+    assertEquals(1, summarized.getSummaryRevision());
     conversationMapper.delete(ownerId, conversationId);
     assertTrue(messageMapper.list(ownerId, conversationId).isEmpty());
   }

@@ -22,22 +22,12 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
-import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-/** 从会话持久化数据构造 RAG 中立记忆，并按批次维护结构化增量摘要。 */
+/** 从会话持久化数据构造 RAG 中立记忆，并按批次维护简短话题摘要。 */
 @Component
 public class ConversationMemoryProvider implements MemoryProvider {
   private static final Logger log = LoggerFactory.getLogger(ConversationMemoryProvider.class);
-  private static final String EMPTY_SUMMARY =
-      "{\"goalsAndTopics\":[],\"factsAndConstraints\":[],\"decisionsAndPreferences\":[],\"entitiesAndReferences\":[],\"openItems\":[]}";
-  private static final List<String> SUMMARY_FIELDS =
-      List.of(
-          "goalsAndTopics",
-          "factsAndConstraints",
-          "decisionsAndPreferences",
-          "entitiesAndReferences",
-          "openItems");
   private final ConversationMapper conversations;
   private final MessageMapper messages;
   private final ConversationProperties config;
@@ -50,7 +40,7 @@ public class ConversationMemoryProvider implements MemoryProvider {
    * @param conversations 会话及其摘要游标持久化接口
    * @param messages 会话消息读取接口
    * @param config 会话窗口和摘要批次配置
-   * @param chat 用于生成结构化增量摘要的模型客户端
+   * @param chat 用于生成简短增量摘要的模型客户端
    */
   public ConversationMemoryProvider(
       ConversationMapper conversations,
@@ -85,7 +75,7 @@ public class ConversationMemoryProvider implements MemoryProvider {
     conversation = refreshSummaryIfNeeded(conversation, turns, trace);
     RagMemory memory =
         toMemory(
-            normalizedSummary(conversation.getSummaryJson()),
+            conversation.getSummaryText(),
             conversation.getSummaryRevision(),
             conversation.getSummarizedThroughTurn(),
             turns);
@@ -146,25 +136,18 @@ public class ConversationMemoryProvider implements MemoryProvider {
     RagRunTrace.Span span = trace.start(RagStageName.MEMORY_SUMMARY, null, batch.size());
     try {
       Map<String, Object> input = new LinkedHashMap<>();
-      input.put("oldSummary", summaryValue(normalizedSummary(conversation.getSummaryJson())));
+      input.put("oldSummary", conversation.getSummaryText());
       input.put("completedTurns", batch);
       String prompt = json.writeValueAsString(input);
-      ChatClient.Generation generation = chat.generate(MemorySummaryPrompts.system(), prompt);
+      ChatClient.Generation generation =
+          chat.generate(MemorySummaryPrompts.system(config.getSummaryMaxChars()), prompt);
       span.model(generation.id(), generation.provider(), generation.model());
-      String candidate = generation.content().strip();
-      JsonNode parsed;
-      try {
-        parsed = json.readTree(stripFence(candidate));
-      } catch (RuntimeException error) {
-        throw ApiException.upstream("SUMMARY_INVALID_OUTPUT", "摘要格式不正确，请稍后重试");
-      }
-      validateSummary(parsed);
-      String encoded = json.writeValueAsString(parsed);
+      String candidate = validateSummary(generation.content());
       int updated =
           conversations.updateSummary(
               conversation.getOwnerId(),
               conversation.getId(),
-              encoded,
+              candidate,
               through,
               conversation.getSummaryRevision());
       if (updated == 1) {
@@ -196,68 +179,32 @@ public class ConversationMemoryProvider implements MemoryProvider {
   }
 
   /**
-   * 校验模型摘要是否严格符合五字段字符串数组协议。
+   * 校验模型输出是否是一行受长度约束的纯文本。
    *
-   * @param node 模型输出解析后的 JSON
-   * @throws IllegalArgumentException 输出结构或元素类型不合法时抛出
+   * @param output 模型原始输出
+   * @return 归一化的文本摘要，`无` 对应空字符串
+   * @throws IllegalArgumentException 输出格式或长度不合法时抛出
    */
-  private void validateSummary(JsonNode node) {
-    if (node == null || !node.isObject() || node.size() != SUMMARY_FIELDS.size()) {
-      throw new IllegalArgumentException("invalid summary object");
+  private String validateSummary(String output) {
+    if (output == null || output.codePoints().anyMatch(Character::isISOControl)) {
+      throw new IllegalArgumentException("summary contains control characters");
     }
-    for (String key : SUMMARY_FIELDS) {
-      JsonNode values = node.path(key);
-      if (!values.isArray()) throw new IllegalArgumentException("invalid summary field");
-      for (JsonNode value : values) {
-        if (!value.isTextual()) throw new IllegalArgumentException("invalid summary item");
-        String item = value.asString();
-        String prefix =
-            item.startsWith("用户称：") ? "用户称：" : item.startsWith("助手曾回答：") ? "助手曾回答：" : null;
-        if (prefix == null || item.substring(prefix.length()).isBlank()) {
-          throw new IllegalArgumentException("summary item missing source");
-        }
-      }
+    String candidate = output.strip();
+    if (candidate.isEmpty()
+        || candidate.startsWith("{")
+        || candidate.startsWith("[")
+        || candidate.startsWith("#")
+        || candidate.startsWith("```")
+        || candidate.startsWith("> ")
+        || candidate.startsWith("- ")
+        || candidate.startsWith("* ")
+        || candidate.contains("**")
+        || candidate.contains("__")
+        || candidate.contains("`")
+        || candidate.codePointCount(0, candidate.length()) > config.getSummaryMaxChars()) {
+      throw new IllegalArgumentException("invalid summary text");
     }
-  }
-
-  /**
-   * 兼容模型偶尔返回的单层 JSON 代码围栏。
-   *
-   * @param value 模型原始输出
-   * @return 去除外层代码围栏后的文本
-   */
-  private String stripFence(String value) {
-    if (!value.startsWith("```")) return value;
-    int firstLine = value.indexOf('\n');
-    int lastFence = value.lastIndexOf("```");
-    return firstLine >= 0 && lastFence > firstLine
-        ? value.substring(firstLine + 1, lastFence).strip()
-        : value;
-  }
-
-  /**
-   * 将缺失或旧版空摘要转换为当前五字段空结构。
-   *
-   * @param value 数据库中的摘要文本
-   * @return 可发送给摘要模型的摘要文本
-   */
-  private String normalizedSummary(String value) {
-    return value == null || value.isBlank() || "{}".equals(value) ? EMPTY_SUMMARY : value;
-  }
-
-  /**
-   * 将合法摘要保留为 JSON 对象，异常历史内容则作为普通字符串放入结构化输入。
-   *
-   * @param summary 已归一化的摘要文本
-   * @return JSON 对象或不具备结构语义的字符串
-   */
-  private Object summaryValue(String summary) {
-    try {
-      JsonNode parsed = json.readTree(summary);
-      return parsed != null && parsed.isObject() ? parsed : summary;
-    } catch (RuntimeException ignored) {
-      return summary;
-    }
+    return "无".equals(candidate) ? "" : candidate;
   }
 
   /**

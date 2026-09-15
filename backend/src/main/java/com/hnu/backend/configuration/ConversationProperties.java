@@ -16,6 +16,9 @@ public class ConversationProperties {
   /** 摘要与最近原文重叠的轮次数，也是后续更新的最大批次大小。 */
   private int summaryBatchTurns = 4;
 
+  /** 话题摘要的 Unicode 字符上限。 */
+  private int summaryMaxChars = 400;
+
   /** 流式内容累计到该字符数时触发持久化检查点。 */
   private int checkpointChars = 512;
 
@@ -28,6 +31,7 @@ public class ConversationProperties {
     if (recentTurns < 1
         || summaryBatchTurns < 1
         || summaryBatchTurns >= recentTurns
+        || summaryMaxChars < 1
         || checkpointChars < 1
         || checkpointIntervalMs < 100) {
       throw new IllegalArgumentException("Invalid conversation configuration");

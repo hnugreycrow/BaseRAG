@@ -32,7 +32,7 @@ class ConversationContextServiceTest {
     Conversation conversation = conversation();
     RagMemory memory =
         new RagMemory(
-            "{\"goalsAndTopics\":[\"用户称：制度\"]}",
+            "用户咨询了制度要求（已讨论）",
             2,
             List.of(new MemoryTurn(4, "较早问题", "较早回答")),
             List.of(new MemoryTurn(5, "最近问题", "最近回答")),
@@ -56,7 +56,7 @@ class ConversationContextServiceTest {
   @Test
   void plansFirstQuestionWithoutCompletedTurns() {
     Conversation conversation = conversation();
-    RagMemory memory = new RagMemory("{}", 0, List.of(), List.of(), 0);
+    RagMemory memory = new RagMemory("", 0, List.of(), List.of(), 0);
     QueryPlan plan = QueryPlan.fallback("原问题");
     RoutingPlan routes = knowledgeRoutes(plan);
     when(memories.load(conversation.getOwnerId(), conversation.getId(), 1)).thenReturn(memory);

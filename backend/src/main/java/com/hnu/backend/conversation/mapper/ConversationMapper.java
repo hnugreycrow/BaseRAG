@@ -113,20 +113,20 @@ public interface ConversationMapper extends BaseMapper<Conversation> {
    *
    * @param ownerId 所属用户标识
    * @param id 会话标识
-   * @param summaryJson 新摘要的 JSON 表示
+   * @param summaryText 新的纯文本话题摘要
    * @param throughTurn 摘要覆盖到的最大轮次
    * @param expectedRevision 调用方读取到的摘要版本
    * @return 受影响行数；为 0 表示版本冲突或会话不存在
    */
   default int updateSummary(
-      UUID ownerId, UUID id, String summaryJson, int throughTurn, int expectedRevision) {
+      UUID ownerId, UUID id, String summaryText, int throughTurn, int expectedRevision) {
     // revision 条件与自增必须在同一条 SQL 中完成，避免并发摘要相互覆盖。
     return update(
         Wrappers.<Conversation>update()
             .eq("id", id)
             .eq("owner_id", ownerId)
             .eq("summary_revision", expectedRevision)
-            .setSql("summary = CAST({0} AS jsonb)", summaryJson)
+            .set("summary_text", summaryText)
             .set("summarized_through_turn", throughTurn)
             .setSql("summary_revision = summary_revision + 1")
             .setSql("updated_at = now()"));

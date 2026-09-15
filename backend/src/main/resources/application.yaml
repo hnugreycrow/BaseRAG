@@ -186,6 +186,7 @@ rag:
 conversation:
   recent-turns: 8
   summary-batch-turns: 4
+  summary-max-chars: 400
   checkpoint-chars: 512
   checkpoint-interval-ms: 1000
 

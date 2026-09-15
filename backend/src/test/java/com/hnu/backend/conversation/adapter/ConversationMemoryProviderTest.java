@@ -1,6 +1,7 @@
 package com.hnu.backend.conversation.adapter;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -26,9 +27,7 @@ import org.mockito.ArgumentCaptor;
 import tools.jackson.databind.json.JsonMapper;
 
 class ConversationMemoryProviderTest {
-  private static final String VALID_SUMMARY =
-      "{\"goalsAndTopics\":[\"用户称：制度\"],\"factsAndConstraints\":[],"
-          + "\"decisionsAndPreferences\":[],\"entitiesAndReferences\":[],\"openItems\":[]}";
+  private static final String VALID_SUMMARY = "用户咨询了制度修订（当时已回答）。待确认：负责人。";
 
   private final ConversationMapper conversations = mock(ConversationMapper.class);
   private final MessageMapper messages = mock(MessageMapper.class);
@@ -59,7 +58,7 @@ class ConversationMemoryProviderTest {
     Conversation updated = conversation();
     updated.setId(conversation.getId());
     updated.setOwnerId(conversation.getOwnerId());
-    updated.setSummaryJson(VALID_SUMMARY);
+    updated.setSummaryText(VALID_SUMMARY);
     updated.setSummarizedThroughTurn(5);
     updated.setSummaryRevision(1);
     when(conversations.find(conversation.getOwnerId(), conversation.getId()))
@@ -83,9 +82,9 @@ class ConversationMemoryProviderTest {
     ArgumentCaptor<String> system = ArgumentCaptor.forClass(String.class);
     ArgumentCaptor<String> user = ArgumentCaptor.forClass(String.class);
     verify(chat).generate(system.capture(), user.capture());
-    assertEquals(MemorySummaryPrompts.system(), system.getValue());
+    assertEquals(MemorySummaryPrompts.system(400), system.getValue());
     var input = JsonMapper.builder().build().readTree(user.getValue());
-    assertTrue(input.path("oldSummary").isObject());
+    assertEquals("", input.path("oldSummary").asString());
     assertEquals(5, input.path("completedTurns").size());
     assertTrue(input.path("summaryMaxChars").isMissingNode());
   }
@@ -93,13 +92,13 @@ class ConversationMemoryProviderTest {
   @Test
   void refreshesOnceThePreviousCutoffSlidesOutOfTheWindow() {
     Conversation conversation = conversation();
-    conversation.setSummaryJson(VALID_SUMMARY);
+    conversation.setSummaryText(VALID_SUMMARY);
     conversation.setSummarizedThroughTurn(5);
     conversation.setSummaryRevision(1);
     Conversation updated = conversation();
     updated.setId(conversation.getId());
     updated.setOwnerId(conversation.getOwnerId());
-    updated.setSummaryJson(VALID_SUMMARY);
+    updated.setSummaryText(VALID_SUMMARY);
     updated.setSummarizedThroughTurn(9);
     updated.setSummaryRevision(2);
     when(conversations.find(conversation.getOwnerId(), conversation.getId()))
@@ -135,7 +134,7 @@ class ConversationMemoryProviderTest {
     Conversation updated = conversation();
     updated.setId(conversation.getId());
     updated.setOwnerId(conversation.getOwnerId());
-    updated.setSummaryJson(VALID_SUMMARY);
+    updated.setSummaryText(VALID_SUMMARY);
     updated.setSummarizedThroughTurn(5);
     updated.setSummaryRevision(1);
     when(conversations.find(conversation.getOwnerId(), conversation.getId()))
@@ -160,13 +159,13 @@ class ConversationMemoryProviderTest {
   @Test
   void continuesAnExistingConversationWithoutResettingItsSummaryCursor() {
     Conversation conversation = conversation();
-    conversation.setSummaryJson(VALID_SUMMARY);
+    conversation.setSummaryText(VALID_SUMMARY);
     conversation.setSummarizedThroughTurn(8);
     conversation.setSummaryRevision(3);
     Conversation updated = conversation();
     updated.setId(conversation.getId());
     updated.setOwnerId(conversation.getOwnerId());
-    updated.setSummaryJson(VALID_SUMMARY);
+    updated.setSummaryText(VALID_SUMMARY);
     updated.setSummarizedThroughTurn(12);
     updated.setSummaryRevision(4);
     when(conversations.find(conversation.getOwnerId(), conversation.getId()))
@@ -212,7 +211,7 @@ class ConversationMemoryProviderTest {
   }
 
   @Test
-  void rejectsInvalidSummarySchemasWithoutAdvancingCursor() {
+  void rejectsInvalidPlainTextWithoutAdvancingCursor() {
     Conversation conversation = conversation();
     when(conversations.find(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(conversation);
@@ -220,15 +219,15 @@ class ConversationMemoryProviderTest {
         .thenReturn(turns(conversation.getId(), 12));
     List<String> invalidCandidates =
         List.of(
-            "not json",
-            "{\"goalsAndTopics\":[],\"factsAndConstraints\":[],"
-                + "\"decisionsAndPreferences\":[],\"entitiesAndReferences\":[]}",
-            "{\"goalsAndTopics\":[1],\"factsAndConstraints\":[],"
-                + "\"decisionsAndPreferences\":[],\"entitiesAndReferences\":[],\"openItems\":[]}",
-            VALID_SUMMARY.substring(0, VALID_SUMMARY.length() - 1) + ",\"extra\":[]}",
-            VALID_SUMMARY.replace("用户称：制度", "  "),
-            VALID_SUMMARY.replace("用户称：制度", "用户称：  "),
-            VALID_SUMMARY.replace("用户称：制度", "制度"));
+            "",
+            "  ",
+            "话题一\n话题二",
+            "{\"content\":\"话题\"}",
+            "```text\n话题\n```",
+            "# 话题",
+            "- 话题",
+            "**话题**",
+            "话题".repeat(401));
 
     for (String candidate : invalidCandidates) {
       clearInvocations(conversations, messages, chat);
@@ -267,7 +266,7 @@ class ConversationMemoryProviderTest {
     Conversation winner = conversation();
     winner.setId(conversation.getId());
     winner.setOwnerId(conversation.getOwnerId());
-    winner.setSummaryJson(VALID_SUMMARY);
+    winner.setSummaryText(VALID_SUMMARY);
     winner.setSummarizedThroughTurn(5);
     winner.setSummaryRevision(1);
     when(conversations.find(conversation.getOwnerId(), conversation.getId()))
@@ -287,31 +286,68 @@ class ConversationMemoryProviderTest {
   }
 
   @Test
-  void acceptsAStructuredSummaryLongerThanTheFormerLimit() {
+  void rejectsOverlongSummaryWithoutAdvancingCursor() {
     Conversation conversation = conversation();
-    String largeSummary = VALID_SUMMARY.replace("制度", "制度".repeat(2500));
+    String largeSummary = "制度".repeat(2500);
+    when(conversations.find(conversation.getOwnerId(), conversation.getId()))
+        .thenReturn(conversation);
+    when(messages.list(conversation.getOwnerId(), conversation.getId()))
+        .thenReturn(turns(conversation.getId(), 9));
+    when(chat.generate(anyString(), anyString())).thenReturn(generation(largeSummary));
+
+    var memory = provider.load(conversation.getOwnerId(), conversation.getId(), 10);
+
+    assertEquals(0, memory.summaryRevision());
+    verify(conversations, never())
+        .updateSummary(
+            eq(conversation.getOwnerId()), eq(conversation.getId()), anyString(), eq(5), eq(0));
+  }
+
+  @Test
+  void acceptsFourHundredUnicodeCharactersIncludingEmoji() {
+    Conversation conversation = conversation();
+    String summary = "话".repeat(399) + "😀";
     Conversation updated = conversation();
-    updated.setId(conversation.getId());
-    updated.setOwnerId(conversation.getOwnerId());
-    updated.setSummaryJson(largeSummary);
+    updated.setSummaryText(summary);
     updated.setSummarizedThroughTurn(5);
     updated.setSummaryRevision(1);
     when(conversations.find(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(conversation, updated);
     when(messages.list(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(turns(conversation.getId(), 9));
-    when(chat.generate(anyString(), anyString())).thenReturn(generation(largeSummary));
+    when(chat.generate(anyString(), anyString())).thenReturn(generation(summary));
     when(conversations.updateSummary(
-            eq(conversation.getOwnerId()), eq(conversation.getId()), anyString(), eq(5), eq(0)))
+            eq(conversation.getOwnerId()), eq(conversation.getId()), eq(summary), eq(5), eq(0)))
         .thenReturn(1);
 
     var memory = provider.load(conversation.getOwnerId(), conversation.getId(), 10);
 
-    assertTrue(largeSummary.length() > 4000);
-    assertEquals(largeSummary, memory.summary());
-    verify(conversations)
-        .updateSummary(
-            eq(conversation.getOwnerId()), eq(conversation.getId()), anyString(), eq(5), eq(0));
+    assertEquals(summary, memory.summary());
+    assertEquals(400, summary.codePointCount(0, summary.length()));
+  }
+
+  @Test
+  void emptySummaryStillAdvancesTheCoverageCursor() {
+    Conversation conversation = conversation();
+    conversation.setSummaryText("话题：用户称：制度修订");
+    Conversation updated = conversation();
+    updated.setSummaryText("");
+    updated.setSummarizedThroughTurn(5);
+    updated.setSummaryRevision(1);
+    when(conversations.find(conversation.getOwnerId(), conversation.getId()))
+        .thenReturn(conversation, updated);
+    when(messages.list(conversation.getOwnerId(), conversation.getId()))
+        .thenReturn(turns(conversation.getId(), 9));
+    when(chat.generate(anyString(), anyString())).thenReturn(generation("无"));
+    when(conversations.updateSummary(
+            eq(conversation.getOwnerId()), eq(conversation.getId()), eq(""), eq(5), eq(0)))
+        .thenReturn(1);
+
+    var memory = provider.load(conversation.getOwnerId(), conversation.getId(), 10);
+
+    assertEquals("", memory.summary());
+    assertEquals(1, memory.summaryRevision());
+    assertTrue(memory.unsummarizedTurns().isEmpty());
   }
 
   @Test
@@ -338,15 +374,14 @@ class ConversationMemoryProviderTest {
   @Test
   void usesValidTurnOrderAndPreservesDetailedHistoryInSummaryInput() {
     Conversation conversation = conversation();
+    conversation.setSummaryText(
+        "话题：用户称：准备制度修订；事实与约束：用户称：截止日期2026-09-20，预算不超过3000元；"
+            + "决定与偏好：用户称：偏好中文说明；实体与指代：助手曾回答：HNU负责审批；"
+            + "未解决事项：用户称：尚未确定负责人");
     Conversation updated = conversation();
     updated.setId(conversation.getId());
     updated.setOwnerId(conversation.getOwnerId());
-    updated.setSummaryJson(
-        "{\"goalsAndTopics\":[\"用户称：准备制度修订\"],"
-            + "\"factsAndConstraints\":[\"用户称：截止日期2026-09-20，预算不超过3000元\"],"
-            + "\"decisionsAndPreferences\":[\"用户称：偏好中文说明\"],"
-            + "\"entitiesAndReferences\":[\"助手曾回答：HNU负责审批\"],"
-            + "\"openItems\":[\"用户称：尚未确定负责人\"]}");
+    updated.setSummaryText("用户讨论制度修订（当时已回答）。约束：截止2026-09-20，预算不超过3000元；" + "偏好：中文说明。待确认：负责人。");
     updated.setSummarizedThroughTurn(7);
     updated.setSummaryRevision(1);
     List<Message> history = new ArrayList<>();
@@ -368,7 +403,7 @@ class ConversationMemoryProviderTest {
     when(conversations.find(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(conversation, updated);
     when(messages.list(conversation.getOwnerId(), conversation.getId())).thenReturn(history);
-    when(chat.generate(anyString(), anyString())).thenReturn(generation(updated.getSummaryJson()));
+    when(chat.generate(anyString(), anyString())).thenReturn(generation(updated.getSummaryText()));
     when(conversations.updateSummary(
             eq(conversation.getOwnerId()), eq(conversation.getId()), anyString(), eq(7), eq(0)))
         .thenReturn(1);
@@ -379,8 +414,8 @@ class ConversationMemoryProviderTest {
     assertTrue(memory.unsummarizedTurns().isEmpty());
     assertTrue(memory.summary().contains("2026-09-20"));
     assertTrue(memory.summary().contains("不超过3000元"));
-    assertTrue(memory.summary().contains("偏好中文"));
-    assertTrue(memory.summary().contains("助手曾回答：HNU"));
+    assertTrue(memory.summary().contains("中文说明"));
+    assertFalse(memory.summary().contains("HNU负责审批"));
     ArgumentCaptor<String> user = ArgumentCaptor.forClass(String.class);
     verify(chat).generate(anyString(), user.capture());
     var input = JsonMapper.builder().build().readTree(user.getValue());
@@ -394,6 +429,25 @@ class ConversationMemoryProviderTest {
     assertTrue(user.getValue().contains("不超过3000元"));
     assertTrue(user.getValue().contains("负责人未定"));
     assertTrue(user.getValue().contains("助手曾回答的历史陈述"));
+    assertEquals(conversation.getSummaryText(), input.path("oldSummary").asString());
+  }
+
+  @Test
+  void loadsMigratedSummaryTextWithoutRefreshingIt() {
+    Conversation conversation = conversation();
+    conversation.setSummaryText("话题：用户称：制度修订");
+    conversation.setSummarizedThroughTurn(5);
+    conversation.setSummaryRevision(1);
+    when(conversations.find(conversation.getOwnerId(), conversation.getId()))
+        .thenReturn(conversation);
+    when(messages.list(conversation.getOwnerId(), conversation.getId()))
+        .thenReturn(turns(conversation.getId(), 8));
+
+    var memory = provider.load(conversation.getOwnerId(), conversation.getId(), 9);
+
+    assertEquals("话题：用户称：制度修订", memory.summary());
+    assertEquals(1, memory.summaryRevision());
+    verify(chat, never()).generate(anyString(), anyString());
   }
 
   @Test
@@ -424,7 +478,7 @@ class ConversationMemoryProviderTest {
     value.setId(UUID.randomUUID());
     value.setOwnerId(UUID.randomUUID());
     value.setTitle("测试");
-    value.setSummaryJson("{}");
+    value.setSummaryText("");
     return value;
   }
 

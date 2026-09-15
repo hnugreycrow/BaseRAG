@@ -20,16 +20,11 @@ import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
-import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /** 将流水线中间结果组装为边界清晰、顺序稳定且可直接交给模型的两条消息。 */
 @Component
 public class PromptAssemblyStage {
-  private static final String EMPTY_SUMMARY =
-      "{\"goalsAndTopics\":[],\"factsAndConstraints\":[],\"decisionsAndPreferences\":[],"
-          + "\"entitiesAndReferences\":[],\"openItems\":[]}";
-
   private final ContextBuilder contexts;
   private final JsonMapper json = JsonMapper.builder().build();
 
@@ -118,7 +113,7 @@ public class PromptAssemblyStage {
                     "Q1", 1, RoutingReasonCode.KNOWLEDGE_SOURCE_REQUIRED)));
     return assemble(
         AnswerPrompts.knowledge(),
-        memoryView(new RagMemory(EMPTY_SUMMARY, 0, List.of(), List.of(), 0)),
+        memoryView(new RagMemory("", 0, List.of(), List.of(), 0)),
         questionPlanView(plan, routing, null),
         sources,
         PackedTools.empty(),
@@ -184,27 +179,12 @@ public class PromptAssemblyStage {
    */
   private Map<String, Object> memoryView(RagMemory memory) {
     LinkedHashMap<String, Object> value = new LinkedHashMap<>();
-    value.put("summary", summaryValue(memory.summary()));
+    value.put("summary", memory.summary());
     value.put("summaryRevision", memory.summaryRevision());
     value.put("unsummarizedTurns", memory.unsummarizedTurns());
     value.put("recentTurns", memory.recentTurns());
     value.put("loadedThroughTurn", memory.loadedThroughTurn());
     return value;
-  }
-
-  /**
-   * 把合法摘要 JSON 保持为对象；异常历史数据则作为普通字符串传递，避免被解释成结构指令。
-   *
-   * @param summary 持久化摘要文本
-   * @return JSON 对象或原始字符串
-   */
-  private Object summaryValue(String summary) {
-    try {
-      JsonNode parsed = json.readTree(summary);
-      return parsed != null && parsed.isObject() ? parsed : summary;
-    } catch (RuntimeException ignored) {
-      return summary;
-    }
   }
 
   /**
