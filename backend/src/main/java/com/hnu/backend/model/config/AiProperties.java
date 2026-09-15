@@ -58,17 +58,6 @@ public class AiProperties {
     return resolve(candidate, id, "embedding", embedding.timeoutMs, dimension);
   }
 
-  public ModelTarget embeddingModel(String model, int dimension) {
-    return embedding.candidates.stream()
-        .filter(candidate -> candidate.model.equals(model) && candidate.dimension == dimension)
-        .findFirst()
-        .map(candidate -> embeddingModel(candidate.id))
-        .orElseThrow(
-            () ->
-                new IllegalArgumentException(
-                    "Knowledge base embedding model is no longer configured: " + model));
-  }
-
   public List<ModelTarget> embeddingModels() {
     return embedding.candidates.stream().map(candidate -> embeddingModel(candidate.id)).toList();
   }

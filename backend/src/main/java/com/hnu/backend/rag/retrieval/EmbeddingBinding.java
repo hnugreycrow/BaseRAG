@@ -6,4 +6,4 @@ package com.hnu.backend.rag.retrieval;
  * @param model 模型名称
  * @param dimensions 向量维度
  */
-public record EmbeddingBinding(String model, int dimensions) {}
+public record EmbeddingBinding(String modelId, String provider, String model, int dimensions) {}

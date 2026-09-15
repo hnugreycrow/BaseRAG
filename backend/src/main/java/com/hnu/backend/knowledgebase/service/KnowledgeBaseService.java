@@ -106,10 +106,13 @@ public class KnowledgeBaseService {
     } catch (IllegalArgumentException e) {
       throw ApiException.bad("INVALID_EMBEDDING_MODEL", "请选择配置文件中可用的向量模型");
     }
+    requireAvailable(model);
     KnowledgeBase kb = new KnowledgeBase();
     kb.setId(UUID.randomUUID());
     kb.setOwnerId(ownerId);
     kb.setName(normalizeName(rawName));
+    kb.setEmbeddingModelId(model.id());
+    kb.setEmbeddingProvider(model.provider());
     kb.setEmbeddingModel(model.model());
     kb.setEmbeddingDimensions(model.dimension());
     mapper.insert(kb);
@@ -120,6 +123,7 @@ public class KnowledgeBaseService {
   public List<EmbeddingModelResponse> embeddingModels() {
     String defaultId = ai.getEmbedding().getDefaultModel();
     return ai.embeddingModels().stream()
+        .filter(model -> model.apiKey() != null && !model.apiKey().isBlank())
         .map(
             model ->
                 new EmbeddingModelResponse(
@@ -140,9 +144,21 @@ public class KnowledgeBaseService {
    */
   public KnowledgeBase ensureModel(UUID ownerId, UUID id) {
     KnowledgeBase kb = requireEntity(ownerId, id);
-    if (kb.getEmbeddingModel() != null) return kb;
+    if (kb.getEmbeddingModel() != null) {
+      checkModel(
+          kb,
+          kb.getEmbeddingModelId(),
+          kb.getEmbeddingProvider(),
+          kb.getEmbeddingModel(),
+          kb.getEmbeddingDimensions());
+      return kb;
+    }
     AiProperties.ModelTarget model = ai.embeddingModel();
-    return tx.execute(status -> lockAndBindModel(ownerId, id, model.model(), model.dimension()));
+    requireAvailable(model);
+    return tx.execute(
+        status ->
+            lockAndBindModel(
+                ownerId, id, model.id(), model.provider(), model.model(), model.dimension()));
   }
 
   /**
@@ -220,15 +236,33 @@ public class KnowledgeBaseService {
    * 校验知识库绑定的模型及维度是否与本次处理使用的配置一致。
    *
    * @param kb 知识库
+   * @param modelId 模型配置标识
+   * @param provider 供应商标识
    * @param model 本次模型名称
    * @param dimensions 本次向量维度
    */
-  public void checkModel(KnowledgeBase kb, String model, int dimensions) {
+  public void checkModel(
+      KnowledgeBase kb, String modelId, String provider, String model, int dimensions) {
     if (kb.getEmbeddingModel() != null
-        && (!kb.getEmbeddingModel().equals(model) || kb.getEmbeddingDimensions() != dimensions)) {
+        && (!kb.getEmbeddingModelId().equals(modelId)
+            || !kb.getEmbeddingProvider().equals(provider)
+            || !kb.getEmbeddingModel().equals(model)
+            || kb.getEmbeddingDimensions() != dimensions)) {
       throw new ApiException(
-          "EMBEDDING_MODEL_CHANGED", "Embedding 模型或维度已变更，请恢复原配置或显式重建知识库", HttpStatus.CONFLICT);
+          "EMBEDDING_MODEL_CHANGED", "Embedding 供应商、模型或维度已变更，请恢复原配置", HttpStatus.CONFLICT);
     }
+    AiProperties.ModelTarget configured;
+    try {
+      configured = ai.embeddingModel(modelId);
+    } catch (IllegalArgumentException error) {
+      throw new ApiException(
+          "EMBEDDING_MODEL_UNAVAILABLE", "知识库绑定的向量模型已不在配置中", HttpStatus.CONFLICT);
+    }
+    if (!configured.provider().equals(provider)
+        || !configured.model().equals(model)
+        || configured.dimension() != dimensions)
+      throw new ApiException(
+          "EMBEDDING_BINDING_CHANGED", "向量模型配置已变更，请恢复原供应商、模型和维度", HttpStatus.CONFLICT);
   }
 
   /**
@@ -236,16 +270,21 @@ public class KnowledgeBaseService {
    *
    * @param ownerId 所属用户标识
    * @param id 知识库标识
+   * @param modelId 模型配置标识
+   * @param provider 供应商标识
    * @param model 模型名称
    * @param dimensions 向量维度
    * @return 锁定并校验后的知识库实体
    */
-  public KnowledgeBase lockAndBindModel(UUID ownerId, UUID id, String model, int dimensions) {
+  public KnowledgeBase lockAndBindModel(
+      UUID ownerId, UUID id, String modelId, String provider, String model, int dimensions) {
     KnowledgeBase kb = mapper.lock(ownerId, id);
     if (kb == null)
       throw new ApiException("KNOWLEDGE_BASE_NOT_FOUND", "知识库不存在", HttpStatus.NOT_FOUND);
-    checkModel(kb, model, dimensions);
+    checkModel(kb, modelId, provider, model, dimensions);
     if (kb.getEmbeddingModel() == null) {
+      kb.setEmbeddingModelId(modelId);
+      kb.setEmbeddingProvider(provider);
       kb.setEmbeddingModel(model);
       kb.setEmbeddingDimensions(dimensions);
       mapper.updateById(kb);
@@ -264,8 +303,15 @@ public class KnowledgeBaseService {
         knowledgeBase.getId(),
         knowledgeBase.getName(),
         knowledgeBase.getEmbeddingModel(),
+        knowledgeBase.getEmbeddingModelId(),
+        knowledgeBase.getEmbeddingProvider(),
         knowledgeBase.getEmbeddingDimensions(),
         knowledgeBase.getDocumentCount() == null ? 0 : knowledgeBase.getDocumentCount(),
         knowledgeBase.getCreatedAt());
+  }
+
+  private void requireAvailable(AiProperties.ModelTarget model) {
+    if (model.apiKey() == null || model.apiKey().isBlank())
+      throw ApiException.bad("MODEL_NOT_CONFIGURED", "所选向量模型未配置 API Key");
   }
 }

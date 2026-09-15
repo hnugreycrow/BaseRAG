@@ -42,6 +42,12 @@ public class DocumentVersion {
   /** 生成分块向量所用的模型名称。 */
   private String embeddingModel;
 
+  /** 生成分块向量所用的配置标识。 */
+  private String embeddingModelId;
+
+  /** 生成分块向量的供应商标识。 */
+  private String embeddingProvider;
+
   /** 生成分块向量的维度。 */
   private Integer embeddingDimensions;
 

@@ -39,6 +39,8 @@ public interface RetrievalMapper {
   List<SearchHit> searchAll(
       @Param("ownerId") UUID ownerId,
       @Param("vector") String vector,
+      @Param("modelId") String modelId,
+      @Param("provider") String provider,
       @Param("model") String model,
       @Param("dimensions") int dimensions,
       @Param("limit") int limit);
@@ -58,6 +60,8 @@ public interface RetrievalMapper {
       @Param("ownerId") UUID ownerId,
       @Param("knowledgeBaseIds") List<UUID> knowledgeBaseIds,
       @Param("vector") String vector,
+      @Param("modelId") String modelId,
+      @Param("provider") String provider,
       @Param("model") String model,
       @Param("dimensions") int dimensions,
       @Param("limit") int limit);
@@ -77,6 +81,8 @@ public interface RetrievalMapper {
       @Param("ownerId") UUID ownerId,
       @Param("knowledgeBaseId") UUID knowledgeBaseId,
       @Param("vector") String vector,
+      @Param("modelId") String modelId,
+      @Param("provider") String provider,
       @Param("model") String model,
       @Param("dimensions") int dimensions,
       @Param("limit") int limit);

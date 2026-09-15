@@ -25,6 +25,12 @@ public class KnowledgeBase {
   /** 建库时绑定的向量模型名称。 */
   private String embeddingModel;
 
+  /** 稳定的模型配置标识。 */
+  private String embeddingModelId;
+
+  /** 生成向量的供应商标识。 */
+  private String embeddingProvider;
+
   /** 建库时绑定的向量维度。 */
   private Integer embeddingDimensions;
 

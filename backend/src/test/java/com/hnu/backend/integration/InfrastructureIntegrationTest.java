@@ -275,10 +275,10 @@ class InfrastructureIntegrationTest {
 
   @BeforeEach
   void testModels() {
-    when(embedding.embed(anyString(), anyInt(), anyList()))
+    when(embedding.embed(anyString(), anyString(), anyString(), anyInt(), anyList()))
         .thenAnswer(
             invocation -> {
-              List<String> inputs = invocation.getArgument(2);
+              List<String> inputs = invocation.getArgument(4);
               return inputs.stream()
                   .map(input -> input.contains("报销") ? new float[] {0, 1} : new float[] {1, 0})
                   .toList();
@@ -296,6 +296,8 @@ class InfrastructureIntegrationTest {
     kb.setId(UUID.randomUUID());
     kb.setOwnerId(ownerId);
     kb.setName("自动化测试");
+    kb.setEmbeddingModelId("qwen-emb-8b");
+    kb.setEmbeddingProvider("siliconflow");
     kb.setEmbeddingModel("Qwen/Qwen3-Embedding-8B");
     kb.setEmbeddingDimensions(2);
     kbMapper.insert(kb);
@@ -347,7 +349,9 @@ class InfrastructureIntegrationTest {
     var version = versionMapper.selectById(document.getActiveVersionId());
     assertTrue(
         version.getStorageKey().startsWith("users/" + ownerId + "/knowledge-bases/" + kb + "/"));
-    var hits = retrievalMapper.search(ownerId, kb, "[1,0]", "Qwen/Qwen3-Embedding-8B", 2, 5);
+    var hits =
+        retrievalMapper.search(
+            ownerId, kb, "[1,0]", "qwen-emb-8b", "siliconflow", "Qwen/Qwen3-Embedding-8B", 2, 5);
     assertEquals(1, hits.size());
     assertEquals(original, hits.getFirst().getContent());
     assertEquals(1.0, hits.getFirst().getSimilarity(), 1e-6);
@@ -355,10 +359,15 @@ class InfrastructureIntegrationTest {
         retrievalMapper.activeModelBindings(ownerId).stream()
             .anyMatch(
                 binding ->
-                    binding.model().equals("Qwen/Qwen3-Embedding-8B")
+                    binding.modelId().equals("qwen-emb-8b")
+                        && binding.provider().equals("siliconflow")
+                        && binding.model().equals("Qwen/Qwen3-Embedding-8B")
                         && binding.dimensions() == 2));
     assertTrue(
-        retrievalMapper.searchAll(ownerId, "[1,0]", "Qwen/Qwen3-Embedding-8B", 2, 50).stream()
+        retrievalMapper
+            .searchAll(
+                ownerId, "[1,0]", "qwen-emb-8b", "siliconflow", "Qwen/Qwen3-Embedding-8B", 2, 50)
+            .stream()
             .anyMatch(hit -> hit.getDocumentId().equals(importedDocumentId)));
     var storage = config.getStorage();
     try (S3Client s3 =
@@ -387,7 +396,16 @@ class InfrastructureIntegrationTest {
     documents.createChunks(ownerId, first, expense.documentId());
     var secret = documents.upload(ownerId, other, file("其他库.md", "# 机密\n不可跨库检索。"));
     documents.createChunks(ownerId, other, secret.documentId());
-    var hits = retrievalMapper.search(ownerId, first, "[1,0]", "Qwen/Qwen3-Embedding-8B", 2, 10);
+    var hits =
+        retrievalMapper.search(
+            ownerId,
+            first,
+            "[1,0]",
+            "qwen-emb-8b",
+            "siliconflow",
+            "Qwen/Qwen3-Embedding-8B",
+            2,
+            10);
     assertEquals(2, hits.size());
     assertEquals(holiday.documentId(), hits.getFirst().getDocumentId());
     assertEquals(1.0, hits.getFirst().getSimilarity(), 1e-6);
@@ -395,11 +413,18 @@ class InfrastructureIntegrationTest {
     assertTrue(hits.stream().noneMatch(h -> h.getDocumentName().equals("其他库.md")));
     var scopedHits =
         retrievalMapper.searchIn(
-            ownerId, List.of(first), "[1,0]", "Qwen/Qwen3-Embedding-8B", 2, 10);
+            ownerId,
+            List.of(first),
+            "[1,0]",
+            "qwen-emb-8b",
+            "siliconflow",
+            "Qwen/Qwen3-Embedding-8B",
+            2,
+            10);
     assertEquals(2, scopedHits.size());
     assertTrue(scopedHits.stream().noneMatch(h -> h.getDocumentName().equals("其他库.md")));
     assertEquals(
-        List.of(new EmbeddingBinding("Qwen/Qwen3-Embedding-8B", 2)),
+        List.of(new EmbeddingBinding("qwen-emb-8b", "siliconflow", "Qwen/Qwen3-Embedding-8B", 2)),
         retrievalMapper.activeModelBindingsIn(ownerId, List.of(first)));
   }
 
@@ -418,7 +443,14 @@ class InfrastructureIntegrationTest {
     assertTrue(
         retrievalMapper
             .searchIn(
-                ownerId, List.of(otherKnowledgeBaseId), "[1,0]", "Qwen/Qwen3-Embedding-8B", 2, 10)
+                ownerId,
+                List.of(otherKnowledgeBaseId),
+                "[1,0]",
+                "qwen-emb-8b",
+                "siliconflow",
+                "Qwen/Qwen3-Embedding-8B",
+                2,
+                10)
             .isEmpty());
 
     UUID otherConversationId = UUID.randomUUID();
@@ -431,7 +463,7 @@ class InfrastructureIntegrationTest {
   void failedEmbeddingLeavesNoActiveVersionOrPartialChunks() {
     UUID kb = kb();
     UUID ownerId = ownerId();
-    when(embedding.embed(anyString(), anyInt(), anyList()))
+    when(embedding.embed(anyString(), anyString(), anyString(), anyInt(), anyList()))
         .thenThrow(ApiException.upstream("MODEL_TIMEOUT", "test"));
     var uploaded = documents.upload(ownerId, kb, file("失败.md", "# 测试\n不应可检索。"));
     assertThrows(
@@ -445,7 +477,10 @@ class InfrastructureIntegrationTest {
         chunkMapper.selectCount(
             new LambdaQueryWrapper<DocumentChunk>()
                 .eq(DocumentChunk::getDocumentId, docs.getFirst().id())));
-    assertTrue(retrievalMapper.search(ownerId, kb, "[1,0]", "test-embedding", 2, 10).isEmpty());
+    assertTrue(
+        retrievalMapper
+            .search(ownerId, kb, "[1,0]", "qwen-emb-8b", "siliconflow", "test-embedding", 2, 10)
+            .isEmpty());
   }
 
   @Test
@@ -454,9 +489,11 @@ class InfrastructureIntegrationTest {
     UUID ownerId = ownerId();
     var uploaded = documents.upload(ownerId, kb, file("待处理.md", "# 资料\n原内容。"));
     assertEquals("UPLOADED", documents.list(ownerId, kb, 1, 10, null).items().getFirst().status());
-    verify(embedding, never()).embed(anyString(), anyInt(), anyList());
+    verify(embedding, never()).embed(anyString(), anyString(), anyString(), anyInt(), anyList());
     documents.createChunks(ownerId, kb, uploaded.documentId());
-    verify(embedding).embed(eq("Qwen/Qwen3-Embedding-8B"), eq(2), anyList());
+    verify(embedding)
+        .embed(
+            eq("qwen-emb-8b"), eq("siliconflow"), eq("Qwen/Qwen3-Embedding-8B"), eq(2), anyList());
   }
 
   @Test
@@ -465,7 +502,7 @@ class InfrastructureIntegrationTest {
     UUID ownerId = ownerId();
     // The deliberately malformed second vector bypasses the mocked HTTP adapter,
     // forcing the real database constraint to fail after the first INSERT.
-    when(embedding.embed(anyString(), anyInt(), anyList()))
+    when(embedding.embed(anyString(), anyString(), anyString(), anyInt(), anyList()))
         .thenReturn(List.of(new float[] {1, 0}, new float[] {1, 0, 0}));
     String multiChunk = "# 第一节\n" + "第一块内容。".repeat(300) + "\n\n# 第二节\n" + "第二块内容。".repeat(300);
     var uploaded = documents.upload(ownerId, kb, file("回滚.md", multiChunk));

@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.hnu.backend.model.client.ChatClient;
 import com.hnu.backend.model.client.EmbeddingClient;
+import com.hnu.backend.model.client.OpenAICompatibleEmbeddingAdapter;
 import com.hnu.backend.model.config.AiProperties;
 import com.hnu.backend.shared.error.ApiException;
 import com.sun.net.httpserver.HttpServer;
@@ -60,11 +61,59 @@ class ModelHttpClientTest {
     var http = new ModelHttpClient(config);
     assertEquals("答案 [S1]", new ChatClient(http, config).generate("系统", "问题").content());
     assertArrayEquals(
-        new float[] {1, 0}, new EmbeddingClient(config, http).embed(List.of("甲", "乙")).getFirst());
+        new float[] {1, 0},
+        new EmbeddingClient(config, List.of(new OpenAICompatibleEmbeddingAdapter(http)))
+            .embed(List.of("甲", "乙"))
+            .getFirst());
     assertTrue(requests.getFirst().contains("\"stream\":false"));
     assertFalse(requests.getFirst().contains("max_tokens"));
     assertTrue(requests.get(1).contains("\"input\":[\"甲\",\"乙\"]"));
     assertTrue(requests.get(1).contains("\"dimensions\":2"));
+  }
+
+  @Test
+  void aliyunCompatibleEmbeddingUsesItsOwnEndpointAndModel() {
+    AiProperties.Provider aliyun = new AiProperties.Provider();
+    aliyun.setUrl("http://127.0.0.1:" + server.getAddress().getPort());
+    aliyun.setApiKey("aliyun-test-only");
+    aliyun.getEndpoints().setEmbedding("/compatible-mode/v1/embeddings");
+    config.getProviders().put("bailian", aliyun);
+    AiProperties.Candidate model = new AiProperties.Candidate();
+    model.setId("bailian-qwen3.7-embedding");
+    model.setProvider("bailian");
+    model.setModel("qwen3.7-text-embedding");
+    model.setDimension(1536);
+    config.getEmbedding().getCandidates().add(model);
+    List<String> requests = new ArrayList<>();
+    server.createContext(
+        "/compatible-mode/v1/embeddings",
+        exchange -> {
+          assertEquals(
+              "Bearer aliyun-test-only", exchange.getRequestHeaders().getFirst("Authorization"));
+          requests.add(
+              new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+          String response = "{\"data\":[{\"index\":0,\"embedding\":[1" + ",0".repeat(1535) + "]}]}";
+          byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
+          exchange.sendResponseHeaders(200, bytes.length);
+          exchange.getResponseBody().write(bytes);
+          exchange.close();
+        });
+    var http = new ModelHttpClient(config);
+    var embedding =
+        new EmbeddingClient(config, List.of(new OpenAICompatibleEmbeddingAdapter(http)));
+    assertEquals(
+        1536,
+        embedding
+            .embed(
+                "bailian-qwen3.7-embedding",
+                "bailian",
+                "qwen3.7-text-embedding",
+                1536,
+                List.of("测试"))
+            .getFirst()
+            .length);
+    assertTrue(requests.getFirst().contains("\"model\":\"qwen3.7-text-embedding\""));
+    assertTrue(requests.getFirst().contains("\"dimensions\":1536"));
   }
 
   @Test

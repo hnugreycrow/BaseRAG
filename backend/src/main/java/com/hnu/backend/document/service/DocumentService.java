@@ -137,6 +137,8 @@ public class DocumentService {
     version.setStatus("UPLOADED");
     version.setParserVersion("markdown-v1");
     version.setChunkerVersion("semantic-pack-v2");
+    version.setEmbeddingModelId(knowledgeBase.getEmbeddingModelId());
+    version.setEmbeddingProvider(knowledgeBase.getEmbeddingProvider());
     version.setEmbeddingModel(knowledgeBase.getEmbeddingModel());
     version.setEmbeddingDimensions(knowledgeBase.getEmbeddingDimensions());
 
@@ -147,6 +149,8 @@ public class DocumentService {
             knowledgeBases.lockAndBindModel(
                 ownerId,
                 knowledgeBaseId,
+                version.getEmbeddingModelId(),
+                version.getEmbeddingProvider(),
                 version.getEmbeddingModel(),
                 version.getEmbeddingDimensions());
             documents.insert(document);
@@ -215,9 +219,15 @@ public class DocumentService {
       if (pieces.isEmpty()) throw ApiException.bad("EMPTY_DOCUMENT", "文档没有可用文本");
       if (pieces.size() > 1000)
         throw ApiException.bad("TOO_MANY_CHUNKS", "单份文档最多处理 1000 个片段，请拆分文档");
-      embedding.requireConfigured(version.getEmbeddingModel(), version.getEmbeddingDimensions());
+      embedding.requireConfigured(
+          version.getEmbeddingModelId(),
+          version.getEmbeddingProvider(),
+          version.getEmbeddingModel(),
+          version.getEmbeddingDimensions());
       List<float[]> vectors =
           embedding.embed(
+              version.getEmbeddingModelId(),
+              version.getEmbeddingProvider(),
               version.getEmbeddingModel(),
               version.getEmbeddingDimensions(),
               pieces.stream().map(MarkdownChunker.Piece::content).toList());
@@ -227,6 +237,8 @@ public class DocumentService {
             knowledgeBases.lockAndBindModel(
                 ownerId,
                 knowledgeBaseId,
+                version.getEmbeddingModelId(),
+                version.getEmbeddingProvider(),
                 version.getEmbeddingModel(),
                 version.getEmbeddingDimensions());
             chunks.delete(

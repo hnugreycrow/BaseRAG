@@ -152,7 +152,14 @@ public class RetrievalService {
       float[] vector;
       try {
         vector =
-            embedding.embed(binding.model(), binding.dimensions(), List.of(question)).getFirst();
+            embedding
+                .embed(
+                    binding.modelId(),
+                    binding.provider(),
+                    binding.model(),
+                    binding.dimensions(),
+                    List.of(question))
+                .getFirst();
         embeddingSpan.success(1);
       } catch (RuntimeException error) {
         embeddingSpan.failed(errorCode(error, "EMBEDDING_FAILED"));
@@ -167,6 +174,8 @@ public class RetrievalService {
               retrieval.searchAll(
                   ownerId,
                   EmbeddingClient.literal(vector),
+                  binding.modelId(),
+                  binding.provider(),
                   binding.model(),
                   binding.dimensions(),
                   budget.recallBudget());
@@ -176,6 +185,8 @@ public class RetrievalService {
                   ownerId,
                   scope,
                   EmbeddingClient.literal(vector),
+                  binding.modelId(),
+                  binding.provider(),
                   binding.model(),
                   binding.dimensions(),
                   budget.recallBudget());

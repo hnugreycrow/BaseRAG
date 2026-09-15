@@ -4,18 +4,22 @@
     "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.hnu.backend.rag.retrieval.RetrievalMapper">
     <select id="activeModelBindings" resultType="com.hnu.backend.rag.retrieval.EmbeddingBinding">
-        SELECT DISTINCT v.embedding_model AS model,
+        SELECT DISTINCT v.embedding_model_id AS model_id,
+                        v.embedding_provider AS provider,
+                        v.embedding_model AS model,
                         v.embedding_dimensions AS dimensions
         FROM document_versions v
         JOIN documents d ON d.active_version_id = v.id
         JOIN knowledge_bases kb ON kb.id = d.knowledge_base_id
         WHERE v.status = 'READY'
           AND kb.owner_id = #{ownerId}
-        ORDER BY v.embedding_model, v.embedding_dimensions
+        ORDER BY v.embedding_model_id, v.embedding_provider, v.embedding_model, v.embedding_dimensions
     </select>
 
     <select id="activeModelBindingsIn" resultType="com.hnu.backend.rag.retrieval.EmbeddingBinding">
-        SELECT DISTINCT v.embedding_model AS model,
+        SELECT DISTINCT v.embedding_model_id AS model_id,
+                        v.embedding_provider AS provider,
+                        v.embedding_model AS model,
                         v.embedding_dimensions AS dimensions
         FROM document_versions v
         JOIN documents d ON d.active_version_id = v.id
@@ -26,7 +30,7 @@
           <foreach collection="knowledgeBaseIds" item="knowledgeBaseId" open="(" separator="," close=")">
               #{knowledgeBaseId}
           </foreach>
-        ORDER BY v.embedding_model, v.embedding_dimensions
+        ORDER BY v.embedding_model_id, v.embedding_provider, v.embedding_model, v.embedding_dimensions
     </select>
 
     <select id="searchAll" resultType="com.hnu.backend.rag.retrieval.SearchHit">
@@ -50,6 +54,8 @@
         JOIN document_versions v ON v.id = c.version_id
         WHERE v.status = 'READY'
           AND kb.owner_id = #{ownerId}
+          AND v.embedding_model_id = #{modelId}
+          AND v.embedding_provider = #{provider}
           AND v.embedding_model = #{model}
           AND v.embedding_dimensions = #{dimensions}
         ORDER BY c.embedding <=> CAST(#{vector} AS vector), c.id
@@ -78,6 +84,8 @@
         JOIN document_versions v ON v.id = c.version_id
         WHERE v.status = 'READY'
           AND kb.owner_id = #{ownerId}
+          AND v.embedding_model_id = #{modelId}
+          AND v.embedding_provider = #{provider}
           AND v.embedding_model = #{model}
           AND v.embedding_dimensions = #{dimensions}
           AND d.knowledge_base_id IN
@@ -113,6 +121,8 @@
         WHERE d.knowledge_base_id = #{knowledgeBaseId}
           AND kb.owner_id = #{ownerId}
           AND v.status = 'READY'
+          AND v.embedding_model_id = #{modelId}
+          AND v.embedding_provider = #{provider}
           AND v.embedding_model = #{model}
           AND v.embedding_dimensions = #{dimensions}
         ORDER BY c.embedding <=> CAST(#{vector} AS vector), c.id
