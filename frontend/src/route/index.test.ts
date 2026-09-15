@@ -37,4 +37,26 @@ describe('authentication route guard', () => {
 
     expect(router.currentRoute.value.name).toBe('chat')
   })
+
+  it('keeps the observability menu active on a deep-linked run', async () => {
+    const auth = useAuthStore(pinia)
+    auth.applySession({
+      user: {
+        id: '00000000-0000-0000-0000-000000000010',
+        username: 'user',
+        displayName: '用户',
+        role: 'USER',
+        enabled: true,
+        lastLoginAt: null,
+        createdAt: '2026-09-15T00:00:00Z',
+        updatedAt: '2026-09-15T00:00:00Z',
+      },
+      csrfToken: 'nonce',
+    })
+
+    await router.push('/admin/observability/run-1?range=24h')
+
+    expect(router.currentRoute.value.name).toBe('observability-detail')
+    expect(router.currentRoute.value.meta.activeMenu).toBe('/admin/observability')
+  })
 })
