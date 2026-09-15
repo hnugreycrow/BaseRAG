@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hnu.backend.observability.mapper.RagRunMapper">
+    <sql id="viewColumns">
+        r.id, r.owner_id, u.username, u.display_name, r.request_id,
+        r.conversation_id, r.user_message_id, r.assistant_message_id,
+        r.status, r.execution_mode, r.model_id, r.provider, r.model,
+        r.candidate_count, r.evidence_count, r.degraded, r.error_code,
+        r.started_at, r.first_token_at, r.completed_at, r.total_ms,
+        r.end_to_end_ttft_ms, r.model_ttft_ms
+    </sql>
+
+    <sql id="filters">
+        <where>
+            <if test="filter.from != null">AND r.started_at &gt;= #{filter.from}</if>
+            <if test="filter.to != null">AND r.started_at &lt; #{filter.to}</if>
+            <if test="filter.status != null">AND r.status = #{filter.status}</if>
+            <if test="filter.model != null">AND r.model = #{filter.model}</if>
+            <if test="filter.executionMode != null">AND r.execution_mode = #{filter.executionMode}</if>
+            <if test="filter.ownerId != null">AND r.owner_id = #{filter.ownerId}</if>
+        </where>
+    </sql>
+
+    <select id="list" resultType="com.hnu.backend.observability.mapper.RagRunViewRow">
+        SELECT <include refid="viewColumns"/>
+        FROM rag_runs r
+        JOIN users u ON u.id = r.owner_id
+        <include refid="filters"/>
+        ORDER BY r.started_at DESC, r.id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="count" resultType="long">
+        SELECT COUNT(*)
+        FROM rag_runs r
+        <include refid="filters"/>
+    </select>
+
+    <select id="findView" resultType="com.hnu.backend.observability.mapper.RagRunViewRow">
+        SELECT <include refid="viewColumns"/>
+        FROM rag_runs r
+        JOIN users u ON u.id = r.owner_id
+        WHERE r.id = #{id}
+        <if test="ownerId != null">AND r.owner_id = #{ownerId}</if>
+    </select>
+
+    <select id="summary" resultType="com.hnu.backend.observability.mapper.RagRunSummaryRow">
+        SELECT COUNT(*) AS request_count,
+               COUNT(*) FILTER (WHERE r.status &lt;&gt; 'RUNNING') AS terminal_count,
+               COUNT(*) FILTER (WHERE r.status = 'COMPLETED') AS success_count,
+               COUNT(*) FILTER (WHERE r.status &lt;&gt; 'RUNNING' AND r.degraded) AS degraded_count,
+               ROUND(percentile_cont(0.50) WITHIN GROUP (ORDER BY r.total_ms)
+                   FILTER (WHERE r.total_ms IS NOT NULL))::bigint AS total_p50_ms,
+               ROUND(percentile_cont(0.95) WITHIN GROUP (ORDER BY r.total_ms)
+                   FILTER (WHERE r.total_ms IS NOT NULL))::bigint AS total_p95_ms,
+               ROUND(percentile_cont(0.50) WITHIN GROUP (ORDER BY r.end_to_end_ttft_ms)
+                   FILTER (WHERE r.end_to_end_ttft_ms IS NOT NULL))::bigint AS end_to_end_ttft_p50_ms,
+               ROUND(percentile_cont(0.95) WITHIN GROUP (ORDER BY r.end_to_end_ttft_ms)
+                   FILTER (WHERE r.end_to_end_ttft_ms IS NOT NULL))::bigint AS end_to_end_ttft_p95_ms,
+               ROUND(percentile_cont(0.50) WITHIN GROUP (ORDER BY r.model_ttft_ms)
+                   FILTER (WHERE r.model_ttft_ms IS NOT NULL))::bigint AS model_ttft_p50_ms,
+               ROUND(percentile_cont(0.95) WITHIN GROUP (ORDER BY r.model_ttft_ms)
+                   FILTER (WHERE r.model_ttft_ms IS NOT NULL))::bigint AS model_ttft_p95_ms
+        FROM rag_runs r
+        <include refid="filters"/>
+    </select>
+</mapper>
