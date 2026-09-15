@@ -22,10 +22,11 @@ const visible = computed({
 const form = reactive({ name: '', embeddingModelId: '' })
 
 watch(
-  () => props.modelValue,
-  (open) => {
+  () => [props.modelValue, props.models] as const,
+  ([open], previous) => {
     if (!open) return
-    form.name = ''
+    if (!previous?.[0]) form.name = ''
+    if (props.models.some((model) => model.id === form.embeddingModelId) && previous?.[0]) return
     form.embeddingModelId =
       props.models.find((model) => model.defaultModel)?.id ?? props.models[0]?.id ?? ''
   },
@@ -33,7 +34,8 @@ watch(
 
 function submit() {
   const name = form.name.trim()
-  if (!name || !form.embeddingModelId) return
+  if (props.loading || !name || !props.models.some((model) => model.id === form.embeddingModelId))
+    return
   emit('submit', { name, embeddingModelId: form.embeddingModelId })
 }
 </script>
@@ -62,7 +64,7 @@ function submit() {
           placeholder="选择用于检索的向量模型"
           style="width: 100%"
         >
-          <el-option v-for="model in models" :key="model.id" :value="model.id">
+          <el-option v-for="model in models" :key="model.id" :value="model.id" :label="model.model">
             <div class="model-option">
               <span>{{ model.model }}</span>
               <small>{{ model.provider }} · {{ model.dimensions }} 维</small>
@@ -98,13 +100,13 @@ function submit() {
 .model-option small {
   color: var(--color-muted);
   font-family: var(--font-data);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .field-help {
   margin: 7px 0 0;
   color: var(--color-muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 </style>

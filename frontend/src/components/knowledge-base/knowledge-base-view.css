@@ -12,7 +12,7 @@
   margin-bottom: 18px;
   overflow: hidden;
   color: #9aa4b5;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .scope-rail button {
@@ -72,11 +72,11 @@
   margin: 0;
   overflow: hidden;
   color: var(--color-ink);
-  font-size: 25px;
+  font-size: 22px;
   font-weight: 720;
   letter-spacing: -0.65px;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .back-button {
@@ -93,7 +93,7 @@
   margin-top: 5px;
   color: var(--color-muted);
   font-family: var(--font-data);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .primary-actions {
@@ -148,12 +148,12 @@
   --el-table-row-hover-bg-color: #f7f9fd;
   --el-table-text-color: #5e6a80;
   --el-table-header-text-color: #8a95a8;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 :deep(.data-table .el-table__header th) {
   height: 43px;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.4px;
 }
@@ -187,7 +187,7 @@
   font-weight: 700;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 600px) {
   .knowledge-page {
     padding: 22px 14px 32px;
   }
@@ -204,13 +204,8 @@
     font-size: 21px;
   }
 
-  .primary-actions :deep(.el-button span) {
-    display: none;
-  }
-
   .primary-actions :deep(.el-button) {
-    width: 36px;
-    padding: 0;
+    padding-inline: 12px;
   }
 
   .table-toolbar {

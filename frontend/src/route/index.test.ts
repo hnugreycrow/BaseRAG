@@ -59,4 +59,24 @@ describe('authentication route guard', () => {
     expect(router.currentRoute.value.name).toBe('observability-detail')
     expect(router.currentRoute.value.meta.activeMenu).toBe('/admin/observability')
   })
+
+  it('restricts user management to administrators', async () => {
+    const auth = useAuthStore(pinia)
+    const user = {
+      id: 'user-1',
+      username: 'reader',
+      displayName: '读者',
+      role: 'USER' as const,
+      enabled: true,
+      lastLoginAt: null,
+      createdAt: '',
+      updatedAt: '',
+    }
+    auth.applySession({ user, csrfToken: 'nonce' })
+    await router.push('/admin/users')
+    expect(router.currentRoute.value.name).toBe('chat')
+    auth.applySession({ user: { ...user, role: 'ADMIN' }, csrfToken: 'nonce' })
+    await router.push('/admin/users')
+    expect(router.currentRoute.value.name).toBe('users')
+  })
 })

@@ -149,13 +149,13 @@ async function changePassword() {
   height: 33px;
   display: grid;
   place-items: center;
-  color: #fff;
+  color: #4c60a6;
   font-family: var(--font-data);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
-  background: #4263eb;
-  border-radius: 9px;
+  background: #e6ebf6;
+  border-radius: 50%;
 }
 
 .copy {
@@ -181,7 +181,7 @@ async function changePassword() {
 .copy small {
   margin-top: 2px;
   color: #919bad;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .arrow {

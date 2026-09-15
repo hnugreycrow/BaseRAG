@@ -5,9 +5,7 @@ import { Cpu } from '@element-plus/icons-vue'
 <template>
   <div class="model-page">
     <header class="page-header">
-      <span>运行设置</span>
-      <h1>模型配置</h1>
-      <p>查看用于对话与向量化的模型配置。</p>
+      <h1>模型</h1>
     </header>
 
     <section class="model-panel">
@@ -16,9 +14,9 @@ import { Cpu } from '@element-plus/icons-vue'
       </div>
       <div>
         <h2>配置由后端统一管理</h2>
-        <p>模型读取与状态检查接口将在后续功能开发中接入。</p>
+        <p>模型状态查询尚未接入。</p>
       </div>
-      <el-tag type="info" effect="plain">等待接入</el-tag>
+      <el-tag type="info" effect="plain">只读 · 未接入</el-tag>
     </section>
   </div>
 </template>

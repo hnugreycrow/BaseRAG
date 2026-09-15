@@ -8,8 +8,15 @@
   --color-surface: #ffffff;
   --color-canvas: #f4f7fb;
   --color-line: #e4e9f1;
-  --font-body: Inter, 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
-  --font-data: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
+  --font-body: system-ui, sans-serif;
+  --font-data: var(--font-body);
+  --el-font-family: var(--font-body);
+  --el-color-primary: #4263eb;
+  --el-color-primary-light-9: #edf1ff;
+  --el-color-danger: #d96c5f;
+  --el-border-radius-base: 8px;
+  --el-border-color: #e0e6ef;
+  font-variant-numeric: tabular-nums;
   color: var(--color-text);
   background: var(--color-canvas);
   font-family: var(--font-body);
@@ -70,6 +77,81 @@ button {
 ::selection {
   color: #ffffff;
   background: var(--color-primary);
+}
+
+.el-button {
+  min-height: 38px;
+  font-weight: 500;
+}
+.el-input__wrapper,
+.el-select__wrapper {
+  min-height: 38px;
+}
+.el-dialog,
+.el-message-box {
+  max-width: calc(100vw - 28px);
+  border-radius: 12px;
+}
+.el-dialog {
+  padding: 24px;
+}
+.el-message-box {
+  width: min(420px, 100%);
+  max-width: calc(100vw - 32px);
+  padding: 24px;
+}
+.el-dialog__title,
+.el-drawer__title {
+  font-size: 18px;
+  font-weight: 600;
+}
+.navigation-drawer .el-drawer__body {
+  padding: 0;
+}
+.desktop-resource-table {
+  display: block;
+}
+.mobile-resource-list {
+  display: none;
+}
+.resource-mobile-card {
+  padding: 18px;
+  border-top: 1px solid var(--color-line);
+}
+.resource-mobile-card h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.resource-mobile-card h3 button {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+}
+.resource-mobile-card p {
+  margin: 8px 0;
+  color: var(--color-muted);
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.resource-mobile-card .card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 12px;
+}
+.resource-mobile-card .el-button {
+  margin: 0;
+}
+@media (max-width: 600px) {
+  .desktop-resource-table {
+    display: none;
+  }
+  .mobile-resource-list {
+    display: block;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

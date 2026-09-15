@@ -46,3 +46,22 @@ export function listAdminUsers(page = 1, pageSize = 50, query = '') {
     params: { page, pageSize, ...(query.trim() ? { query: query.trim() } : {}) },
   })
 }
+
+export interface CreateUserInput {
+  username: string
+  displayName: string
+  password: string
+  role: UserRole
+}
+
+export function createAdminUser(data: CreateUserInput) {
+  return request<AuthUser>({ url: '/admin/users', method: 'post', data })
+}
+
+export function setAdminUserEnabled(id: string, enabled: boolean) {
+  return request<AuthUser>({ url: `/admin/users/${id}/status`, method: 'patch', data: { enabled } })
+}
+
+export function resetAdminUserPassword(id: string, password: string) {
+  return request<void>({ url: `/admin/users/${id}/password`, method: 'put', data: { password } })
+}

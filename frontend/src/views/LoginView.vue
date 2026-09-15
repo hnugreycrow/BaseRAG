@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ElMessage } from 'element-plus'
+import { Collection } from '@element-plus/icons-vue'
 import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -13,6 +14,7 @@ const loading = ref(false)
 const form = reactive({ username: '', password: '' })
 
 async function submit() {
+  if (loading.value) return
   if (!form.username.trim() || !form.password) {
     ElMessage.warning('请输入用户名和密码')
     return
@@ -37,17 +39,20 @@ async function submit() {
 <template>
   <main class="login-page">
     <section class="login-card" aria-labelledby="login-title">
-      <div class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
-      <p class="eyebrow">BASERAG · KNOWLEDGE STUDIO</p>
-      <h1 id="login-title">欢迎回来</h1>
-      <p class="subtitle">登录后继续访问你的私有知识库与会话。</p>
+      <div class="login-brand">
+        <span class="brand-mark" aria-hidden="true"
+          ><el-icon><Collection /></el-icon
+        ></span>
+        <strong>BaseRAG</strong>
+      </div>
+      <h1 id="login-title">登录</h1>
       <el-form label-position="top" @submit.prevent="submit">
         <el-form-item label="用户名">
           <el-input
             v-model="form.username"
             autocomplete="username"
             autofocus
-            placeholder="name@example"
+            placeholder="请输入用户名"
             size="large"
           />
         </el-form-item>
@@ -59,10 +64,15 @@ async function submit() {
             show-password
             size="large"
             type="password"
-            @keyup.enter="submit"
           />
         </el-form-item>
-        <el-button class="submit" type="primary" size="large" :loading="loading" @click="submit">
+        <el-button
+          class="submit"
+          type="primary"
+          native-type="submit"
+          size="large"
+          :loading="loading"
+        >
           登录
         </el-button>
       </el-form>
@@ -75,58 +85,48 @@ async function submit() {
   min-height: 100vh;
   min-height: 100dvh;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   place-items: center;
   padding: 24px;
-  background:
-    radial-gradient(circle at 20% 10%, rgb(66 99 235 / 14%), transparent 32rem),
-    linear-gradient(145deg, #f7f9fd, #eef2f8);
+  background: var(--color-canvas);
 }
 
 .login-card {
-  width: min(100%, 420px);
-  padding: 42px;
+  width: 100%;
+  max-width: 400px;
+  padding: 32px;
   background: rgb(255 255 255 / 94%);
   border: 1px solid #e0e6ef;
-  border-radius: 18px;
-  box-shadow: 0 24px 70px rgb(34 49 80 / 14%);
+  border-radius: 12px;
+  box-shadow: 0 8px 36px rgb(23 35 60 / 3%);
 }
 
 .brand-mark {
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   display: grid;
-  grid-template-columns: repeat(2, 6px);
   place-content: center;
-  gap: 5px;
-  background: #4263eb;
-  border-radius: 14px 14px 5px 14px;
+  background: var(--color-primary);
+  color: white;
+  font-size: 22px;
+  border-radius: 10px;
 }
 
-.brand-mark i {
-  width: 6px;
-  height: 6px;
-  background: #fff;
-  border-radius: 50%;
-}
-
-.eyebrow {
-  margin: 24px 0 8px;
-  color: #7e8aa0;
-  font-family: var(--font-data);
-  font-size: 10px;
-  letter-spacing: 1.3px;
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+  color: var(--color-ink);
+  font-size: 18px;
+  font-weight: 600;
 }
 
 h1 {
   margin: 0;
   color: #1d2940;
-  font-size: 30px;
-}
-
-.subtitle {
-  margin: 9px 0 28px;
-  color: #798499;
-  font-size: 14px;
+  font-size: 22px;
+  margin-bottom: 24px;
 }
 
 .submit {

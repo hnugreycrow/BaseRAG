@@ -1,229 +1,120 @@
 <script setup lang="ts">
 import { Expand, Fold, Menu } from '@element-plus/icons-vue'
 import { storeToRefs } from 'pinia'
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import { useRoute } from 'vue-router'
-
 import { useLayoutStore } from '../store'
-import AccountMenu from '../components/auth/AccountMenu.vue'
 import AppSidebar from './AppSidebar.vue'
-
 const route = useRoute()
-const layoutStore = useLayoutStore()
-const { mobileMenuOpen, sidebarCollapsed } = storeToRefs(layoutStore)
-
-const pageTitle = computed(() => String(route.meta.title ?? '工作台'))
-const pageSection = computed(() => String(route.meta.section ?? '概览'))
-
-function handleMenuButton() {
-  if (window.matchMedia('(max-width: 760px)').matches) {
-    layoutStore.openMobileMenu()
-    return
-  }
-
-  layoutStore.toggleSidebar()
+const layout = useLayoutStore()
+const { mobileMenuOpen, sidebarCollapsed } = storeToRefs(layout)
+const tablet = ref(window.innerWidth <= 1000)
+function resize() {
+  tablet.value = window.innerWidth <= 1000
 }
+window.addEventListener('resize', resize)
+onBeforeUnmount(() => window.removeEventListener('resize', resize))
+const collapsed = computed(() => tablet.value || sidebarCollapsed.value)
 </script>
-
 <template>
   <div class="admin-layout">
-    <div class="desktop-sidebar" :class="{ 'is-collapsed': sidebarCollapsed }">
-      <AppSidebar :collapsed="sidebarCollapsed" />
+    <div class="desktop-sidebar" :class="{ 'is-collapsed': collapsed }">
+      <AppSidebar :collapsed="collapsed" />
     </div>
-
     <el-drawer
       v-model="mobileMenuOpen"
       direction="ltr"
-      size="280px"
-      :show-close="false"
+      size="264px"
       :with-header="false"
-      class="mobile-drawer"
+      class="navigation-drawer"
+      aria-label="导航"
     >
-      <AppSidebar @navigate="layoutStore.closeMobileMenu" />
+      <AppSidebar @navigate="layout.closeMobileMenu" />
     </el-drawer>
-
     <div class="workspace">
       <header class="topbar">
-        <div class="topbar-leading">
-          <el-button
-            class="menu-button"
-            text
-            :icon="sidebarCollapsed ? Expand : Fold"
-            aria-label="切换侧边栏"
-            @click="handleMenuButton"
-          />
-          <el-button
-            class="mobile-menu-button"
-            text
-            :icon="Menu"
-            aria-label="打开菜单"
-            @click="layoutStore.openMobileMenu"
-          />
-          <div class="breadcrumb">
-            <span v-if="pageSection">{{ pageSection }}</span>
-            <i v-if="pageSection">/</i>
-            <strong>{{ pageTitle }}</strong>
-          </div>
-        </div>
-
-        <div class="topbar-actions">
-          <AccountMenu />
-        </div>
+        <el-button
+          class="desktop-toggle"
+          text
+          :icon="sidebarCollapsed ? Expand : Fold"
+          aria-label="切换侧边栏"
+          @click="layout.toggleSidebar"
+        />
+        <el-button
+          class="mobile-toggle"
+          text
+          :icon="Menu"
+          aria-label="打开导航"
+          @click="layout.openMobileMenu"
+        />
+        <span>{{ String(route.meta.title ?? '工作台') }}</span>
       </header>
-
-      <main class="main-content">
-        <RouterView v-slot="{ Component }">
-          <Transition name="page" mode="out-in">
-            <component :is="Component" />
-          </Transition>
-        </RouterView>
-      </main>
+      <main class="main-content"><RouterView /></main>
     </div>
   </div>
 </template>
-
 <style scoped>
 .admin-layout {
-  min-height: 100vh;
   min-height: 100dvh;
   display: flex;
   background: var(--color-canvas);
 }
-
 .desktop-sidebar {
   position: sticky;
   top: 0;
-  z-index: 20;
-  width: 248px;
-  height: 100vh;
+  width: 224px;
   height: 100dvh;
-  flex: 0 0 248px;
-  transition:
-    width 180ms ease,
-    flex-basis 180ms ease;
+  flex: 0 0 224px;
 }
-
 .desktop-sidebar.is-collapsed {
-  width: 80px;
-  flex-basis: 80px;
+  width: 72px;
+  flex-basis: 72px;
 }
-
 .workspace {
   min-width: 0;
   flex: 1;
 }
-
 .topbar {
-  position: sticky;
-  top: 0;
-  z-index: 15;
-  height: 68px;
+  height: 64px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 0 30px;
-  background: rgb(255 255 255 / 90%);
+  gap: 16px;
+  padding: 0 32px;
+  background: white;
   border-bottom: 1px solid var(--color-line);
-  backdrop-filter: blur(14px);
+  font-size: 14px;
+  color: #637086;
 }
-
-.topbar-leading,
-.topbar-actions {
-  display: flex;
-  align-items: center;
+.topbar .el-button {
+  margin: 0;
+  padding: 8px;
+  color: #738096;
 }
-
-.topbar-leading {
-  min-width: 0;
-  gap: 18px;
+.main-content {
+  min-height: calc(100dvh - 64px);
 }
-
-.menu-button,
-.mobile-menu-button {
-  width: 34px;
-  height: 34px;
-  color: #66738a;
-  border: 1px solid #e3e8f0;
-  border-radius: 8px;
-}
-
-.mobile-menu-button {
+.mobile-toggle {
   display: none;
 }
-
-.breadcrumb {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  color: #96a0b2;
-  font-size: 13px;
-  white-space: nowrap;
-}
-
-.breadcrumb i {
-  color: #cbd1db;
-  font-style: normal;
-}
-
-.breadcrumb strong {
-  overflow: hidden;
-  color: #31405a;
-  font-weight: 600;
-  text-overflow: ellipsis;
-}
-
-.topbar-actions {
-  gap: 10px;
-}
-
-.main-content {
-  min-height: calc(100vh - 68px);
-  min-height: calc(100dvh - 68px);
-}
-
-.page-enter-active,
-.page-leave-active {
-  transition:
-    opacity 120ms ease,
-    transform 120ms ease;
-}
-
-.page-enter-from,
-.page-leave-to {
-  opacity: 0;
-  transform: translateY(4px);
-}
-
-:global(.mobile-drawer .el-drawer__body) {
-  padding: 0;
-}
-
-@media (max-width: 760px) {
-  .desktop-sidebar,
-  .menu-button {
+@media (max-width: 1000px) {
+  .desktop-toggle {
     display: none;
   }
-
-  .mobile-menu-button {
+}
+@media (max-width: 600px) {
+  .desktop-sidebar {
+    display: none;
+  }
+  .mobile-toggle {
     display: inline-flex;
   }
-
   .topbar {
-    height: 60px;
-    padding: 0 16px;
+    height: 56px;
+    padding-inline: 16px;
+    gap: 8px;
   }
-
-  .topbar-leading {
-    gap: 12px;
-  }
-
-  .breadcrumb > span,
-  .breadcrumb > i,
   .main-content {
-    min-height: calc(100vh - 60px);
-    min-height: calc(100dvh - 60px);
+    min-height: calc(100dvh - 56px);
   }
 }
 </style>

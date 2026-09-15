@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Delete, EditPen, FolderOpened } from '@element-plus/icons-vue'
+import { FolderOpened, MoreFilled } from '@element-plus/icons-vue'
 
 import type { KnowledgeBase } from '../../api'
 
@@ -26,53 +26,85 @@ function formatDate(value: string) {
 </script>
 
 <template>
-  <el-table
-    :data="rows"
-    row-key="id"
-    class="data-table"
-    :row-class-name="() => 'clickable-row'"
-    @row-click="emit('open', $event)"
-  >
-    <el-table-column label="知识库" min-width="280">
-      <template #default="{ row }">
-        <div class="name-cell">
-          <span class="resource-icon"
-            ><el-icon><FolderOpened /></el-icon
-          ></span>
-          <div>
-            <strong>{{ row.name }}</strong>
-            <small>{{ row.id.slice(0, 8) }}</small>
+  <div class="desktop-resource-table">
+    <el-table
+      :data="rows"
+      row-key="id"
+      class="data-table"
+      :row-class-name="() => 'clickable-row'"
+      @row-click="emit('open', $event)"
+    >
+      <el-table-column label="知识库" min-width="180">
+        <template #default="{ row }">
+          <div class="name-cell">
+            <span class="resource-icon"
+              ><el-icon><FolderOpened /></el-icon
+            ></span>
+            <div>
+              <strong>{{ row.name }}</strong>
+            </div>
           </div>
-        </div>
+        </template>
+      </el-table-column>
+      <el-table-column label="向量模型" min-width="180">
+        <template #default="{ row }">
+          <span class="model-name"
+            >{{ row.embeddingModel }} · {{ row.embeddingDimensions }} 维</span
+          >
+        </template>
+      </el-table-column>
+      <el-table-column label="文档" width="110">
+        <template #default="{ row }">{{ row.documentCount }} 份</template>
+      </el-table-column>
+      <el-table-column label="创建时间" width="150">
+        <template #default="{ row }">{{ formatDate(row.createdAt) }}</template>
+      </el-table-column>
+      <el-table-column label="操作" width="110" fixed="right" align="center">
+        <template #default="{ row }">
+          <div class="row-actions" @click.stop>
+            <el-button class="open-button" text @click="emit('open', row)">打开</el-button>
+            <el-dropdown
+              trigger="click"
+              @command="
+                (command: string) =>
+                  command === 'rename' ? emit('rename', row) : emit('remove', row)
+              "
+            >
+              <el-button text :icon="MoreFilled" :aria-label="'管理 ' + row.name" />
+              <template #dropdown
+                ><el-dropdown-menu
+                  ><el-dropdown-item command="rename">重命名</el-dropdown-item
+                  ><el-dropdown-item command="remove">删除</el-dropdown-item></el-dropdown-menu
+                ></template
+              >
+            </el-dropdown>
+          </div>
+        </template>
+      </el-table-column>
+      <template #empty>
+        <el-empty :description="loading ? '正在加载知识库' : '还没有知识库'" :image-size="72" />
       </template>
-    </el-table-column>
-    <el-table-column label="向量模型" min-width="230">
-      <template #default="{ row }">
-        <span class="model-name">{{ row.embeddingModel }}</span>
-      </template>
-    </el-table-column>
-    <el-table-column prop="embeddingDimensions" label="维度" width="110" />
-    <el-table-column label="文档" width="110">
-      <template #default="{ row }">{{ row.documentCount }} 份</template>
-    </el-table-column>
-    <el-table-column label="创建时间" width="150">
-      <template #default="{ row }">{{ formatDate(row.createdAt) }}</template>
-    </el-table-column>
-    <el-table-column label="操作" width="244" fixed="right" align="center">
-      <template #default="{ row }">
-        <div class="row-actions" @click.stop>
-          <el-button class="open-button" text @click="emit('open', row)">打开</el-button>
-          <el-button text :icon="EditPen" @click="emit('rename', row)">重命名</el-button>
-          <el-button text type="danger" :icon="Delete" @click="emit('remove', row)">
-            删除
-          </el-button>
-        </div>
-      </template>
-    </el-table-column>
-    <template #empty>
-      <el-empty :description="loading ? '正在加载知识库' : '还没有知识库'" :image-size="72" />
-    </template>
-  </el-table>
+    </el-table>
+  </div>
+  <div class="mobile-resource-list">
+    <article v-for="row in rows" :key="row.id" class="resource-mobile-card">
+      <h3>
+        <button @click="emit('open', row)">{{ row.name }}</button>
+      </h3>
+      <p>{{ row.embeddingModel }} · {{ row.embeddingDimensions }} 维</p>
+      <p>{{ row.documentCount }} 份文档 · {{ formatDate(row.createdAt) }}</p>
+      <div class="card-actions">
+        <el-button text @click="emit('open', row)">打开</el-button
+        ><el-button text @click="emit('rename', row)">重命名</el-button
+        ><el-button text type="danger" @click="emit('remove', row)">删除</el-button>
+      </div>
+    </article>
+    <el-empty
+      v-if="!rows.length"
+      :description="loading ? '正在加载知识库' : '还没有知识库'"
+      :image-size="64"
+    />
+  </div>
 </template>
 
 <style scoped>

@@ -2,18 +2,12 @@
 import {
   ArrowLeft,
   ArrowRight,
-  ChatDotRound,
-  Close,
   CopyDocument,
-  Delete,
   Document,
-  EditPen,
   Menu as MenuIcon,
   Plus,
   Position,
   RefreshRight,
-  Search,
-  Setting,
   VideoPause,
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -27,13 +21,14 @@ import {
   getErrorMessage,
   listConversations,
   renameConversation,
-  type AnswerSource,
   type AssistantMessage,
   type ConversationDetail,
   type ConversationSummary,
   type ConversationTurn,
 } from '../api'
-import AccountMenu from '../components/auth/AccountMenu.vue'
+import AppSidebar from '../layout/AppSidebar.vue'
+import ConversationHistory from '../components/conversation/ConversationHistory.vue'
+import SourcePanel from '../components/conversation/SourcePanel.vue'
 import { useConversationGenerationStore } from '../store'
 
 const route = useRoute()
@@ -47,6 +42,12 @@ const draft = ref('')
 const listLoading = ref(false)
 const detailLoading = ref(false)
 const mobileSidebarOpen = ref(false)
+const compactSidebar = ref(window.innerWidth <= 1000)
+function updateSidebarWidth() {
+  compactSidebar.value = window.innerWidth <= 1000
+}
+window.addEventListener('resize', updateSidebarWidth)
+onBeforeUnmount(() => window.removeEventListener('resize', updateSidebarWidth))
 const sourcePanelOpen = ref(false)
 const sourceMessage = ref<AssistantMessage | null>(null)
 const highlightedCitation = ref<string | null>(null)
@@ -239,16 +240,6 @@ function selectVersion(turn: ConversationTurn, direction: number) {
   viewedVersions.value[turn.user.turnIndex] = turn.assistantVersions[next]!.id
 }
 
-function taskStatusLabel(conversationId: string) {
-  const phase = generationStore.taskFor(conversationId)?.phase
-  if (phase === 'starting' || phase === 'streaming') return '生成中'
-  if (phase === 'stopping') return '停止中'
-  if (phase === 'completed') return '已完成'
-  if (phase === 'failed') return '生成失败'
-  if (phase === 'cancelled') return '已停止'
-  return ''
-}
-
 function inlineParts(content: string) {
   const parts: Array<{
     text: string
@@ -360,12 +351,6 @@ function openSources(message: AssistantMessage, citationId?: string) {
       .getElementById(`source-${message.id}-${citationId}`)
       ?.scrollIntoView({ block: 'center' })
   })
-}
-
-function sourceLineLabel(source: AnswerSource) {
-  return source.lineStart === source.lineEnd
-    ? `第 ${source.lineStart} 行`
-    : `第 ${source.lineStart}–${source.lineEnd} 行`
 }
 
 async function copyAnswer(content: string) {
@@ -527,115 +512,53 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="chat-page" :class="{ 'has-sources': sourcePanelOpen }">
-    <div
-      v-if="mobileSidebarOpen"
-      class="sidebar-scrim"
-      aria-hidden="true"
-      @click="mobileSidebarOpen = false"
-    ></div>
-
-    <aside class="chat-sidebar" :class="{ 'is-open': mobileSidebarOpen }">
-      <div class="sidebar-head">
-        <RouterLink class="brand" to="/chat" aria-label="BaseRAG 问答首页">
-          <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
-          <span><strong>BaseRAG</strong><small>知识问答</small></span>
-        </RouterLink>
-        <button
-          class="mobile-close"
-          type="button"
-          aria-label="关闭会话列表"
-          @click="mobileSidebarOpen = false"
-        >
-          <el-icon><Close /></el-icon>
-        </button>
-      </div>
-
-      <button class="new-chat-button" type="button" @click="startNewConversation">
-        <el-icon><Plus /></el-icon>
-        新对话
-      </button>
-
-      <label class="search-box">
-        <el-icon><Search /></el-icon>
-        <input v-model="searchQuery" type="search" placeholder="搜索会话" aria-label="搜索会话" />
-      </label>
-
-      <div class="conversation-list" :class="{ 'is-loading': listLoading }">
-        <template v-if="groupedConversations.length">
-          <section
-            v-for="group in groupedConversations"
-            :key="group.label"
-            class="conversation-group"
-          >
-            <h2>{{ group.label }}</h2>
-            <div
-              v-for="item in group.items"
-              :key="item.id"
-              class="conversation-item"
-              :class="{
-                'is-active': item.id === currentConversationId,
-                'has-active-task': generationStore.isActive(item.id),
-                'has-task-status': generationStore.taskFor(item.id),
-              }"
-            >
-              <button type="button" class="conversation-link" @click="openConversation(item.id)">
-                <el-icon><ChatDotRound /></el-icon>
-                <span class="conversation-name">{{ item.title }}</span>
-                <span
-                  v-if="generationStore.taskFor(item.id)"
-                  class="conversation-status"
-                  :class="generationStore.taskFor(item.id)?.phase"
-                  aria-live="polite"
-                >
-                  <i aria-hidden="true"></i>
-                  {{ taskStatusLabel(item.id) }}
-                </span>
-              </button>
-              <div v-if="!generationStore.isActive(item.id)" class="conversation-actions">
-                <button
-                  type="button"
-                  title="重命名"
-                  aria-label="重命名会话"
-                  @click="editConversation(item)"
-                >
-                  <el-icon><EditPen /></el-icon>
-                </button>
-                <button
-                  type="button"
-                  title="删除"
-                  aria-label="删除会话"
-                  @click="removeConversation(item)"
-                >
-                  <el-icon><Delete /></el-icon>
-                </button>
-              </div>
-            </div>
-          </section>
-        </template>
-        <p v-else-if="!listLoading" class="conversation-empty">
-          {{ searchQuery ? '没有匹配的会话' : '还没有历史会话' }}
-        </p>
-      </div>
-
-      <div class="sidebar-footer">
-        <RouterLink class="admin-entry" to="/admin">
-          <el-icon><Setting /></el-icon>
-          <strong>管理工作台</strong>
-          <el-icon class="admin-arrow"><ArrowRight /></el-icon>
-        </RouterLink>
-        <AccountMenu class="chat-account" />
-      </div>
-    </aside>
+    <el-drawer
+      v-model="mobileSidebarOpen"
+      direction="ltr"
+      size="280px"
+      :with-header="false"
+      class="navigation-drawer"
+      aria-label="导航"
+    >
+      <AppSidebar @navigate="mobileSidebarOpen = false">
+        <ConversationHistory
+          v-model:query="searchQuery"
+          :groups="groupedConversations"
+          :current-id="currentConversationId"
+          :loading="listLoading"
+          @new="startNewConversation"
+          @open="openConversation"
+          @rename="editConversation"
+          @remove="removeConversation"
+        />
+      </AppSidebar>
+    </el-drawer>
+    <AppSidebar class="chat-sidebar" :collapsed="compactSidebar">
+      <ConversationHistory
+        v-model:query="searchQuery"
+        :groups="groupedConversations"
+        :current-id="currentConversationId"
+        :loading="listLoading"
+        @new="startNewConversation"
+        @open="openConversation"
+        @rename="editConversation"
+        @remove="removeConversation"
+      />
+    </AppSidebar>
 
     <main class="chat-workspace">
-      <button
-        class="sidebar-trigger"
-        type="button"
-        aria-label="打开会话列表"
-        @click="mobileSidebarOpen = true"
-      >
-        <el-icon><MenuIcon /></el-icon>
-      </button>
+      <header class="chat-topbar">
+        <button
+          class="history-toggle"
+          type="button"
+          aria-label="打开导航和会话"
+          @click="mobileSidebarOpen = true"
+        >
+          <el-icon><MenuIcon /></el-icon>
+        </button>
+        <span>知识问答</span>
+        <el-button :icon="Plus" @click="startNewConversation">新对话</el-button>
+      </header>
       <div ref="messageViewport" class="message-viewport">
         <div v-if="detailLoading" class="loading-state" aria-label="正在加载会话">
           <span></span><span></span><span></span>
@@ -654,7 +577,7 @@ onBeforeUnmount(() => {
             </div>
 
             <div v-if="currentAssistant(turn)" class="assistant-row">
-              <div class="assistant-avatar" aria-hidden="true"><span>J</span></div>
+              <div class="assistant-avatar" aria-hidden="true"><span>B</span></div>
               <div class="assistant-content">
                 <div
                   v-if="currentAssistant(turn)?.content"
@@ -808,7 +731,7 @@ onBeforeUnmount(() => {
                     @click="openSources(currentAssistant(turn)!)"
                   >
                     <el-icon><Document /></el-icon>
-                    {{ currentAssistant(turn)?.sources.length }} 条检索来源
+                    {{ currentAssistant(turn)?.sources.length }} 个来源
                   </button>
                   <button
                     v-if="['FAILED', 'CANCELLED'].includes(currentAssistant(turn)?.status || '')"
@@ -900,1118 +823,16 @@ onBeforeUnmount(() => {
             <el-icon><Position /></el-icon>
           </button>
         </div>
-        <p>BaseRAG 仅根据已导入资料回答，重要信息请通过来源原文核对。</p>
+        <p>Enter 发送 · Shift + Enter 换行</p>
       </footer>
     </main>
 
-    <div
-      v-if="sourcePanelOpen"
-      class="source-scrim"
-      aria-hidden="true"
-      @click="sourcePanelOpen = false"
-    ></div>
-    <aside class="source-panel" :class="{ 'is-open': sourcePanelOpen }" aria-label="检索来源">
-      <header>
-        <div>
-          <span>回答依据</span>
-          <h2>检索来源</h2>
-        </div>
-        <button type="button" aria-label="关闭来源" @click="sourcePanelOpen = false">
-          <el-icon><Close /></el-icon>
-        </button>
-      </header>
-      <div class="source-intro">
-        <span>{{ sourceMessage?.sources.length || 0 }}</span>
-        个文档片段参与了本次回答。点击引用标记可定位到对应原文。
-      </div>
-      <div class="source-list">
-        <article
-          v-for="source in sourceMessage?.sources"
-          :id="`source-${sourceMessage?.id}-${source.citationId}`"
-          :key="source.chunkId"
-          class="source-card"
-          :class="{ 'is-highlighted': highlightedCitation === source.citationId }"
-        >
-          <div class="source-card-head">
-            <span class="source-id">{{ source.citationId }}</span>
-            <span class="source-lines">{{ sourceLineLabel(source) }}</span>
-          </div>
-          <h3>{{ source.documentName }}</h3>
-          <p class="source-path">
-            {{ source.knowledgeBaseName
-            }}<template v-if="source.heading"> · {{ source.heading }}</template>
-          </p>
-          <blockquote>{{ source.content }}</blockquote>
-        </article>
-        <div v-if="!sourceMessage?.sources.length" class="no-sources">
-          <el-icon><Document /></el-icon>
-          <p>这条回答没有可展示的检索来源。</p>
-        </div>
-      </div>
-    </aside>
+    <SourcePanel
+      v-model="sourcePanelOpen"
+      :message="sourceMessage"
+      :highlighted="highlightedCitation"
+    />
   </div>
 </template>
 
-<style scoped>
-.chat-page {
-  --chat-ink: #1d2433;
-  --chat-muted: #6e7582;
-  --chat-line: #e6e7ea;
-  --chat-blue: #315ee7;
-  --chat-blue-soft: #eef2ff;
-  width: 100%;
-  height: 100vh;
-  height: 100dvh;
-  display: flex;
-  overflow: hidden;
-  color: var(--chat-ink);
-  background: #ffffff;
-}
-
-.chat-sidebar {
-  position: relative;
-  z-index: 30;
-  width: 276px;
-  display: flex;
-  flex: 0 0 276px;
-  flex-direction: column;
-  padding: 16px 12px 14px;
-  background: #f7f7f8;
-  border-right: 1px solid #ececef;
-}
-
-.sidebar-head,
-.brand,
-.conversation-link,
-.sidebar-footer,
-.admin-entry,
-.desktop-admin-entry,
-.answer-toolbar,
-.source-card-head,
-.source-panel header {
-  display: flex;
-  align-items: center;
-}
-
-.sidebar-head {
-  min-height: 40px;
-  justify-content: space-between;
-  padding: 0 7px;
-}
-
-.brand {
-  gap: 10px;
-}
-
-.brand-mark,
-.welcome-mark {
-  display: grid;
-  grid-template-columns: repeat(2, 5px);
-  place-content: center;
-  gap: 3px;
-  background: var(--chat-blue);
-  border-radius: 10px 10px 3px 10px;
-}
-
-.brand-mark {
-  width: 34px;
-  height: 34px;
-}
-.brand-mark i,
-.welcome-mark i {
-  width: 5px;
-  height: 5px;
-  background: #ffffff;
-  border-radius: 50%;
-}
-.brand > span:last-child {
-  display: flex;
-  flex-direction: column;
-}
-.brand strong {
-  font-size: 15px;
-  letter-spacing: -0.2px;
-}
-.brand small {
-  margin-top: 1px;
-  color: #8a8f99;
-  font-size: 10px;
-}
-.mobile-close {
-  display: none;
-}
-
-.new-chat-button {
-  height: 42px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  margin: 19px 2px 12px;
-  color: #ffffff;
-  font-size: 13px;
-  font-weight: 650;
-  background: var(--chat-blue);
-  border-radius: 10px;
-  box-shadow: 0 6px 16px rgb(49 94 231 / 16%);
-  transition:
-    background 150ms ease,
-    transform 150ms ease;
-}
-
-.new-chat-button:hover {
-  background: #244fd4;
-  transform: translateY(-1px);
-}
-
-.search-box {
-  height: 38px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 2px 10px;
-  padding: 0 11px;
-  color: #9297a1;
-  background: #ffffff;
-  border: 1px solid #e6e7ea;
-  border-radius: 9px;
-}
-
-.search-box:focus-within {
-  border-color: #aab9f3;
-  box-shadow: 0 0 0 3px rgb(49 94 231 / 8%);
-}
-.search-box input {
-  min-width: 0;
-  flex: 1;
-  color: var(--chat-ink);
-  font-size: 12px;
-  background: transparent;
-  border: 0;
-  outline: 0;
-}
-
-.conversation-list {
-  min-height: 0;
-  flex: 1;
-  overflow-x: hidden;
-  overflow-y: auto;
-  padding: 4px 2px 12px;
-  transition: opacity 120ms ease;
-  scrollbar-width: thin;
-}
-
-.conversation-list.is-loading {
-  opacity: 0.55;
-}
-.conversation-group h2 {
-  margin: 16px 10px 6px;
-  color: #9297a1;
-  font-size: 10px;
-  font-weight: 600;
-}
-.conversation-item {
-  position: relative;
-  min-width: 0;
-  border-radius: 8px;
-}
-.conversation-item:hover,
-.conversation-item.is-active {
-  background: #eaeaec;
-}
-
-.conversation-link {
-  width: 100%;
-  min-width: 0;
-  height: 39px;
-  gap: 9px;
-  padding: 0 10px;
-  color: #555b65;
-  font-size: 12px;
-  text-align: left;
-}
-
-.conversation-link .el-icon {
-  flex: 0 0 auto;
-  color: #868c97;
-}
-.conversation-name {
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-.conversation-item.is-active .conversation-link {
-  color: #252b36;
-  font-weight: 600;
-}
-
-.conversation-actions {
-  position: absolute;
-  top: 0;
-  right: 5px;
-  height: 39px;
-  display: none;
-  align-items: center;
-  gap: 1px;
-  padding-left: 12px;
-  background: linear-gradient(90deg, transparent, #eaeaec 18%);
-}
-
-.conversation-item:hover .conversation-actions,
-.conversation-item:focus-within .conversation-actions {
-  display: flex;
-}
-
-.conversation-item:not(.has-active-task):hover .conversation-status,
-.conversation-item:not(.has-active-task):focus-within .conversation-status {
-  visibility: hidden;
-}
-
-.conversation-status {
-  display: inline-flex;
-  align-items: center;
-  flex: 0 0 auto;
-  gap: 4px;
-  color: #8a909a;
-  font-size: 9px;
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.conversation-status i {
-  width: 6px;
-  height: 6px;
-  background: currentColor;
-  border-radius: 50%;
-}
-
-.conversation-status.starting,
-.conversation-status.streaming,
-.conversation-status.stopping {
-  color: #315ee7;
-}
-
-.conversation-status.starting i,
-.conversation-status.streaming i {
-  box-shadow: 0 0 0 0 rgb(49 94 231 / 30%);
-  animation: generation-pulse 1.4s infinite;
-}
-
-.conversation-status.completed {
-  color: #21855f;
-}
-
-.conversation-status.failed {
-  color: #c05248;
-}
-
-@keyframes generation-pulse {
-  65% {
-    box-shadow: 0 0 0 4px rgb(49 94 231 / 0%);
-  }
-
-  100% {
-    box-shadow: 0 0 0 0 rgb(49 94 231 / 0%);
-  }
-}
-.conversation-actions button {
-  width: 25px;
-  height: 25px;
-  display: grid;
-  place-items: center;
-  color: #7e848e;
-  border-radius: 6px;
-}
-.conversation-actions button:hover {
-  color: #2f3540;
-  background: #dcdddf;
-}
-.conversation-empty {
-  margin: 28px 12px;
-  color: #999ea7;
-  font-size: 12px;
-  text-align: center;
-}
-
-.sidebar-footer {
-  flex-direction: column;
-  gap: 3px;
-  padding: 8px 2px 0;
-  border-top: 1px solid #e4e4e7;
-}
-
-.admin-entry {
-  width: 100%;
-  min-height: 38px;
-  gap: 9px;
-  padding: 8px;
-  color: #59616e;
-  border-radius: 8px;
-  transition:
-    color 140ms ease,
-    background 140ms ease;
-}
-
-.admin-entry:hover {
-  color: #244fd4;
-  background: #eef1f8;
-}
-
-.admin-entry:focus-visible {
-  outline: 2px solid var(--chat-blue);
-  outline-offset: 1px;
-}
-
-.chat-account {
-  width: 100%;
-}
-.admin-entry > .el-icon:first-child {
-  color: #767e8b;
-  font-size: 16px;
-}
-.admin-entry strong {
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  font-size: 12px;
-  font-weight: 650;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-.admin-arrow {
-  color: #a1a6af;
-  font-size: 12px;
-}
-
-.chat-workspace {
-  min-width: 0;
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-}
-
-.conversation-title {
-  display: flex;
-  align-items: center;
-  flex-direction: column;
-}
-.conversation-title strong {
-  max-width: min(480px, 45vw);
-  overflow: hidden;
-  font-size: 13px;
-  font-weight: 650;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-.conversation-title span {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin-top: 3px;
-  color: #9297a1;
-  font-size: 9px;
-  letter-spacing: 0.2px;
-}
-.conversation-title i {
-  width: 5px;
-  height: 5px;
-  background: #2baa78;
-  border-radius: 50%;
-}
-.desktop-admin-entry,
-.sidebar-trigger {
-  position: absolute;
-}
-.desktop-admin-entry {
-  right: 22px;
-  gap: 6px;
-  padding: 7px 10px;
-  color: #5c6471;
-  font-size: 11px;
-  border: 1px solid #e3e5e9;
-  border-radius: 8px;
-}
-.desktop-admin-entry:hover {
-  color: var(--chat-blue);
-  border-color: #cbd4f6;
-}
-.sidebar-trigger {
-  top: 12px;
-  left: 14px;
-  z-index: 12;
-  display: none;
-  background: rgb(255 255 255 / 92%);
-  border: 1px solid #e3e5e9;
-  box-shadow: 0 4px 14px rgb(31 39 55 / 8%);
-  backdrop-filter: blur(10px);
-}
-
-.message-viewport {
-  min-height: 0;
-  flex: 1;
-  overflow-y: auto;
-  scroll-behavior: smooth;
-}
-.loading-state {
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-}
-.loading-state span,
-.thinking-state > span {
-  width: 5px;
-  height: 5px;
-  background: #8d94a1;
-  border-radius: 50%;
-  animation: thinking 1.2s infinite ease-in-out;
-}
-.loading-state span:nth-child(2),
-.thinking-state > span:nth-child(2) {
-  animation-delay: 120ms;
-}
-.loading-state span:nth-child(3),
-.thinking-state > span:nth-child(3) {
-  animation-delay: 240ms;
-}
-
-@keyframes thinking {
-  0%,
-  70%,
-  100% {
-    opacity: 0.3;
-    transform: translateY(0);
-  }
-  35% {
-    opacity: 1;
-    transform: translateY(-3px);
-  }
-}
-
-.welcome-state {
-  width: min(760px, calc(100% - 40px));
-  min-height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  margin: 0 auto;
-  padding: 56px 0 40px;
-  text-align: center;
-}
-
-.welcome-mark {
-  position: relative;
-  width: 48px;
-  height: 48px;
-  grid-template-columns: repeat(2, 6px);
-  gap: 4px;
-  margin-bottom: 20px;
-  border-radius: 14px 14px 4px 14px;
-  box-shadow: 0 12px 28px rgb(49 94 231 / 20%);
-}
-.welcome-mark i {
-  width: 6px;
-  height: 6px;
-}
-.welcome-mark::after {
-  position: absolute;
-  right: -3px;
-  bottom: -3px;
-  width: 10px;
-  height: 10px;
-  content: '';
-  background: #50cda0;
-  border: 3px solid #ffffff;
-  border-radius: 50%;
-}
-.welcome-state h1 {
-  margin: 0;
-  color: #19202d;
-  font-size: clamp(29px, 4vw, 38px);
-  font-weight: 650;
-  line-height: 1.25;
-  letter-spacing: -1.2px;
-}
-.welcome-copy {
-  max-width: 500px;
-  margin: 13px 0 0;
-  color: #777e8a;
-  font-size: 13px;
-  line-height: 1.75;
-}
-
-.message-list {
-  width: min(820px, calc(100% - 40px));
-  margin: 0 auto;
-  padding: 34px 0 28px;
-}
-.turn + .turn {
-  margin-top: 34px;
-}
-.user-row {
-  display: flex;
-  justify-content: flex-end;
-  padding-left: 80px;
-}
-.user-message {
-  max-width: 82%;
-  padding: 11px 15px;
-  color: #242a35;
-  font-size: 13px;
-  line-height: 1.7;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  background: #f1f1f2;
-  border-radius: 16px 16px 4px 16px;
-}
-.assistant-row {
-  display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
-  gap: 14px;
-  margin-top: 22px;
-}
-.assistant-avatar {
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  color: #ffffff;
-  background: var(--chat-blue);
-  border-radius: 9px 9px 3px 9px;
-}
-.assistant-avatar span {
-  font-family: var(--font-data);
-  font-size: 11px;
-  font-weight: 700;
-}
-.assistant-content {
-  min-width: 0;
-  padding-top: 3px;
-}
-.answer-text {
-  color: #303642;
-  font-size: 13.5px;
-  line-height: 1.78;
-  overflow-wrap: anywhere;
-}
-.answer-heading {
-  margin: 20px 0 7px;
-  color: #252b36;
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 1.5;
-}
-.answer-text > .answer-heading:first-child {
-  margin-top: 0;
-}
-.answer-paragraph {
-  margin: 0 0 11px;
-  white-space: pre-wrap;
-}
-.answer-paragraph:last-child {
-  margin-bottom: 0;
-}
-.answer-list {
-  margin: 5px 0 13px;
-  padding-left: 21px;
-}
-.answer-list li {
-  margin: 4px 0;
-  padding-left: 2px;
-}
-.inline-code {
-  padding: 2px 5px;
-  color: #33405a;
-  font-family: var(--font-data);
-  font-size: 0.86em;
-  background: #f2f3f5;
-  border: 1px solid #e8e9ec;
-  border-radius: 4px;
-}
-.answer-code {
-  margin: 8px 0 14px;
-  overflow-x: auto;
-  padding: 13px 14px;
-  color: #dce3f2;
-  font-family: var(--font-data);
-  font-size: 11px;
-  line-height: 1.65;
-  white-space: pre;
-  background: #202633;
-  border-radius: 9px;
-  scrollbar-width: thin;
-}
-.answer-quote {
-  margin: 8px 0 13px;
-  padding: 7px 13px;
-  color: #646c78;
-  white-space: pre-wrap;
-  background: #f7f8fa;
-  border-left: 3px solid #acb9e7;
-}
-.answer-text.is-streaming::after {
-  width: 2px;
-  height: 15px;
-  display: inline-block;
-  margin-left: 3px;
-  content: '';
-  vertical-align: -2px;
-  background: var(--chat-blue);
-  animation: cursor 900ms infinite;
-}
-@keyframes cursor {
-  50% {
-    opacity: 0;
-  }
-}
-
-.citation {
-  display: inline-flex;
-  margin: 0 2px;
-  padding: 1px 5px;
-  color: #3159ca;
-  font-family: var(--font-data);
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 18px;
-  vertical-align: 1px;
-  background: var(--chat-blue-soft);
-  border-radius: 5px;
-}
-.citation:hover {
-  background: #dfe6ff;
-}
-.thinking-state {
-  min-height: 32px;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  color: #858b96;
-  font-size: 11px;
-}
-.thinking-state > span:nth-child(3) {
-  margin-right: 5px;
-}
-.answer-error {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  margin-top: 10px;
-  padding: 10px 12px;
-  color: #8c4c42;
-  font-size: 11px;
-  line-height: 1.5;
-  background: #fff7f5;
-  border-left: 2px solid #d97868;
-}
-.answer-error strong {
-  font-size: 12px;
-}
-
-.answer-toolbar {
-  min-height: 30px;
-  display: flex;
-  gap: 3px;
-  margin-top: 12px;
-  color: #8b919b;
-}
-.answer-toolbar > button,
-.version-switcher button {
-  min-width: 28px;
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  padding: 0 7px;
-  color: #7d8490;
-  font-size: 10px;
-  border-radius: 6px;
-}
-.answer-toolbar > button:hover,
-.version-switcher button:hover {
-  color: #303744;
-  background: #f3f4f5;
-}
-.answer-toolbar .source-button {
-  color: #536aa8;
-  background: #f5f7fd;
-}
-.model-label {
-  align-self: center;
-  margin-left: 5px;
-  color: #a0a5ae;
-  font-family: var(--font-data);
-  font-size: 9px;
-}
-.version-switcher {
-  display: flex;
-  align-items: center;
-  margin-left: auto;
-}
-.version-switcher span {
-  min-width: 34px;
-  color: #8c929c;
-  font-family: var(--font-data);
-  font-size: 9px;
-  text-align: center;
-}
-
-.composer-area {
-  position: relative;
-  z-index: 8;
-  flex: 0 0 auto;
-  padding: 14px 22px 10px;
-  background: linear-gradient(180deg, rgb(255 255 255 / 0%), #ffffff 24%);
-}
-.composer-shell {
-  width: min(820px, 100%);
-  min-height: 54px;
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
-  margin: 0 auto;
-  padding: 9px 9px 9px 15px;
-  background: #ffffff;
-  border: 1px solid #d8dbe1;
-  border-radius: 15px;
-  box-shadow: 0 8px 28px rgb(31 39 55 / 9%);
-  transition:
-    border-color 150ms ease,
-    box-shadow 150ms ease;
-}
-.composer-shell:focus-within {
-  border-color: #9fafea;
-  box-shadow:
-    0 8px 30px rgb(31 39 55 / 10%),
-    0 0 0 3px rgb(49 94 231 / 7%);
-}
-.composer-shell :deep(.el-textarea) {
-  display: flex;
-  align-items: center;
-}
-.composer-shell :deep(.el-textarea__inner) {
-  min-height: 34px !important;
-  padding: 7px 0 5px;
-  color: #272d38;
-  font-size: 13px;
-  line-height: 1.55;
-  box-shadow: none;
-  scrollbar-width: thin;
-}
-.composer-shell :deep(.el-textarea__inner::placeholder) {
-  color: #9a9fa8;
-}
-.send-button {
-  width: 36px;
-  height: 36px;
-  display: grid;
-  flex: 0 0 36px;
-  place-items: center;
-  color: #ffffff;
-  font-size: 17px;
-  background: var(--chat-blue);
-  border-radius: 10px;
-  transition:
-    background 140ms ease,
-    transform 140ms ease;
-}
-.send-button:hover:not(:disabled) {
-  background: #244fd4;
-  transform: translateY(-1px);
-}
-.send-button:disabled {
-  color: #b0b4bc;
-  background: #eceef1;
-  cursor: not-allowed;
-}
-.stop-button {
-  background: #252b36;
-}
-.composer-area > p {
-  margin: 7px 0 0;
-  color: #a0a5ae;
-  font-size: 9px;
-  text-align: center;
-}
-
-.source-panel {
-  position: relative;
-  z-index: 25;
-  width: 0;
-  flex: 0 0 0;
-  overflow: hidden;
-  background: #fbfbfc;
-  border-left: 0 solid var(--chat-line);
-  transition:
-    width 200ms ease,
-    flex-basis 200ms ease,
-    border-width 200ms ease;
-}
-.source-panel.is-open {
-  width: 390px;
-  flex-basis: 390px;
-  border-left-width: 1px;
-}
-.source-panel header,
-.source-intro,
-.source-list {
-  width: 389px;
-}
-.source-panel header {
-  height: 69px;
-  justify-content: space-between;
-  padding: 0 18px 0 20px;
-  background: #ffffff;
-  border-bottom: 1px solid var(--chat-line);
-}
-.source-panel header > div {
-  display: flex;
-  flex-direction: column;
-}
-.source-panel header span {
-  color: var(--chat-blue);
-  font-family: var(--font-data);
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 1.2px;
-}
-.source-panel h2 {
-  margin: 3px 0 0;
-  font-size: 15px;
-}
-.source-panel header button {
-  width: 31px;
-  height: 31px;
-  display: grid;
-  place-items: center;
-  color: #727986;
-  border-radius: 7px;
-}
-.source-panel header button:hover {
-  background: #f1f2f4;
-}
-.source-intro {
-  padding: 15px 20px;
-  color: #737a86;
-  font-size: 10px;
-  line-height: 1.6;
-  background: #f4f6fc;
-  border-bottom: 1px solid #e6e9f3;
-}
-.source-intro span {
-  color: #355bc7;
-  font-family: var(--font-data);
-  font-size: 11px;
-  font-weight: 700;
-}
-.source-list {
-  height: calc(100vh - 119px);
-  height: calc(100dvh - 119px);
-  overflow-y: auto;
-  padding: 14px;
-  scrollbar-width: thin;
-}
-.source-card {
-  padding: 15px;
-  background: #ffffff;
-  border: 1px solid #e2e4e9;
-  border-left: 3px solid #aebcf0;
-  border-radius: 9px;
-  transition:
-    border-color 160ms ease,
-    box-shadow 160ms ease;
-  scroll-margin-block: 20px;
-}
-.source-card + .source-card {
-  margin-top: 10px;
-}
-.source-card.is-highlighted {
-  border-color: #7891e9;
-  border-left-color: var(--chat-blue);
-  box-shadow: 0 8px 24px rgb(49 94 231 / 9%);
-}
-.source-card-head {
-  justify-content: space-between;
-}
-.source-id {
-  padding: 3px 6px;
-  color: #3159ca;
-  font-family: var(--font-data);
-  font-size: 9px;
-  font-weight: 700;
-  background: var(--chat-blue-soft);
-  border-radius: 5px;
-}
-.source-lines {
-  color: #9399a3;
-  font-size: 9px;
-}
-.source-card h3 {
-  margin: 11px 0 0;
-  overflow: hidden;
-  color: #303642;
-  font-size: 12px;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-.source-path {
-  margin: 3px 0 11px;
-  overflow: hidden;
-  color: #8b919b;
-  font-size: 9px;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-.source-card blockquote {
-  max-height: 190px;
-  margin: 0;
-  overflow-y: auto;
-  padding: 10px 11px;
-  color: #5f6672;
-  font-size: 10px;
-  line-height: 1.75;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  background: #f8f8f9;
-  border-radius: 6px;
-  scrollbar-width: thin;
-}
-.no-sources {
-  display: flex;
-  align-items: center;
-  flex-direction: column;
-  padding: 70px 20px;
-  color: #a0a5ae;
-  text-align: center;
-}
-.no-sources .el-icon {
-  font-size: 28px;
-}
-.no-sources p {
-  font-size: 11px;
-}
-.sidebar-scrim,
-.source-scrim {
-  display: none;
-}
-
-@media (max-width: 1180px) {
-  .source-panel {
-    position: fixed;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: min(390px, 88vw);
-    flex-basis: auto;
-    border-left-width: 1px;
-    box-shadow: -18px 0 42px rgb(27 34 48 / 12%);
-    transform: translateX(105%);
-    transition: transform 200ms ease;
-  }
-  .source-panel.is-open {
-    width: min(390px, 88vw);
-    flex-basis: auto;
-    transform: translateX(0);
-  }
-  .source-scrim {
-    position: fixed;
-    z-index: 24;
-    inset: 0;
-    display: block;
-    background: rgb(18 23 32 / 20%);
-    backdrop-filter: blur(1px);
-  }
-}
-
-@media (max-width: 760px) {
-  .chat-sidebar {
-    position: fixed;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    width: min(286px, 86vw);
-    transform: translateX(-105%);
-    transition: transform 190ms ease;
-  }
-  .chat-sidebar.is-open {
-    transform: translateX(0);
-    box-shadow: 18px 0 42px rgb(27 34 48 / 16%);
-  }
-  .sidebar-scrim {
-    position: fixed;
-    z-index: 29;
-    inset: 0;
-    display: block;
-    background: rgb(18 23 32 / 24%);
-    backdrop-filter: blur(1px);
-  }
-  .mobile-close,
-  .sidebar-trigger {
-    width: 34px;
-    height: 34px;
-    display: grid;
-    place-items: center;
-    color: #626a77;
-    border-radius: 8px;
-  }
-  .desktop-admin-entry {
-    width: 34px;
-    height: 34px;
-    right: 12px;
-    justify-content: center;
-    padding: 0;
-    font-size: 0;
-  }
-  .conversation-title strong {
-    max-width: 54vw;
-  }
-  .welcome-state {
-    width: min(600px, calc(100% - 28px));
-    justify-content: flex-start;
-    padding-top: clamp(54px, 12vh, 110px);
-  }
-  .welcome-state h1 {
-    font-size: 30px;
-  }
-  .message-list {
-    width: calc(100% - 28px);
-    padding-top: 25px;
-  }
-  .user-row {
-    padding-left: 36px;
-  }
-  .user-message {
-    max-width: 92%;
-  }
-  .assistant-row {
-    grid-template-columns: 28px minmax(0, 1fr);
-    gap: 10px;
-  }
-  .assistant-avatar {
-    width: 27px;
-    height: 27px;
-  }
-  .answer-text {
-    font-size: 13px;
-  }
-  .model-label {
-    display: none;
-  }
-  .composer-area {
-    padding: 10px 10px 7px;
-  }
-  .composer-area > p {
-    display: none;
-  }
-  .source-panel header,
-  .source-intro,
-  .source-list {
-    width: min(390px, 88vw);
-  }
-}
-</style>
+<style scoped src="../components/conversation/conversation-view.css"></style>

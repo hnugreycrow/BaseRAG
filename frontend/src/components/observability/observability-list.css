@@ -1,7 +1,7 @@
 .observability-page {
   max-width: 1480px;
   margin: 0 auto;
-  padding: 34px 38px 48px;
+  padding: 32px;
 }
 
 .trace-heading,
@@ -18,7 +18,7 @@
 .panel-index {
   color: var(--color-primary);
   font-family: var(--font-data);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 1.5px;
 }
@@ -26,7 +26,7 @@
 .trace-heading h1 {
   margin: 7px 0 0;
   color: var(--color-ink);
-  font-size: clamp(27px, 3vw, 35px);
+  font-size: 22px;
   line-height: 1.18;
   letter-spacing: -1px;
 }
@@ -40,7 +40,7 @@
 .privacy-note {
   padding: 7px 10px;
   color: #647188;
-  font-size: 11px;
+  font-size: 13px;
   background: #ffffff;
   border: 1px solid var(--color-line);
   border-radius: 7px;
@@ -48,14 +48,14 @@
 
 .telemetry-board {
   display: grid;
-  grid-template-columns: minmax(150px, 0.55fr) minmax(260px, 1fr) minmax(390px, 1.5fr);
+  grid-template-columns: minmax(100px, 0.5fr) minmax(170px, 0.7fr) minmax(300px, 1.5fr);
   margin-top: 27px;
   overflow: hidden;
-  color: #dbe3f3;
-  background: var(--color-ink);
-  border: 1px solid #223150;
+  color: var(--color-text);
+  background: white;
+  border: 1px solid var(--color-line);
   border-radius: 12px;
-  box-shadow: 0 16px 35px rgb(23 35 60 / 10%);
+  box-shadow: none;
 }
 
 .request-volume,
@@ -67,7 +67,7 @@
 
 .request-volume,
 .rate-ledger {
-  border-right: 1px solid rgb(255 255 255 / 9%);
+  border-right: 1px solid var(--color-line);
 }
 
 .request-volume {
@@ -81,14 +81,14 @@
 .latency-head,
 .rate-row > span {
   color: #7f8fab;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .request-volume strong {
   margin: 5px 0 1px;
-  color: #ffffff;
+  color: var(--color-ink);
   font-family: var(--font-data);
-  font-size: 38px;
+  font-size: 28px;
   font-weight: 650;
   letter-spacing: -1.6px;
 }
@@ -101,13 +101,13 @@
 
 .rate-row {
   display: grid;
-  grid-template-columns: 48px minmax(60px, 1fr) 50px;
+  grid-template-columns: 1fr auto;
   align-items: center;
   gap: 11px;
 }
 
 .rate-row strong {
-  color: #ffffff;
+  color: var(--color-ink);
   font-family: var(--font-data);
   font-size: 12px;
   text-align: right;
@@ -139,7 +139,7 @@
 .latency-head,
 .latency-row {
   display: grid;
-  grid-template-columns: minmax(120px, 1fr) 84px 84px;
+  grid-template-columns: minmax(110px, 1fr) 70px 70px;
   align-items: center;
   gap: 12px;
 }
@@ -150,16 +150,16 @@
 
 .latency-row {
   padding-top: 9px;
-  border-top: 1px solid rgb(255 255 255 / 8%);
+  border-top: 1px solid var(--color-line);
 }
 
 .latency-row > span {
-  color: #aebbd0;
-  font-size: 11px;
+  color: var(--color-text);
+  font-size: 13px;
 }
 
 .latency-row strong {
-  color: #ffffff;
+  color: var(--color-ink);
   font-family: var(--font-data);
   font-size: 12px;
   font-weight: 550;
@@ -196,12 +196,12 @@
 
 .filter-intro small {
   color: var(--color-muted);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .filter-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(140px, 1fr)) auto;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   align-items: end;
   gap: 13px;
 }
@@ -214,7 +214,7 @@
 
 .filter-field > span {
   color: #68758b;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -263,7 +263,7 @@
 .panel-heading > span {
   color: var(--color-muted);
   font-family: var(--font-data);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .desktop-run-table {
@@ -311,7 +311,7 @@
 
 .data-text {
   font-family: var(--font-data);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .run-status-cell {
@@ -323,7 +323,7 @@
 
 .run-status-cell > small {
   color: #a46f19;
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .owner-cell,
@@ -349,7 +349,7 @@
   overflow: hidden;
   color: #8a95a8;
   font-family: var(--font-data);
-  font-size: 9px;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -394,7 +394,7 @@
 
 .error-state span {
   color: var(--color-muted);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .pagination-footer {
@@ -410,7 +410,7 @@
 
 @media (max-width: 1180px) {
   .telemetry-board {
-    grid-template-columns: 150px minmax(230px, 0.8fr) minmax(350px, 1.2fr);
+    grid-template-columns: minmax(100px, 0.5fr) minmax(150px, 0.7fr) minmax(280px, 1.2fr);
   }
 
   .filter-grid {
@@ -432,12 +432,12 @@
   }
 
   .request-volume {
-    border-bottom: 1px solid rgb(255 255 255 / 9%);
+    border-bottom: 1px solid var(--color-line);
   }
 
   .rate-ledger {
     border-right: 0;
-    border-bottom: 1px solid rgb(255 255 255 / 9%);
+    border-bottom: 1px solid var(--color-line);
   }
 
   .latency-ledger {
@@ -474,7 +474,7 @@
   .mobile-owner {
     color: var(--color-muted);
     font-family: var(--font-data);
-    font-size: 10px;
+    font-size: 12px;
   }
 
   .run-card > strong {
@@ -494,13 +494,13 @@
     flex-direction: column;
     gap: 3px;
     font-family: var(--font-data);
-    font-size: 11px;
+    font-size: 13px;
   }
 
   .run-card-metrics small {
     color: var(--color-muted);
     font-family: var(--font-body);
-    font-size: 9px;
+    font-size: 12px;
   }
 
   .detail-link {
@@ -523,17 +523,15 @@
   }
 
   .heading-actions {
-    padding-top: 22px;
+    padding-top: 0;
   }
 
   .heading-actions :deep(.el-button) {
-    width: 34px;
-    padding-inline: 0;
-    font-size: 0;
+    padding-inline: 12px;
   }
 
   .telemetry-board {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
   }
 
   .request-volume,
@@ -544,15 +542,15 @@
   .request-volume,
   .rate-ledger,
   .latency-ledger {
-    padding: 20px;
+    padding: 16px;
   }
 
   .latency-ledger {
-    grid-column: auto;
+    grid-column: 1 / -1;
   }
 
   .filter-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .filter-intro small {
@@ -584,4 +582,7 @@
     align-items: flex-start;
     flex-wrap: wrap;
   }
+}
+.rate-track {
+  display: none;
 }

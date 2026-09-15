@@ -28,6 +28,12 @@ export const router = createRouter({
       component: AdminLayout,
       children: [
         {
+          path: 'users',
+          name: 'users',
+          component: () => import('../views/UserView.vue'),
+          meta: { title: '用户管理', adminOnly: true },
+        },
+        {
           path: '',
           name: 'dashboard',
           component: () => import('../views/DashboardView.vue'),
@@ -88,7 +94,10 @@ router.beforeEach(async (to) => {
     }
   }
   if (to.meta.public) return auth.authenticated ? redirectTarget(to.query.redirect) : true
-  if (auth.authenticated) return true
+  if (auth.authenticated) {
+    if (to.meta.adminOnly && auth.user?.role !== 'ADMIN') return '/chat'
+    return true
+  }
   return { name: 'login', query: { redirect: to.fullPath } }
 })
 

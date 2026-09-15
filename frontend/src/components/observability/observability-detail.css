@@ -1,7 +1,7 @@
 .trace-detail-page {
   max-width: 1480px;
   margin: 0 auto;
-  padding: 27px 38px 50px;
+  padding: 32px;
 }
 
 .back-link {
@@ -34,14 +34,14 @@
 .heading-meta > span {
   color: var(--color-muted);
   font-family: var(--font-data);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .detail-heading h1 {
   margin: 10px 0 0;
   color: var(--color-ink);
   font-family: var(--font-data);
-  font-size: clamp(25px, 3vw, 34px);
+  font-size: 22px;
   font-weight: 650;
   letter-spacing: -1px;
 }
@@ -49,7 +49,7 @@
 .detail-heading p {
   margin: 7px 0 0;
   color: var(--color-muted);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .detail-heading .run-error-code {
@@ -72,7 +72,7 @@
   padding: 7px 10px;
   color: #78859a;
   font-family: var(--font-data);
-  font-size: 9px;
+  font-size: 12px;
   letter-spacing: 0.8px;
   border: 1px solid var(--color-line);
   border-radius: 6px;
@@ -94,20 +94,21 @@
   flex-direction: column;
   justify-content: center;
   padding: 28px;
-  color: #ffffff;
-  background: var(--color-ink);
+  color: var(--color-ink);
+  background: white;
+  border-right: 1px solid var(--color-line);
 }
 
 .fact-primary span,
 .fact-primary small {
   color: #8f9db6;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .fact-primary strong {
   margin: 7px 0 3px;
   font-family: var(--font-data);
-  font-size: 31px;
+  font-size: 28px;
   font-weight: 600;
 }
 
@@ -134,7 +135,7 @@
 .run-facts dt,
 .attempt-panel dt {
   color: var(--color-muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .run-facts dd {
@@ -175,7 +176,7 @@
 .section-heading span {
   color: var(--color-primary);
   font-family: var(--font-data);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 1.3px;
 }
@@ -189,7 +190,7 @@
 .section-heading > strong {
   color: #617087;
   font-family: var(--font-data);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .waterfall {
@@ -199,7 +200,7 @@
 .waterfall-axis,
 .waterfall-row {
   display: grid;
-  grid-template-columns: 210px minmax(340px, 1fr) 78px;
+  grid-template-columns: 180px minmax(180px, 1fr) 78px;
   column-gap: 18px;
 }
 
@@ -208,7 +209,7 @@
   align-items: center;
   color: #9aa4b5;
   font-family: var(--font-data);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .waterfall-axis > div {
@@ -239,7 +240,7 @@
   flex: 0 0 24px;
   color: #a0aaba;
   font-family: var(--font-data);
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .stage-name > div {
@@ -251,7 +252,7 @@
 .stage-name strong {
   overflow: hidden;
   color: #344158;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -339,7 +340,7 @@
 
 .stage-duration strong {
   color: #425069;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .stage-duration small {
@@ -355,7 +356,7 @@
   gap: 8px;
   margin: -4px 0 8px;
   color: #7d899d;
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .stage-note code {
@@ -379,7 +380,7 @@
 .degradation-panel li {
   padding: 7px 9px;
   color: #95691f;
-  font-size: 10px;
+  font-size: 12px;
   background: #fff8e9;
   border: 1px solid #f3dfb9;
   border-radius: 5px;
@@ -418,7 +419,7 @@
 .detail-list article > div > strong {
   overflow: hidden;
   color: var(--color-ink);
-  font-size: 11px;
+  font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -439,7 +440,7 @@
   overflow: hidden;
   color: #56637a;
   font-family: var(--font-data);
-  font-size: 9px;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -496,14 +497,14 @@
 
 .candidate-flow > li > span {
   color: #445169;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
 }
 
 .candidate-flow > li > strong {
   color: var(--color-ink);
   font-family: var(--font-data);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .candidate-flow strong i {
@@ -690,7 +691,7 @@
     gap: 10px;
     color: #7c889c;
     font-family: var(--font-data);
-    font-size: 9px;
+    font-size: 12px;
   }
 
   .stage-note {

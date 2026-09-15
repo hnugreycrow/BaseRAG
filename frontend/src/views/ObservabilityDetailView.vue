@@ -107,7 +107,6 @@ onMounted(loadDetail)
             运行错误 <code>{{ detail.run.errorCode }}</code>
           </p>
         </div>
-        <span class="privacy-seal">TRACE METADATA ONLY</span>
       </header>
 
       <section class="run-facts" aria-label="运行摘要">
@@ -118,11 +117,11 @@ onMounted(loadDetail)
         </div>
         <dl>
           <div>
-            <dt>端到端 TTFT</dt>
+            <dt>首字耗时</dt>
             <dd>{{ formatDuration(detail.run.endToEndTtftMs) }}</dd>
           </div>
           <div>
-            <dt>模型 TTFT</dt>
+            <dt>模型首字耗时</dt>
             <dd>{{ formatDuration(detail.run.modelTtftMs) }}</dd>
           </div>
           <div>
@@ -153,7 +152,6 @@ onMounted(loadDetail)
       <section class="waterfall-panel" aria-labelledby="waterfall-title">
         <div class="section-heading">
           <div>
-            <span>TRACE</span>
             <h2 id="waterfall-title">阶段瀑布</h2>
           </div>
           <strong>{{ formatDuration(waterfall.durationMs) }}</strong>
@@ -218,7 +216,7 @@ onMounted(loadDetail)
             </div>
           </article>
         </div>
-        <el-empty v-else description="运行仍在进行，阶段将在终态时批量保存" :image-size="72" />
+        <el-empty v-else description="暂无阶段记录" :image-size="72" />
       </section>
 
       <section
@@ -228,7 +226,6 @@ onMounted(loadDetail)
       >
         <div class="section-heading compact">
           <div>
-            <span>DEGRADED</span>
             <h2 id="degradation-title">降级原因</h2>
           </div>
         </div>
@@ -243,7 +240,6 @@ onMounted(loadDetail)
         <section class="attempt-panel" aria-labelledby="attempt-title">
           <div class="section-heading compact">
             <div>
-              <span>MODEL</span>
               <h2 id="attempt-title">回答模型尝试</h2>
             </div>
             <strong>{{ modelAttempts.length }} 次</strong>
@@ -282,7 +278,6 @@ onMounted(loadDetail)
         <section class="candidate-panel" aria-labelledby="candidate-title">
           <div class="section-heading compact">
             <div>
-              <span>EVIDENCE</span>
               <h2 id="candidate-title">候选流转</h2>
             </div>
           </div>

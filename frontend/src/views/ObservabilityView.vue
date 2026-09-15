@@ -57,8 +57,8 @@ const userOptions = computed(() => {
 
 const latencyRows = computed(() => [
   { label: '总耗时', value: aggregate.value?.totalMs },
-  { label: '端到端 TTFT', value: aggregate.value?.endToEndTtftMs },
-  { label: '模型 TTFT', value: aggregate.value?.modelTtftMs },
+  { label: '首字耗时', value: aggregate.value?.endToEndTtftMs },
+  { label: '模型首字耗时', value: aggregate.value?.modelTtftMs },
 ])
 
 async function searchUsers(query = '') {
@@ -92,13 +92,10 @@ onMounted(() => {
   <div class="observability-page">
     <header class="trace-heading">
       <div>
-        <span class="eyebrow">RAG RUN LEDGER</span>
-        <h1>问答链路追踪</h1>
-        <p>每行对应一次回答版本，沿阶段轨迹定位等待、降级和失败。</p>
+        <h1>链路追踪</h1>
       </div>
       <div class="heading-actions">
-        <span class="privacy-note">仅记录安全元数据</span>
-        <el-button :icon="Refresh" :loading="loading" @click="refresh">刷新数据</el-button>
+        <el-button :icon="Refresh" :loading="loading" @click="refresh">刷新</el-button>
       </div>
     </header>
 
@@ -106,7 +103,6 @@ onMounted(() => {
       <div class="request-volume">
         <span>问答运行</span>
         <strong>{{ aggregate?.requestCount ?? '—' }}</strong>
-        <small>当前时间范围</small>
       </div>
       <div class="rate-ledger">
         <div class="rate-row">
@@ -138,9 +134,8 @@ onMounted(() => {
       <div class="filter-intro">
         <div>
           <span id="trace-filter-title">筛选运行</span>
-          <small>默认查看最近 24 小时</small>
         </div>
-        <el-button text @click="resetFilters">恢复默认</el-button>
+        <el-button text @click="resetFilters">重置</el-button>
       </div>
       <div class="filter-grid">
         <label class="filter-field">
@@ -230,8 +225,7 @@ onMounted(() => {
     <section class="runs-panel" aria-labelledby="run-list-title">
       <div class="panel-heading">
         <div>
-          <span class="panel-index">RUNS</span>
-          <h2 id="run-list-title">每次问答请求</h2>
+          <h2 id="run-list-title">运行记录</h2>
         </div>
         <span>{{ total }} 条记录</span>
       </div>
@@ -290,7 +284,7 @@ onMounted(() => {
                   ></template
                 >
               </el-table-column>
-              <el-table-column label="端到端 TTFT" width="130" align="right">
+              <el-table-column label="首字耗时" width="130" align="right">
                 <template #default="{ row }"
                   ><span class="data-text">{{ formatDuration(row.endToEndTtftMs) }}</span></template
                 >
@@ -303,7 +297,7 @@ onMounted(() => {
               <el-table-column label="" width="112" align="right">
                 <template #default="{ row }">
                   <RouterLink class="detail-link" :to="detailLink(row.id)"
-                    >查看链路 <el-icon><ArrowRight /></el-icon
+                    >查看详情 <el-icon><ArrowRight /></el-icon
                   ></RouterLink>
                 </template>
               </el-table-column>
@@ -326,7 +320,7 @@ onMounted(() => {
               <span class="mobile-model">{{ run.model ?? '未调用回答模型' }}</span>
               <div class="run-card-metrics">
                 <span><small>总耗时</small>{{ formatDuration(run.totalMs) }}</span>
-                <span><small>端到端 TTFT</small>{{ formatDuration(run.endToEndTtftMs) }}</span>
+                <span><small>首字耗时</small>{{ formatDuration(run.endToEndTtftMs) }}</span>
                 <span
                   ><small>候选 → 证据</small>{{ run.candidateCount }} →
                   {{ run.evidenceCount }}</span
@@ -336,7 +330,7 @@ onMounted(() => {
                 {{ run.displayName }} · {{ run.username }}
               </div>
               <RouterLink class="detail-link" :to="detailLink(run.id)"
-                >查看链路 <el-icon><ArrowRight /></el-icon
+                >查看详情 <el-icon><ArrowRight /></el-icon
               ></RouterLink>
             </article>
             <el-empty v-if="runs.length === 0" description="当前筛选范围内没有问答运行" />

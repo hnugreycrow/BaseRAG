@@ -58,7 +58,7 @@ const {
 
 <template>
   <div class="knowledge-page">
-    <nav class="scope-rail" aria-label="当前位置">
+    <nav v-if="selectedKnowledgeBase" class="scope-rail" aria-label="当前位置">
       <button :class="{ active: level === 'knowledge-bases' }" @click="goToKnowledgeBases">
         <el-icon><Collection /></el-icon>
         知识库
@@ -125,7 +125,13 @@ const {
     <section class="table-panel">
       <div class="table-toolbar">
         <div class="toolbar-actions">
-          <el-input v-model="query" :placeholder="searchPlaceholder" clearable class="search-input">
+          <el-input
+            v-model="query"
+            :aria-label="searchPlaceholder"
+            :placeholder="searchPlaceholder"
+            clearable
+            class="search-input"
+          >
             <template #prefix
               ><el-icon><Search /></el-icon
             ></template>

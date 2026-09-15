@@ -14,45 +14,64 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <el-table
-    :data="rows"
-    row-key="id"
-    class="data-table"
-    :row-class-name="() => 'clickable-row'"
-    @row-click="emit('open', $event)"
-  >
-    <el-table-column label="序号" width="92">
-      <template #default="{ row }">
-        <span class="chunk-index">{{ String(row.chunkIndex + 1).padStart(2, '0') }}</span>
+  <div class="desktop-resource-table">
+    <el-table
+      :data="rows"
+      row-key="id"
+      class="data-table"
+      :row-class-name="() => 'clickable-row'"
+      @row-click="emit('open', $event)"
+    >
+      <el-table-column label="序号" width="92">
+        <template #default="{ row }">
+          <span class="chunk-index">{{ String(row.chunkIndex + 1).padStart(2, '0') }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="标题" min-width="210">
+        <template #default="{ row }">
+          <strong class="heading">{{ row.heading || '无标题段落' }}</strong>
+        </template>
+      </el-table-column>
+      <el-table-column label="内容预览" min-width="220">
+        <template #default="{ row }">
+          <span class="preview">{{ row.preview }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="原文行" width="130">
+        <template #default="{ row }">L{{ row.lineStart }}–{{ row.lineEnd }}</template>
+      </el-table-column>
+      <el-table-column label="字符数" width="110">
+        <template #default="{ row }">{{ row.characterCount }}</template>
+      </el-table-column>
+      <el-table-column label="操作" width="110" fixed="right" align="right">
+        <template #default="{ row }">
+          <el-button text :icon="View" class="view-button" @click.stop="emit('open', row)">
+            查看
+          </el-button>
+        </template>
+      </el-table-column>
+      <template #empty>
+        <el-empty :description="loading ? '正在加载分块' : '该文档暂无分块'" :image-size="72" />
       </template>
-    </el-table-column>
-    <el-table-column label="标题" min-width="210">
-      <template #default="{ row }">
-        <strong class="heading">{{ row.heading || '无标题段落' }}</strong>
-      </template>
-    </el-table-column>
-    <el-table-column label="内容预览" min-width="380">
-      <template #default="{ row }">
-        <span class="preview">{{ row.preview }}</span>
-      </template>
-    </el-table-column>
-    <el-table-column label="原文行" width="130">
-      <template #default="{ row }">L{{ row.lineStart }}–{{ row.lineEnd }}</template>
-    </el-table-column>
-    <el-table-column label="字符数" width="110">
-      <template #default="{ row }">{{ row.characterCount }}</template>
-    </el-table-column>
-    <el-table-column label="操作" width="110" fixed="right" align="right">
-      <template #default="{ row }">
-        <el-button text :icon="View" class="view-button" @click.stop="emit('open', row)">
-          查看
-        </el-button>
-      </template>
-    </el-table-column>
-    <template #empty>
-      <el-empty :description="loading ? '正在加载分块' : '该文档暂无分块'" :image-size="72" />
-    </template>
-  </el-table>
+    </el-table>
+  </div>
+  <div class="mobile-resource-list">
+    <article v-for="row in rows" :key="row.id" class="resource-mobile-card">
+      <h3>
+        <button @click="emit('open', row)">
+          {{ row.chunkIndex + 1 }} · {{ row.heading || '无标题段落' }}
+        </button>
+      </h3>
+      <p>{{ row.preview }}</p>
+      <p>第 {{ row.lineStart }}–{{ row.lineEnd }} 行 · {{ row.characterCount }} 字符</p>
+      <el-button text @click="emit('open', row)">查看分块</el-button>
+    </article>
+    <el-empty
+      v-if="!rows.length"
+      :description="loading ? '正在加载分块' : '暂无分块'"
+      :image-size="64"
+    />
+  </div>
 </template>
 
 <style scoped>
