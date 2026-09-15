@@ -176,6 +176,10 @@ conversation:
   checkpoint-chars: 512
   checkpoint-interval-ms: 1000
 
+observability:
+  retention-days: 30
+  cleanup-cron: "0 15 3 * * *"
+
 baserag:
   bootstrap-admin:
     username: "${BASERAG_ADMIN_USERNAME:admin}"
