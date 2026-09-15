@@ -61,6 +61,7 @@ ai:
       api-key: "${BAILIAN_API_KEY:}"
       endpoints:
         chat: /compatible-mode/v1/chat/completions
+        embedding: /compatible-mode/v1/embeddings
         rerank: /compatible-api/v1/reranks
     siliconflow:
       url: https://api.siliconflow.cn
@@ -105,6 +106,12 @@ ai:
         model: Qwen/Qwen3-Embedding-8B
         dimension: ${EMBEDDING_DIMENSIONS:1536}
         priority: 1
+      - id: bailian-qwen3.7-embedding
+        provider: bailian
+        model: qwen3.7-text-embedding
+        dimension: 1536
+        base-url: "${BAILIAN_EMBEDDING_BASE_URL:}"
+        priority: 2
 
   rerank:
     default-model: qwen3-rerank

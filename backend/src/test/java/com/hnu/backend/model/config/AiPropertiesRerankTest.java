@@ -20,6 +20,25 @@ class AiPropertiesRerankTest {
   }
 
   @Test
+  void embeddingAddressOverrideDoesNotChangeBailianRerankAddress() {
+    AiProperties config = configured();
+    config
+        .getProviders()
+        .get("bailian")
+        .getEndpoints()
+        .setEmbedding("/compatible-mode/v1/embeddings");
+    AiProperties.Candidate embedding = candidate("embedding", "bailian", "embedding-model", 1);
+    embedding.setDimension(1536);
+    embedding.setBaseUrl("https://workspace.example.com");
+    config.getEmbedding().setDefaultModel("embedding");
+    config.getEmbedding().setCandidates(List.of(embedding));
+
+    assertEquals("https://workspace.example.com", config.embeddingModel().baseUrl());
+    assertEquals("https://example.com", config.rerankModels().getFirst().baseUrl());
+    assertEquals("/compatible-mode/v1/embeddings", config.embeddingModel().endpoint());
+  }
+
+  @Test
   void rejectsUnknownDefaultDuplicateIdsAndIncompleteNoop() {
     AiProperties config = configured();
     config.getRerank().setDefaultModel("missing");

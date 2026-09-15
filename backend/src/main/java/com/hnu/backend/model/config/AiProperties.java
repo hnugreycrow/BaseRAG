@@ -123,8 +123,12 @@ public class AiProperties {
           case "rerank" -> provider.endpoints.rerank;
           default -> throw new IllegalArgumentException("Unsupported AI capability: " + capability);
         };
-    if (provider.url == null
-        || provider.url.isBlank()
+    String baseUrl =
+        "embedding".equals(capability) && candidate.baseUrl != null && !candidate.baseUrl.isBlank()
+            ? candidate.baseUrl
+            : provider.url;
+    if (baseUrl == null
+        || baseUrl.isBlank()
         || path == null
         || !path.startsWith("/")
         || timeoutMs < 1) {
@@ -132,7 +136,7 @@ public class AiProperties {
           "Incomplete AI provider endpoint: " + candidate.provider + "/" + capability);
     }
     try {
-      URI uri = URI.create(provider.url);
+      URI uri = URI.create(baseUrl);
       if (!("http".equals(uri.getScheme()) || "https".equals(uri.getScheme()))
           || uri.getHost() == null
           || uri.getUserInfo() != null
@@ -148,7 +152,7 @@ public class AiProperties {
         candidate.id,
         candidate.provider,
         candidate.model,
-        provider.url.replaceAll("/+$", ""),
+        baseUrl.replaceAll("/+$", ""),
         path,
         provider.apiKey,
         timeoutMs,
@@ -240,6 +244,7 @@ public class AiProperties {
     private String id = "";
     private String provider = "";
     private String model = "";
+    private String baseUrl = "";
     private int dimension;
     private int priority;
     private boolean supportsThinking;
