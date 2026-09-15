@@ -1,4 +1,5 @@
 import { request } from './http'
+import type { PageResult } from './types'
 
 export type UserRole = 'ADMIN' | 'USER'
 
@@ -35,5 +36,13 @@ export function changePassword(oldPassword: string, newPassword: string) {
     url: '/auth/password',
     method: 'put',
     data: { oldPassword, newPassword },
+  })
+}
+
+/** 管理员分页搜索用户，供需要按所属用户过滤的界面复用。 */
+export function listAdminUsers(page = 1, pageSize = 50, query = '') {
+  return request<PageResult<AuthUser>>({
+    url: '/admin/users',
+    params: { page, pageSize, ...(query.trim() ? { query: query.trim() } : {}) },
   })
 }

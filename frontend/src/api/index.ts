@@ -10,3 +10,5 @@ export {
 export * from './auth'
 export * from './conversation'
 export * from './knowledgeBase'
+export * from './observability'
+export type { PageResult } from './types'

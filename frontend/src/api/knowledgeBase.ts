@@ -1,4 +1,7 @@
 import { request } from './http'
+import type { PageResult } from './types'
+
+export type { PageResult } from './types'
 
 export interface EmbeddingModel {
   id: string
@@ -48,14 +51,6 @@ export interface DocumentImportResult {
   documentId: string
   status: DocumentStatus
   chunkCount: number
-}
-
-export interface PageResult<T> {
-  items: T[]
-  total: number
-  page: number
-  pageSize: number
-  totalPages: number
 }
 
 function pageParams(page: number, pageSize: number, query = '') {
