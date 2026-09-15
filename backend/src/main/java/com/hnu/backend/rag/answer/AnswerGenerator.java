@@ -29,6 +29,13 @@ public interface AnswerGenerator {
       StreamObserver observer,
       Control control);
 
+  /** 使用统一请求传入回答的思考选择。 */
+  Generation generate(
+      Request request, AttemptReason reason, StreamObserver observer, Control control);
+
+  /** 回答阶段的中立生成请求。 */
+  record Request(String systemPrompt, String userPrompt, boolean thinkingEnabled) {}
+
   /** 一次模型调用的业务原因，用于区分主生成、供应商回退和引用修复。 */
   enum AttemptReason {
     /** 首选模型的首次回答。 */
@@ -81,6 +88,9 @@ public interface AnswerGenerator {
      * @param text 非空增量正文
      */
     void delta(String text);
+
+    /** 接收一段思考内容，与回答正文分开传递。 */
+    default void reasoningDelta(String text) {}
 
     /**
      * 当前模型候选完整结束。

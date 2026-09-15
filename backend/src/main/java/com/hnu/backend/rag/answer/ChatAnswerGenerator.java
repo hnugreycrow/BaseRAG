@@ -1,6 +1,7 @@
 package com.hnu.backend.rag.answer;
 
 import com.hnu.backend.model.client.ChatClient;
+import com.hnu.backend.model.client.ChatGenerationRequest;
 import com.hnu.backend.model.config.AiProperties;
 import com.hnu.backend.model.http.ModelHttpClient;
 import com.hnu.backend.shared.error.ApiException;
@@ -34,48 +35,64 @@ public class ChatAnswerGenerator implements AnswerGenerator {
       AttemptReason reason,
       StreamObserver observer,
       Control control) {
+    return generate(new Request(systemPrompt, userPrompt, false), reason, observer, control);
+  }
+
+  @Override
+  public Generation generate(
+      Request request, AttemptReason reason, StreamObserver observer, Control control) {
     if (!(control instanceof ChatControl chatControl)) {
       throw new IllegalArgumentException("Unsupported answer stream control");
     }
     control.throwIfCancelled();
+    ChatClient.StreamObserver bridge =
+        new ChatClient.StreamObserver() {
+          /** {@inheritDoc} */
+          @Override
+          public void started(AiProperties.ModelTarget target, String providerReason) {
+            observer.started(modelTarget(target), attemptReason(reason, providerReason));
+          }
+
+          /** {@inheritDoc} */
+          @Override
+          public void requesting(AiProperties.ModelTarget target) {
+            observer.requesting(modelTarget(target));
+          }
+
+          /** {@inheritDoc} */
+          @Override
+          public void delta(String text) {
+            observer.delta(text);
+          }
+
+          @Override
+          public void reasoningDelta(String text) {
+            observer.reasoningDelta(text);
+          }
+
+          /** {@inheritDoc} */
+          @Override
+          public void completed(
+              AiProperties.ModelTarget target, String content, String finishReason) {
+            observer.completed(modelTarget(target), content, finishReason);
+          }
+
+          /** {@inheritDoc} */
+          @Override
+          public void failed(
+              AiProperties.ModelTarget target, String partialContent, ApiException error) {
+            observer.failed(modelTarget(target), partialContent, error);
+          }
+        };
     ChatClient.Generation generation =
-        chat.stream(
-            systemPrompt,
-            userPrompt,
-            new ChatClient.StreamObserver() {
-              /** {@inheritDoc} */
-              @Override
-              public void started(AiProperties.ModelTarget target, String providerReason) {
-                observer.started(modelTarget(target), attemptReason(reason, providerReason));
-              }
-
-              /** {@inheritDoc} */
-              @Override
-              public void requesting(AiProperties.ModelTarget target) {
-                observer.requesting(modelTarget(target));
-              }
-
-              /** {@inheritDoc} */
-              @Override
-              public void delta(String text) {
-                observer.delta(text);
-              }
-
-              /** {@inheritDoc} */
-              @Override
-              public void completed(
-                  AiProperties.ModelTarget target, String content, String finishReason) {
-                observer.completed(modelTarget(target), content, finishReason);
-              }
-
-              /** {@inheritDoc} */
-              @Override
-              public void failed(
-                  AiProperties.ModelTarget target, String partialContent, ApiException error) {
-                observer.failed(modelTarget(target), partialContent, error);
-              }
-            },
-            chatControl.delegate);
+        request.thinkingEnabled()
+            ? chat.stream(
+                new ChatGenerationRequest(
+                    request.systemPrompt(), request.userPrompt(), request.thinkingEnabled()),
+                bridge,
+                chatControl.delegate)
+            : chat.stream(
+                request.systemPrompt(), request.userPrompt(), bridge, chatControl.delegate);
     control.throwIfCancelled();
     return new Generation(
         generation.content(), generation.id(), generation.provider(), generation.model());

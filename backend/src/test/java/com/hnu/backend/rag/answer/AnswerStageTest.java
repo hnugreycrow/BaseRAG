@@ -105,6 +105,21 @@ class AnswerStageTest {
   }
 
   @Test
+  void citationRepairKeepsTheRequestedThinkingMode() {
+    AssembledPrompt prompt = prompt(List.of(source), List.of(), true);
+    when(generator.generate(any(AnswerGenerator.Request.class), any(), eq(observer), eq(control)))
+        .thenReturn(generation("错误 [S99]"), generation("答案 [S1]"));
+
+    AnswerResult result = stage.execute(prompt, observer, control, true);
+
+    assertEquals("答案 [S1]", result.content());
+    ArgumentCaptor<AnswerGenerator.Request> requests =
+        ArgumentCaptor.forClass(AnswerGenerator.Request.class);
+    verify(generator, times(2)).generate(requests.capture(), any(), eq(observer), eq(control));
+    assertTrue(requests.getAllValues().stream().allMatch(AnswerGenerator.Request::thinkingEnabled));
+  }
+
+  @Test
   void rejectsASecondInvalidAnswerAndDoesNotRetryAgain() {
     AssembledPrompt prompt = prompt(List.of(source), List.of(), true);
     when(generator.generate(anyString(), anyString(), any(), eq(observer), eq(control)))

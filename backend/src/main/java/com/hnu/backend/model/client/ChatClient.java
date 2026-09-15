@@ -6,6 +6,7 @@ import com.hnu.backend.shared.error.ApiException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /** 对话模型客户端，支持模型故障转移和流式生成回调。 */
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Component;
 public class ChatClient {
   private final ModelHttpClient http;
   private final AiProperties config;
+  private final Map<String, ThinkingParameterAdapter> thinkingAdapters;
 
   /**
    * 创建对话模型客户端。
@@ -20,9 +22,27 @@ public class ChatClient {
    * @param http 模型 HTTP 客户端
    * @param config AI 模型配置
    */
-  public ChatClient(ModelHttpClient http, AiProperties config) {
+  @Autowired
+  public ChatClient(
+      ModelHttpClient http, AiProperties config, List<ThinkingParameterAdapter> adapters) {
     this.http = http;
     this.config = config;
+    this.thinkingAdapters = new LinkedHashMap<>();
+    for (ThinkingParameterAdapter adapter : adapters) {
+      if (thinkingAdapters.putIfAbsent(adapter.provider(), adapter) != null) {
+        throw new IllegalArgumentException("Duplicate thinking adapter: " + adapter.provider());
+      }
+    }
+    for (AiProperties.ModelTarget target : config.chatModels()) {
+      if (target.supportsThinking() && !thinkingAdapters.containsKey(target.provider())) {
+        throw new IllegalArgumentException("Missing thinking adapter: " + target.provider());
+      }
+    }
+  }
+
+  /** 供不启动 Spring 容器的模型 HTTP 测试使用。 */
+  public ChatClient(ModelHttpClient http, AiProperties config) {
+    this(http, config, List.of(new DeepSeekThinkingAdapter(), new BailianThinkingAdapter()));
   }
 
   /**
@@ -33,11 +53,15 @@ public class ChatClient {
    * @return 生成文本及实际使用的模型信息
    */
   public Generation generate(String system, String user) {
+    return generate(new ChatGenerationRequest(system, user, false));
+  }
+
+  public Generation generate(ChatGenerationRequest request) {
     ApiException last = null;
     // 仅当当前目标没有产出可用结果时，才按配置顺序切换到下一个模型。
     for (AiProperties.ModelTarget target : config.chatModels()) {
       try {
-        var response = http.post(target, payload(target, system, user, false));
+        var response = http.post(target, payload(target, request, false));
         var choice = response.path("choices").path(0);
         var content = choice.path("message").path("content");
         if (!content.isString()
@@ -65,6 +89,13 @@ public class ChatClient {
    */
   public Generation stream(
       String system, String user, StreamObserver observer, ModelHttpClient.StreamControl control) {
+    return stream(new ChatGenerationRequest(system, user, false), observer, control);
+  }
+
+  public Generation stream(
+      ChatGenerationRequest request,
+      StreamObserver observer,
+      ModelHttpClient.StreamControl control) {
     ApiException last = null;
     int attemptIndex = 0;
     for (AiProperties.ModelTarget target : config.chatModels()) {
@@ -76,9 +107,16 @@ public class ChatClient {
         observer.requesting(target);
         http.stream(
             target,
-            payload(target, system, user, true),
+            payload(target, request, true),
             event -> {
               var choice = event.path("choices").path(0);
+              var reasoning = choice.path("delta").path("reasoning_content");
+              if (request.thinkingEnabled()
+                  && target.supportsThinking()
+                  && reasoning.isString()
+                  && !reasoning.asString().isEmpty()) {
+                observer.reasoningDelta(reasoning.asString());
+              }
               var delta = choice.path("delta").path("content");
               if (delta.isString() && !delta.asString().isEmpty()) {
                 content.append(delta.asString());
@@ -114,14 +152,19 @@ public class ChatClient {
    * @return 模型请求体
    */
   private Map<String, Object> payload(
-      AiProperties.ModelTarget target, String system, String user, boolean stream) {
+      AiProperties.ModelTarget target, ChatGenerationRequest request, boolean stream) {
     Map<String, Object> payload = new LinkedHashMap<>();
     payload.put("model", target.model());
     payload.put("stream", stream);
     payload.put(
         "messages",
         List.of(
-            Map.of("role", "system", "content", system), Map.of("role", "user", "content", user)));
+            Map.of("role", "system", "content", request.system()),
+            Map.of("role", "user", "content", request.user())));
+    ThinkingParameterAdapter adapter = thinkingAdapters.get(target.provider());
+    if (adapter != null && target.supportsThinking()) {
+      adapter.apply(payload, request.thinkingEnabled());
+    }
     return payload;
   }
 
@@ -148,6 +191,9 @@ public class ChatClient {
      * @param text 增量文本
      */
     void delta(String text);
+
+    /** 收到一段思考内容；与最终回答正文分开传递。 */
+    default void reasoningDelta(String text) {}
 
     /**
      * 当前模型完整生成成功。

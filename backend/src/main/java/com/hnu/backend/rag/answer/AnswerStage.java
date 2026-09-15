@@ -46,13 +46,22 @@ public class AnswerStage {
    */
   public AnswerResult execute(
       AssembledPrompt prompt, Observer observer, AnswerGenerator.Control control) {
+    return execute(prompt, observer, control, false);
+  }
+
+  /** 根据本回答版本固定的思考选择执行回答生成。 */
+  public AnswerResult execute(
+      AssembledPrompt prompt,
+      Observer observer,
+      AnswerGenerator.Control control,
+      boolean thinkingEnabled) {
     control.throwIfCancelled();
     if (!prompt.shouldGenerate()) {
       observer.generationSkipped("NO_EVIDENCE");
       return new AnswerResult(INSUFFICIENT_EVIDENCE, prompt.sources(), List.of(), List.of(), null);
     }
     AnswerGenerator.Generation generation =
-        generate(prompt, AnswerGenerator.AttemptReason.PRIMARY, observer, control);
+        generate(prompt, AnswerGenerator.AttemptReason.PRIMARY, observer, control, thinkingEnabled);
     Citations.Validation references;
     try {
       observer.validationStarted();
@@ -64,7 +73,12 @@ public class AnswerStage {
       control.throwIfCancelled();
       AssembledPrompt repair = prompts.forCitationRepair(prompt);
       generation =
-          generate(repair, AnswerGenerator.AttemptReason.CITATION_REPAIR, observer, control);
+          generate(
+              repair,
+              AnswerGenerator.AttemptReason.CITATION_REPAIR,
+              observer,
+              control,
+              thinkingEnabled);
       try {
         observer.validationStarted();
         references = validate(generation, repair);
@@ -105,10 +119,18 @@ public class AnswerStage {
       AssembledPrompt prompt,
       AnswerGenerator.AttemptReason reason,
       Observer observer,
-      AnswerGenerator.Control control) {
+      AnswerGenerator.Control control,
+      boolean thinkingEnabled) {
     control.throwIfCancelled();
     AnswerGenerator.Generation generation =
-        generator.generate(prompt.systemPrompt(), prompt.userPrompt(), reason, observer, control);
+        thinkingEnabled
+            ? generator.generate(
+                new AnswerGenerator.Request(prompt.systemPrompt(), prompt.userPrompt(), true),
+                reason,
+                observer,
+                control)
+            : generator.generate(
+                prompt.systemPrompt(), prompt.userPrompt(), reason, observer, control);
     control.throwIfCancelled();
     return generation;
   }

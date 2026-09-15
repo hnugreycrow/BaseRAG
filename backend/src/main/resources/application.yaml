@@ -90,9 +90,11 @@ ai:
       - id: deepseek-flash
         provider: deepseek
         model: deepseek-flash
+        supports-thinking: true
       - id: qwen3.8-flash
         provider: bailian
         model: qwen3.8-flash
+        supports-thinking: true
     tiers:
       standard:
         candidates: [deepseek-flash, qwen3.8-flash]
