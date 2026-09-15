@@ -10,6 +10,7 @@ BaseRAG 是一个本地运行的多用户 RAG 知识问答系统。当前版本�
 - 支持历史摘要、独立问题改写、有限子问题拆分、安全意图路由、RRF 候选融合、三级去重、模型重排及失败降级。
 - 支持结构化提示词、流式回答、模型候选回退、停止、一次引用修复、重试、重新生成和回答版本切换。
 - 支持 ADMIN/USER 账号、管理员账号管理 API、用户自行改密和完整的数据所有权隔离；本阶段不提供管理员用户管理页面。
+- 会话 SSE 问答按回答版本记录运行摘要、阶段瀑布、降级原因、最终模型、总耗时及端到端/模型 TTFT；Trace 默认保留 30 天且不保存问题、回答或证据正文。
 - 当前没有注册、共享知识库、组织、PDF、异步索引、关键词混合检索、Agent、可用的 MCP 工具或公网部署能力；MCP 内部安全框架默认关闭且允许列表为空。
 
 当前产品范围和验收标准以 [REQUIREMENTS.md](REQUIREMENTS.md) 为唯一来源；技术实现以 [架构文档](docs/architecture.md) 为准。
@@ -141,6 +142,9 @@ createdb 仅需首次执行；已存在时无需重建。测试默认连接独�
 | POST (SSE) | /api/conversations/{id}/messages/{assistantMessageId}/retry | 重试失败或已停止回答 |
 | POST (SSE) | /api/conversations/{id}/messages/{assistantMessageId}/regenerate | 重新生成最后一轮成功回答 |
 | POST | /api/conversations/{id}/generations/{generationId}/cancel | 幂等停止生成 |
+| GET | /api/observability/rag-runs | 按时间、状态、模型、执行模式和用户分页查询问答运行 |
+| GET | /api/observability/rag-runs/{id} | 查询单次运行及阶段瀑布；普通用户仅能访问本人记录 |
+| GET | /api/observability/rag-runs/summary | 查询请求量、成功率、降级率和总耗时/两类 TTFT 的 P50/P95 |
 
 SSE v1 事件为 started、delta、reset、complete、cancelled、error，每条数据都包含 schemaVersion。sources 包含 citationId、knowledgeBaseId、knowledgeBaseName、chunkId、documentId、versionId、documentName、heading、lineStart、lineEnd、similarity、content；与 citations、modelInfo 一起按回答版本保存。/api/questions 保留为阶段 1 评测兼容入口。
 
@@ -165,6 +169,7 @@ SSE v1 事件为 started、delta、reset、complete、cancelled、error，每条
 - 失败版本可能保留 RustFS 文件，进程中断可能留 PROCESSING 记录；都不参与检索。通过管理界面删除文档或知识库时会清理其数据库记录，并尽力清理 RustFS 原文件。
 - 同一文件重复上传会产生新文档；尚无 PDF、文件级重复检测或版本替换。知识库、文档、会话、消息与检索结果均按当前用户隔离，跨用户直接访问统一表现为资源不存在。
 - 当前只有向量检索通道；RRF 已作为稳定融合机制使用，但关键词通道尚未实现。Reranker 默认开启，失败、超时或 noop 时按确定性融合分继续回答。
+- 单次问答 Trace 使用显式上下文跨虚拟线程传播，在请求开始写入 run、回答终态批量写入 stages；`/api/questions` 评测兼容入口不产生 Trace。保留期通过 `observability.retention-days` 配置，默认 30 天。
 - MCP 注册、Schema 校验、只读白名单、超时和输出截断代码已经存在，但默认关闭、允许列表为空且没有面向用户的工具配置，不构成当前产品能力。
 - 本机已有 5432/6379/9000 端口占用时，修改 Compose 映射及对应连接地址。
 - 默认数据库与 RustFS 密码只是本地示例，应在个人 .env 中修改。已有 PostgreSQL volume 修改密码不会自动改变数据库用户密码。

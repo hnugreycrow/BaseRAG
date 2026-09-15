@@ -252,6 +252,9 @@ erDiagram
 
     CONVERSATION ||--o{ MESSAGE : contains
     MESSAGE ||--o{ GENERATION_ATTEMPT : generates
+    USER ||--o{ RAG_RUN : owns
+    MESSAGE ||--o| RAG_RUN : traces
+    RAG_RUN ||--o{ RAG_STAGE_RUN : contains
 ​```
 
 ### 知识库与文档
@@ -269,8 +272,11 @@ erDiagram
 - `conversations`：标题、结构化历史摘要和摘要游标。
 - `messages`：用户消息、Assistant 回答版本、状态和来源快照。
 - `generation_attempts`：主生成、候选切换和引用修复尝试。
+- `rag_runs`：一次回答版本的状态、模型、数量、降级和延迟摘要。
+- `rag_stage_runs`：可并发展示的阶段瀑布、模型尝试和稳定原因码。
 
 旧回答保存当时的 sources、citations 和 modelInfo，不依赖文档当前状态。
+删除会话或消息后，Trace 的业务外键置空并继续保留到 30 天清理期结束；Trace 本身不复制任何业务正文。
 
 ---
 
@@ -448,6 +454,8 @@ SSE v1 事件：
 - 主生成、供应商回退和引用修复分别保存 generation attempt；引用非法的已完成尝试会转为失败记录。
 - 文档后续删除或重新分块不会修改旧回答的来源快照。
 - 每个普通 HTTP 请求通过响应体、响应头和日志共享同一 request ID。
+- 会话问答显式传递线程安全 Trace 上下文；run 在回答版本创建时写入，阶段在终态事务中批量写入，不在 SSE Delta 热路径增加观测写库。
+- 端到端 TTFT 以首个成功发送的非空 Delta 为准，模型 TTFT 以最终有效回答模型尝试的首段内容为准。
 
 ### 可恢复性
 
@@ -459,7 +467,7 @@ SSE v1 事件：
 
 - 密钥只能通过环境变量注入。
 - 日志不得记录密钥或完整敏感正文。
-- 当前没有身份认证，不能用于多用户或公网环境。
+- 当前具备本地多用户认证与数据隔离，但仍不具备 HTTPS、反向代理和公网生产运维能力。
 
 ---
 
