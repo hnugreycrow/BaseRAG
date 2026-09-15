@@ -59,7 +59,7 @@ ai:
   request-timeout-ms: 60000
   providers:
     bailian:
-      url: https://dashscope.aliyuncs.com
+      url: https://llm-vu96ssm0fo582moc.cn-beijing.maas.aliyuncs.com
       api-key: "${BAILIAN_API_KEY:}"
       endpoints:
         chat: /compatible-mode/v1/chat/completions
@@ -99,19 +99,19 @@ ai:
         timeout-ms: 30000
 
   embedding:
-    default-model: qwen-emb-8b
+    default-model: bailian-qwen3.7-embedding
     batch-size: 16
     candidates:
-      - id: qwen-emb-8b
-        provider: siliconflow
-        model: Qwen/Qwen3-Embedding-8B
-        dimension: ${EMBEDDING_DIMENSIONS:1536}
-        priority: 1
       - id: bailian-qwen3.7-embedding
         provider: bailian
         model: qwen3.7-text-embedding
         dimension: 1536
         base-url: "${BAILIAN_EMBEDDING_BASE_URL:}"
+        priority: 1
+      - id: qwen-emb-8b
+        provider: siliconflow
+        model: Qwen/Qwen3-Embedding-8B
+        dimension: 1536
         priority: 2
 
   rerank:

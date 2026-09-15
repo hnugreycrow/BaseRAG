@@ -56,6 +56,7 @@ import software.amazon.awssdk.services.s3.S3Client;
       "baserag.bootstrap-admin.username=integration-admin",
       "baserag.bootstrap-admin.display-name=Integration Admin",
       "baserag.bootstrap-admin.password=integration-password",
+      "ai.embedding.default-model=qwen-emb-8b",
       "ai.embedding.candidates[0].id=qwen-emb-8b",
       "ai.embedding.candidates[0].provider=siliconflow",
       "ai.embedding.candidates[0].model=Qwen/Qwen3-Embedding-8B",
