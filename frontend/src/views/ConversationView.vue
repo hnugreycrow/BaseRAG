@@ -21,6 +21,7 @@ import {
   getErrorMessage,
   listConversations,
   renameConversation,
+  setConversationThinking,
   type AssistantMessage,
   type ConversationDetail,
   type ConversationSummary,
@@ -39,6 +40,8 @@ const conversations = ref<ConversationSummary[]>([])
 const conversation = ref<ConversationDetail | null>(null)
 const searchQuery = ref('')
 const draft = ref('')
+const thinkingEnabled = ref(false)
+const thinkingSaving = ref(false)
 const listLoading = ref(false)
 const detailLoading = ref(false)
 const mobileSidebarOpen = ref(false)
@@ -116,6 +119,8 @@ function makeAssistant(
     active: true,
     status: 'PENDING',
     content: '',
+    thinkingEnabled: thinkingEnabled.value,
+    reasoningContent: '',
     retrievalQuery: null,
     sources: [],
     citations: [],
@@ -146,6 +151,7 @@ async function loadCurrentConversation(id: string) {
   viewedVersions.value = {}
   if (!id) {
     conversation.value = null
+    thinkingEnabled.value = false
     detailLoading.value = false
     return
   }
@@ -155,6 +161,7 @@ async function loadCurrentConversation(id: string) {
     const result = generationStore.mergeIntoDetail(await getConversation(id))
     if (currentConversationId.value !== id) return
     conversation.value = result
+    thinkingEnabled.value = result.thinkingEnabled
     result.turns.forEach((turn) => {
       if (turn.activeAssistantId) viewedVersions.value[turn.user.turnIndex] = turn.activeAssistantId
     })
@@ -181,6 +188,7 @@ function openConversation(id: string) {
 function startNewConversation() {
   mobileSidebarOpen.value = false
   draft.value = ''
+  thinkingEnabled.value = false
   void router.push('/chat')
 }
 
@@ -372,7 +380,8 @@ async function scrollToBottom(smooth = true) {
 
 async function submitQuestion() {
   const content = draft.value.trim()
-  if (!content || generationStore.isActive(currentConversationId.value)) return
+  if (!content || thinkingSaving.value || generationStore.isActive(currentConversationId.value))
+    return
   if (content.length > 2000) {
     ElMessage.warning('问题不能超过 2000 个字符')
     return
@@ -382,7 +391,7 @@ async function submitQuestion() {
   let id = currentConversationId.value
   if (!id) {
     try {
-      const created = await createConversation(content.slice(0, 28))
+      const created = await createConversation(content.slice(0, 28), thinkingEnabled.value)
       id = created.id
       conversation.value = { ...created, turns: [] }
       conversations.value = [created, ...conversations.value]
@@ -420,6 +429,30 @@ async function submitQuestion() {
   await scrollToBottom()
 
   void generationStore.startAsk(id, turn.user, assistant, content)
+}
+
+async function toggleThinking() {
+  if (sending.value || thinkingSaving.value || detailLoading.value) return
+  const previous = thinkingEnabled.value
+  thinkingEnabled.value = !previous
+  const id = currentConversationId.value
+  if (!id) return
+  thinkingSaving.value = true
+  try {
+    const updated = await setConversationThinking(id, thinkingEnabled.value)
+    if (currentConversationId.value === id) {
+      thinkingEnabled.value = updated.thinkingEnabled
+      if (conversation.value?.id === id)
+        conversation.value.thinkingEnabled = updated.thinkingEnabled
+    }
+    const summary = conversations.value.find((item) => item.id === id)
+    if (summary) summary.thinkingEnabled = updated.thinkingEnabled
+  } catch (error) {
+    if (currentConversationId.value === id) thinkingEnabled.value = previous
+    ElMessage.error(getErrorMessage(error))
+  } finally {
+    thinkingSaving.value = false
+  }
 }
 
 async function rerunAnswer(turn: ConversationTurn, mode: 'retry' | 'regenerate') {
@@ -476,6 +509,13 @@ watch(
 // 只跟随当前会话的增量滚动，后台会话继续生成但不会干扰正在查看的内容。
 watch(
   () => currentTask.value?.assistant.content.length,
+  () => {
+    if (sending.value) void scrollToBottom()
+  },
+)
+
+watch(
+  () => currentTask.value?.assistant.reasoningContent.length,
   () => {
     if (sending.value) void scrollToBottom()
   },
@@ -579,6 +619,34 @@ onBeforeUnmount(() => {
             <div v-if="currentAssistant(turn)" class="assistant-row">
               <div class="assistant-avatar" aria-hidden="true"><span>B</span></div>
               <div class="assistant-content">
+                <div
+                  v-if="
+                    currentAssistant(turn)?.reasoningContent &&
+                    ['PENDING', 'STREAMING'].includes(currentAssistant(turn)?.status || '')
+                  "
+                  class="reasoning-panel is-live"
+                  aria-label="正在生成思考内容"
+                >
+                  <strong>深度思考中</strong>
+                  <div class="reasoning-body">{{ currentAssistant(turn)?.reasoningContent }}</div>
+                </div>
+                <details
+                  v-else-if="currentAssistant(turn)?.reasoningContent"
+                  class="reasoning-panel"
+                >
+                  <summary>深度思考</summary>
+                  <div class="reasoning-body">{{ currentAssistant(turn)?.reasoningContent }}</div>
+                </details>
+                <div
+                  v-else-if="
+                    currentAssistant(turn)?.thinkingEnabled &&
+                    currentAssistant(turn)?.status === 'COMPLETED' &&
+                    currentAssistant(turn)?.modelInfo
+                  "
+                  class="reasoning-unavailable"
+                >
+                  本次模型未返回思考内容
+                </div>
                 <div
                   v-if="currentAssistant(turn)?.content"
                   class="answer-text"
@@ -791,6 +859,20 @@ onBeforeUnmount(() => {
       </div>
 
       <footer class="composer-area">
+        <div class="composer-options">
+          <button
+            type="button"
+            class="thinking-toggle"
+            :class="{ 'is-enabled': thinkingEnabled }"
+            :disabled="sending || thinkingSaving || detailLoading"
+            :aria-pressed="thinkingEnabled"
+            aria-label="深度思考"
+            @click="toggleThinking"
+          >
+            <span class="thinking-toggle-mark" aria-hidden="true">✦</span>
+            深度思考
+          </button>
+        </div>
         <div class="composer-shell" :class="{ 'is-busy': sending }">
           <el-input
             v-model="draft"
@@ -816,7 +898,7 @@ onBeforeUnmount(() => {
             v-else
             type="button"
             class="send-button"
-            :disabled="!draft.trim()"
+            :disabled="!draft.trim() || thinkingSaving"
             aria-label="发送问题"
             @click="submitQuestion"
           >

@@ -39,6 +39,9 @@ public class GenerationAttempt {
   /** 本次尝试生成的完整或部分内容。 */
   private String content;
 
+  /** 当前模型尝试返回的思考内容。 */
+  private String reasoningContent;
+
   /** 模型返回的生成结束原因。 */
   private String finishReason;
 

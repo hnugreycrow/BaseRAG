@@ -35,7 +35,7 @@ public final class RagRunResponses {
    * @param degraded 是否发生过降级
    * @param errorCode 可选错误码
    * @param startedAt 开始时间
-   * @param firstTokenAt 首个成功发送 Delta 的时间
+   * @param firstTokenAt 首个成功发送思考或正文增量的时间
    * @param completedAt 完成时间
    * @param totalMs 总耗时
    * @param endToEndTtftMs 端到端首 Token 耗时

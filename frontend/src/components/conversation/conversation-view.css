@@ -321,6 +321,64 @@
   color: #858b96;
   font-size: 12px;
 }
+
+.reasoning-panel {
+  margin-bottom: 14px;
+  padding: 11px 13px;
+  color: #526080;
+  font-size: 13px;
+  line-height: 1.6;
+  background: #f3f6fc;
+  border: 1px solid #e4eaf7;
+  border-radius: 10px;
+}
+.reasoning-panel summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.reasoning-panel.is-live strong {
+  font-weight: 600;
+}
+.reasoning-body {
+  max-height: 320px;
+  overflow: auto;
+  margin-top: 8px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.reasoning-unavailable {
+  margin-bottom: 10px;
+  color: #8b919b;
+  font-size: 12px;
+}
+.composer-options {
+  width: min(800px, 100%);
+  display: flex;
+  margin: 0 auto 8px;
+}
+.thinking-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  color: #697284;
+  font-size: 12px;
+  background: #f5f6f8;
+  border: 1px solid #e5e8ee;
+  border-radius: 8px;
+}
+.thinking-toggle.is-enabled {
+  color: #3159ca;
+  background: #edf2ff;
+  border-color: #c9d7ff;
+}
+.thinking-toggle:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.thinking-toggle-mark {
+  font-size: 14px;
+}
 .thinking-state > span:nth-child(3) {
   margin-right: 5px;
 }

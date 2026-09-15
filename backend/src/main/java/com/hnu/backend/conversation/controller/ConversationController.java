@@ -2,7 +2,9 @@ package com.hnu.backend.conversation.controller;
 
 import com.hnu.backend.auth.service.CurrentUserService;
 import com.hnu.backend.conversation.dto.ActionRequest;
+import com.hnu.backend.conversation.dto.CreateConversationRequest;
 import com.hnu.backend.conversation.dto.MessageRequest;
+import com.hnu.backend.conversation.dto.ThinkingRequest;
 import com.hnu.backend.conversation.dto.TitleRequest;
 import com.hnu.backend.conversation.service.ConversationService;
 import com.hnu.backend.conversation.vo.ConversationResponses;
@@ -40,8 +42,12 @@ public class ConversationController {
   /** 创建会话。 */
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
-  public ConversationResponses.Summary create(@Valid @RequestBody TitleRequest request) {
-    return service.create(currentUsers.require().getId(), request.title());
+  public ConversationResponses.Summary create(
+      @Valid @RequestBody CreateConversationRequest request) {
+    return service.create(
+        currentUsers.require().getId(),
+        request.title(),
+        Boolean.TRUE.equals(request.thinkingEnabled()));
   }
 
   /** 按标题关键字查询会话；返回数量最多为服务层允许的上限。 */
@@ -62,6 +68,14 @@ public class ConversationController {
   public ConversationResponses.Summary rename(
       @PathVariable UUID id, @Valid @RequestBody TitleRequest request) {
     return service.rename(currentUsers.require().getId(), id, request.title());
+  }
+
+  /** 更新本会话后续回答使用的深度思考选择。 */
+  @PatchMapping("/{id}/thinking")
+  public ConversationResponses.Summary setThinking(
+      @PathVariable UUID id, @Valid @RequestBody ThinkingRequest request) {
+    return service.setThinkingEnabled(
+        currentUsers.require().getId(), id, request.thinkingEnabled());
   }
 
   /** 删除没有正在生成回答的会话。 */

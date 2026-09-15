@@ -143,9 +143,14 @@ public class ConversationService {
    * @return 新会话摘要
    */
   public ConversationResponses.Summary create(UUID ownerId, String rawTitle) {
+    return create(ownerId, rawTitle, false);
+  }
+
+  public ConversationResponses.Summary create(
+      UUID ownerId, String rawTitle, boolean thinkingEnabled) {
     String title = normalizeTitle(rawTitle);
     UUID id = UUID.randomUUID();
-    conversations.insert(ownerId, id, title);
+    conversations.insert(ownerId, id, title, thinkingEnabled);
     return summary(require(ownerId, id));
   }
 
@@ -207,6 +212,7 @@ public class ConversationService {
     return new ConversationResponses.Detail(
         conversation.getId(),
         conversation.getTitle(),
+        conversation.isThinkingEnabled(),
         conversation.getCreatedAt(),
         conversation.getUpdatedAt(),
         List.copyOf(turns));
@@ -223,6 +229,13 @@ public class ConversationService {
   public ConversationResponses.Summary rename(UUID ownerId, UUID id, String rawTitle) {
     require(ownerId, id);
     conversations.rename(ownerId, id, normalizeTitle(rawTitle));
+    return summary(require(ownerId, id));
+  }
+
+  /** 更新会话后续回答的深度思考选择；运行中的回答沿用其创建时的快照。 */
+  public ConversationResponses.Summary setThinkingEnabled(UUID ownerId, UUID id, boolean enabled) {
+    require(ownerId, id);
+    conversations.setThinkingEnabled(ownerId, id, enabled);
     return summary(require(ownerId, id));
   }
 
@@ -301,6 +314,7 @@ public class ConversationService {
                 Message user = userMessage(conversationId, clientMessageId, turn, question);
                 messages.insert(user);
                 Message assistant = assistantMessage(conversationId, null, turn, 1, user.getId());
+                assistant.setThinkingEnabled(conversation.isThinkingEnabled());
                 messages.insert(assistant);
                 RagRunTrace trace =
                     traces.start(ownerId, conversationId, user.getId(), assistant.getId(), timing);
@@ -437,6 +451,7 @@ public class ConversationService {
                         user.getTurnIndex(),
                         messages.nextVariant(ownerId, user.getId()),
                         user.getId());
+                value.setThinkingEnabled(conversation.isThinkingEnabled());
                 messages.insert(value);
                 RagRunTrace trace =
                     traces.start(ownerId, conversationId, user.getId(), value.getId(), timing);
@@ -680,7 +695,11 @@ public class ConversationService {
       active.assistant.setRetrievalQuery(standaloneQuestion);
       active.assistant.setSourcesJson(json.writeValueAsString(prompt.sources()));
       AnswerResult answer =
-          answers.execute(prompt, new ConversationAnswerObserver(active), active.control);
+          answers.execute(
+              prompt,
+              new ConversationAnswerObserver(active),
+              active.control,
+              active.assistant.isThinkingEnabled());
       complete(active, answer.content(), answer.citations(), answer.generation());
     } catch (ApiException e) {
       if (active.control.cancelled() || "GENERATION_CANCELLED".equals(e.code()))
@@ -733,7 +752,11 @@ public class ConversationService {
     promptSpan.success(0);
     active.trace.evidenceCount(0);
     AnswerResult answer =
-        answers.execute(prompt, new ConversationAnswerObserver(active), active.control);
+        answers.execute(
+            prompt,
+            new ConversationAnswerObserver(active),
+            active.control,
+            active.assistant.isThinkingEnabled());
     complete(active, answer.content(), answer.citations(), answer.generation());
   }
 
@@ -763,6 +786,13 @@ public class ConversationService {
     @Override
     public void started(AnswerGenerator.ModelTarget target, AnswerGenerator.AttemptReason reason) {
       ensureNotCancelled(active);
+      if (active.attemptCounter.get() > 0 && active.reasoningBuffer.length() > 0) {
+        active.reasoningBuffer.setLength(0);
+        messages.checkpointReasoning(active.ownerId, active.assistant.getId(), "");
+        active.lastCheckpointLength = active.buffer.length();
+        active.lastCheckpointAt = System.currentTimeMillis();
+        send(active.emitter, "reset", event("reason", "PROVIDER_FALLBACK"));
+      }
       active.currentAttemptReason = reason;
       if (reason != AnswerGenerator.AttemptReason.PRIMARY) active.trace.markDegraded();
       int index = active.attemptCounter.incrementAndGet();
@@ -780,6 +810,7 @@ public class ConversationService {
       attempt.setModel(target.model());
       attempt.setStatus("STREAMING");
       attempt.setContent("");
+      attempt.setReasoningContent("");
       attempts.insert(attempt);
       active.currentAttemptId = attempt.getId();
       messages.setModelInfo(
@@ -806,7 +837,17 @@ public class ConversationService {
       if (active.currentModelSpan != null) active.currentModelSpan.firstContent();
       active.buffer.append(text);
       send(active.emitter, "delta", event("text", text));
-      // 只有 SSE 发送成功才算用户真正看到首个 Delta；断连抛错时不会污染端到端 TTFT。
+      // 只有 SSE 发送成功才算用户真正看到首个增量。
+      active.trace.endToEndDeltaSent();
+      checkpoint(active);
+    }
+
+    @Override
+    public void reasoningDelta(String text) {
+      ensureNotCancelled(active);
+      if (active.currentModelSpan != null) active.currentModelSpan.firstContent();
+      active.reasoningBuffer.append(text);
+      send(active.emitter, "reasoning_delta", event("text", text));
       active.trace.endToEndDeltaSent();
       checkpoint(active);
     }
@@ -815,6 +856,8 @@ public class ConversationService {
     @Override
     public void completed(AnswerGenerator.ModelTarget target, String content, String finishReason) {
       attempts.complete(active.ownerId, active.currentAttemptId, content, finishReason);
+      attempts.saveReasoning(
+          active.ownerId, active.currentAttemptId, active.reasoningBuffer.toString());
       if (active.currentModelSpan != null) {
         active.currentModelSpan.success(
             1, active.currentAttemptReason == null ? null : active.currentAttemptReason.name());
@@ -837,6 +880,8 @@ public class ConversationService {
             partialContent,
             error.code(),
             error.getMessage());
+        attempts.saveReasoning(
+            active.ownerId, active.currentAttemptId, active.reasoningBuffer.toString());
       }
     }
 
@@ -871,7 +916,9 @@ public class ConversationService {
       if (!repairScheduled) return;
       // reset 之前同步清空数据库和检查点游标，避免修复流继续沿用首次正文的长度基线。
       active.buffer.setLength(0);
+      active.reasoningBuffer.setLength(0);
       messages.checkpoint(active.ownerId, active.assistant.getId(), "");
+      messages.checkpointReasoning(active.ownerId, active.assistant.getId(), "");
       active.lastCheckpointLength = 0;
       active.lastCheckpointAt = System.currentTimeMillis();
       send(active.emitter, "reset", event("reason", reasonCode));
@@ -885,12 +932,18 @@ public class ConversationService {
    */
   private void checkpoint(ActiveGeneration active) {
     long now = System.currentTimeMillis();
-    if (active.buffer.length() - active.lastCheckpointLength >= config.getCheckpointChars()
+    int generatedChars = active.buffer.length() + active.reasoningBuffer.length();
+    if (generatedChars - active.lastCheckpointLength >= config.getCheckpointChars()
         || now - active.lastCheckpointAt >= config.getCheckpointIntervalMs()) {
       messages.checkpoint(active.ownerId, active.assistant.getId(), active.buffer.toString());
-      if (active.currentAttemptId != null)
+      messages.checkpointReasoning(
+          active.ownerId, active.assistant.getId(), active.reasoningBuffer.toString());
+      if (active.currentAttemptId != null) {
         attempts.checkpoint(active.ownerId, active.currentAttemptId, active.buffer.toString());
-      active.lastCheckpointLength = active.buffer.length();
+        attempts.checkpointReasoning(
+            active.ownerId, active.currentAttemptId, active.reasoningBuffer.toString());
+      }
+      active.lastCheckpointLength = generatedChars;
       active.lastCheckpointAt = now;
     }
   }
@@ -905,9 +958,12 @@ public class ConversationService {
    */
   private void failCurrentAttempt(
       ActiveGeneration active, String status, String code, String message) {
-    if (active.currentAttemptId != null)
+    if (active.currentAttemptId != null) {
       attempts.fail(
           active.ownerId, active.currentAttemptId, status, active.buffer.toString(), code, message);
+      attempts.saveReasoning(
+          active.ownerId, active.currentAttemptId, active.reasoningBuffer.toString());
+    }
   }
 
   /**
@@ -949,6 +1005,9 @@ public class ConversationService {
                     content,
                     json.writeValueAsString(citations),
                     modelInfo);
+            if (changed > 0)
+              messages.saveReasoning(
+                  active.ownerId, active.generationId, active.reasoningBuffer.toString());
             if (changed > 0) conversations.touch(active.ownerId, active.conversation.getId());
             persistenceSpan.success(changed);
             // Trace 阶段批量写入与回答终态共享事务，任一失败都不会留下互相矛盾的状态。
@@ -977,6 +1036,9 @@ public class ConversationService {
             int changed =
                 messages.cancelRunning(
                     active.ownerId, active.generationId, active.conversation.getId(), content);
+            if (changed > 0)
+              messages.saveReasoning(
+                  active.ownerId, active.generationId, active.reasoningBuffer.toString());
             attempts.cancelRunning(active.ownerId, active.generationId);
             if (changed > 0) conversations.touch(active.ownerId, active.conversation.getId());
             persistenceSpan.success(changed);
@@ -1008,6 +1070,8 @@ public class ConversationService {
                 messages.terminalFailure(
                     active.ownerId, active.generationId, "FAILED", content, code, message);
             if (changed > 0) {
+              messages.saveReasoning(
+                  active.ownerId, active.generationId, active.reasoningBuffer.toString());
               failCurrentAttempt(active, "FAILED", code, message);
               conversations.touch(active.ownerId, active.conversation.getId());
             }
@@ -1183,6 +1247,8 @@ public class ConversationService {
         message.isActive(),
         message.getStatus(),
         message.getContent(),
+        message.isThinkingEnabled(),
+        message.getReasoningContent(),
         message.getRetrievalQuery(),
         sources,
         citations,
@@ -1228,7 +1294,11 @@ public class ConversationService {
    */
   private ConversationResponses.Summary summary(Conversation value) {
     return new ConversationResponses.Summary(
-        value.getId(), value.getTitle(), value.getCreatedAt(), value.getUpdatedAt());
+        value.getId(),
+        value.getTitle(),
+        value.isThinkingEnabled(),
+        value.getCreatedAt(),
+        value.getUpdatedAt());
   }
 
   /**
@@ -1306,6 +1376,7 @@ public class ConversationService {
     value.setReplyToId(replyTo);
     value.setStatus("PENDING");
     value.setContent("");
+    value.setReasoningContent("");
     value.setSourcesJson("[]");
     value.setCitationsJson("[]");
     return value;
@@ -1343,6 +1414,7 @@ public class ConversationService {
     private final AtomicBoolean running = new AtomicBoolean();
     private final AtomicInteger attemptCounter = new AtomicInteger();
     private final StringBuilder buffer = new StringBuilder();
+    private final StringBuilder reasoningBuffer = new StringBuilder();
     private volatile UUID currentAttemptId;
     private volatile AnswerGenerator.AttemptReason currentAttemptReason;
     private volatile RagRunTrace.Span currentModelSpan;

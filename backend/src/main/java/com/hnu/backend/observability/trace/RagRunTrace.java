@@ -136,7 +136,7 @@ public final class RagRunTrace {
     if (enabled && !sealed) degraded = true;
   }
 
-  /** 在第一条非空 Delta 成功写入 SSE 后记录端到端首 Token。 */
+  /** 在第一条非空思考或正文增量成功写入 SSE 后记录端到端首内容。 */
   public synchronized void endToEndDeltaSent() {
     if (enabled && !sealed && firstDeltaNanos == null) firstDeltaNanos = System.nanoTime();
   }
@@ -411,7 +411,7 @@ public final class RagRunTrace {
    * @param evidenceCount 最终证据数
    * @param degraded 是否发生降级
    * @param errorCode 可选运行错误码
-   * @param firstTokenAt 首个成功发送 Delta 的时间
+   * @param firstTokenAt 首个成功发送思考或正文增量的时间
    * @param completedAt 终态时间
    * @param totalMs 总耗时
    * @param endToEndTtftMs 端到端首 Token 耗时

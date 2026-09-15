@@ -28,6 +28,29 @@ public interface GenerationAttemptMapper extends BaseMapper<GenerationAttempt> {
             .set(GenerationAttempt::getContent, content));
   }
 
+  /** 保存运行中模型尝试的思考内容检查点。 */
+  default int checkpointReasoning(UUID ownerId, UUID id, String reasoning) {
+    return update(
+        Wrappers.<GenerationAttempt>lambdaUpdate()
+            .eq(GenerationAttempt::getId, id)
+            .apply(
+                "assistant_message_id IN (SELECT m.id FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE c.owner_id = {0})",
+                ownerId)
+            .eq(GenerationAttempt::getStatus, "STREAMING")
+            .set(GenerationAttempt::getReasoningContent, reasoning));
+  }
+
+  /** 在模型尝试终态后保存该尝试的完整或部分思考内容。 */
+  default int saveReasoning(UUID ownerId, UUID id, String reasoning) {
+    return update(
+        Wrappers.<GenerationAttempt>lambdaUpdate()
+            .eq(GenerationAttempt::getId, id)
+            .apply(
+                "assistant_message_id IN (SELECT m.id FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE c.owner_id = {0})",
+                ownerId)
+            .set(GenerationAttempt::getReasoningContent, reasoning));
+  }
+
   /**
    * 将流式尝试标记为成功完成。
    *

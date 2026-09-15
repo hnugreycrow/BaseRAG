@@ -57,8 +57,8 @@ const userOptions = computed(() => {
 
 const latencyRows = computed(() => [
   { label: '总耗时', value: aggregate.value?.totalMs },
-  { label: '首字耗时', value: aggregate.value?.endToEndTtftMs },
-  { label: '模型首字耗时', value: aggregate.value?.modelTtftMs },
+  { label: '首字耗时（思考或正文）', value: aggregate.value?.endToEndTtftMs },
+  { label: '模型首字耗时（思考或正文）', value: aggregate.value?.modelTtftMs },
 ])
 
 async function searchUsers(query = '') {

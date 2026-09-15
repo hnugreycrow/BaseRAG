@@ -45,6 +45,12 @@ public class Message {
   /** 消息正文或流式生成的已保存部分。 */
   private String content;
 
+  /** 创建回答版本时固定的深度思考选择。 */
+  private boolean thinkingEnabled;
+
+  /** 模型返回的思考内容，与最终回答正文分开保存。 */
+  private String reasoningContent;
+
   /** 规划阶段生成并实际用于检索的问题。 */
   private String retrievalQuery;
 

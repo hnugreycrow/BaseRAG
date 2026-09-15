@@ -3,6 +3,7 @@ import { ApiRequestError, getCsrfToken, request } from './http'
 export interface ConversationSummary {
   id: string
   title: string
+  thinkingEnabled: boolean
   createdAt: string
   updatedAt: string
 }
@@ -45,6 +46,8 @@ export interface AssistantMessage {
   active: boolean
   status: AssistantStatus
   content: string
+  thinkingEnabled: boolean
+  reasoningContent: string
   retrievalQuery: string | null
   sources: AnswerSource[]
   citations: string[]
@@ -98,6 +101,7 @@ interface TerminalEvent {
 export type ConversationStreamEvent =
   | { type: 'started'; data: StartedEvent }
   | { type: 'delta'; data: DeltaEvent }
+  | { type: 'reasoning_delta'; data: DeltaEvent }
   | { type: 'reset'; data: ResetEvent }
   | { type: 'complete' | 'cancelled' | 'error'; data: TerminalEvent }
 
@@ -108,8 +112,20 @@ export function listConversations(query = '', limit = 100) {
   })
 }
 
-export function createConversation(title: string) {
-  return request<ConversationSummary>({ url: '/conversations', method: 'post', data: { title } })
+export function createConversation(title: string, thinkingEnabled = false) {
+  return request<ConversationSummary>({
+    url: '/conversations',
+    method: 'post',
+    data: { title, thinkingEnabled },
+  })
+}
+
+export function setConversationThinking(id: string, thinkingEnabled: boolean) {
+  return request<ConversationSummary>({
+    url: `/conversations/${id}/thinking`,
+    method: 'patch',
+    data: { thinkingEnabled },
+  })
 }
 
 export function getConversation(id: string) {

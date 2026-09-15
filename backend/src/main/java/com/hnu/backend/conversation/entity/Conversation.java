@@ -24,6 +24,9 @@ public class Conversation {
   /** 会话标题。 */
   private String title;
 
+  /** 当前会话的深度思考选择。 */
+  private boolean thinkingEnabled;
+
   /** 早期对话摘要的 JSON 表示。 */
   @TableField(
       value = "summary",

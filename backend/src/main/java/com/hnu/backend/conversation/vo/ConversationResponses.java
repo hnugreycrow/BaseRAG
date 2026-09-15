@@ -20,7 +20,11 @@ public final class ConversationResponses {
    * @param updatedAt 最近更新时间
    */
   public record Summary(
-      UUID id, String title, OffsetDateTime createdAt, OffsetDateTime updatedAt) {}
+      UUID id,
+      String title,
+      boolean thinkingEnabled,
+      OffsetDateTime createdAt,
+      OffsetDateTime updatedAt) {}
 
   /**
    * 包含全部对话轮次的会话详情。
@@ -34,6 +38,7 @@ public final class ConversationResponses {
   public record Detail(
       UUID id,
       String title,
+      boolean thinkingEnabled,
       OffsetDateTime createdAt,
       OffsetDateTime updatedAt,
       List<Turn> turns) {}
@@ -86,6 +91,8 @@ public final class ConversationResponses {
       boolean active,
       String status,
       String content,
+      boolean thinkingEnabled,
+      String reasoningContent,
       String retrievalQuery,
       List<SourceResponse> sources,
       List<String> citations,

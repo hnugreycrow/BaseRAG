@@ -2,6 +2,7 @@ package com.hnu.backend.conversation.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -14,6 +15,7 @@ import com.hnu.backend.conversation.mapper.ConversationMapper;
 import com.hnu.backend.conversation.mapper.GenerationAttemptMapper;
 import com.hnu.backend.conversation.mapper.MessageMapper;
 import com.hnu.backend.model.client.ChatClient;
+import com.hnu.backend.model.client.ChatGenerationRequest;
 import com.hnu.backend.model.config.AiProperties;
 import com.hnu.backend.observability.service.RagTraceManager;
 import com.hnu.backend.observability.trace.RagRunTrace;
@@ -100,6 +102,41 @@ class ConversationServiceCancellationTest {
   }
 
   @Test
+  void returnsPersistedThinkingChoiceAndReasoningForHistoricalVersions() {
+    UUID conversationId = UUID.randomUUID();
+    Conversation conversation = new Conversation();
+    conversation.setId(conversationId);
+    conversation.setOwnerId(ownerId);
+    conversation.setThinkingEnabled(true);
+    Message user = new Message();
+    user.setId(UUID.randomUUID());
+    user.setRole("USER");
+    user.setTurnIndex(1);
+    user.setContent("问题");
+    Message assistant = new Message();
+    assistant.setId(UUID.randomUUID());
+    assistant.setRole("ASSISTANT");
+    assistant.setReplyToId(user.getId());
+    assistant.setTurnIndex(1);
+    assistant.setVariantIndex(1);
+    assistant.setActive(true);
+    assistant.setStatus("COMPLETED");
+    assistant.setContent("答案");
+    assistant.setThinkingEnabled(true);
+    assistant.setReasoningContent("模型思考内容");
+    assistant.setSourcesJson("[]");
+    assistant.setCitationsJson("[]");
+    when(conversations.find(ownerId, conversationId)).thenReturn(conversation);
+    when(messages.list(ownerId, conversationId)).thenReturn(List.of(user, assistant));
+
+    var detail = service.get(ownerId, conversationId);
+    assertTrue(detail.thinkingEnabled());
+    var restored = detail.turns().getFirst().assistantVersions().getFirst();
+    assertTrue(restored.thinkingEnabled());
+    assertEquals("模型思考内容", restored.reasoningContent());
+  }
+
+  @Test
   void cancelsPersistedRunningGenerationWhenInMemoryTaskIsMissing() {
     UUID conversationId = UUID.randomUUID();
     UUID generationId = UUID.randomUUID();
@@ -144,6 +181,53 @@ class ConversationServiceCancellationTest {
 
     assertEquals("GENERATION_NOT_FOUND", error.code());
     verify(tx, never()).executeWithoutResult(any());
+  }
+
+  @Test
+  void thinkingFallbackDiscardsThePreviousModelsReasoningBeforeSavingTheAnswer() {
+    UUID conversationId = UUID.randomUUID();
+    Conversation conversation = new Conversation();
+    conversation.setId(conversationId);
+    conversation.setOwnerId(ownerId);
+    conversation.setThinkingEnabled(true);
+    when(conversations.find(ownerId, conversationId)).thenReturn(conversation);
+    when(messages.nextTurn(ownerId, conversationId)).thenReturn(1);
+    when(rag.getMaxQuestionChars()).thenReturn(2000);
+    when(conversationContext.prepare(any(Conversation.class), eq(1), eq("你好")))
+        .thenReturn(preparedSystemChat("你好"));
+    when(messages.markStreaming(eq(ownerId), any(UUID.class))).thenReturn(1);
+    when(messages.complete(eq(ownerId), any(UUID.class), eq("答案"), eq("[]"), anyString()))
+        .thenReturn(1);
+    AiProperties.ModelTarget primary =
+        new AiProperties.ModelTarget(
+            "primary", "deepseek", "model", "http://localhost", "/chat", "", 1000, 0, true);
+    AiProperties.ModelTarget fallback =
+        new AiProperties.ModelTarget(
+            "fallback", "bailian", "model", "http://localhost", "/chat", "", 1000, 0, true);
+    when(chat.stream(any(ChatGenerationRequest.class), any(), any()))
+        .thenAnswer(
+            invocation -> {
+              ChatGenerationRequest request = invocation.getArgument(0);
+              assertTrue(request.thinkingEnabled());
+              ChatClient.StreamObserver observer = invocation.getArgument(1);
+              observer.started(primary, "PRIMARY");
+              observer.reasoningDelta("旧思考");
+              observer.failed(primary, "", ApiException.upstream("MODEL_UNAVAILABLE", "模型失败"));
+              observer.started(fallback, "PROVIDER_FALLBACK");
+              observer.reasoningDelta("新思考");
+              observer.delta("答案");
+              observer.completed(fallback, "答案", "stop");
+              return new ChatClient.Generation("答案", "fallback", "bailian", "model");
+            });
+    runTransactionsWithResultImmediately();
+    runTransactionsImmediately();
+
+    service.ask(ownerId, conversationId, UUID.randomUUID(), "你好", "request-id");
+
+    verify(messages, timeout(2000)).checkpointReasoning(eq(ownerId), any(UUID.class), eq(""));
+    verify(messages, timeout(2000)).saveReasoning(eq(ownerId), any(UUID.class), eq("新思考"));
+    verify(messages, timeout(2000))
+        .complete(eq(ownerId), any(UUID.class), eq("答案"), eq("[]"), anyString());
   }
 
   @Test

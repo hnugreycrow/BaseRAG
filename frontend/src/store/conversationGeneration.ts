@@ -76,8 +76,16 @@ export const useConversationGenerationStore = defineStore('conversation-generati
       return
     }
 
+    if (event.type === 'reasoning_delta') {
+      task.assistant.status = 'STREAMING'
+      task.assistant.reasoningContent += event.data.text
+      if (task.phase !== 'stopping') task.phase = 'streaming'
+      return
+    }
+
     if (event.type === 'reset') {
       task.assistant.content = ''
+      task.assistant.reasoningContent = ''
       return
     }
 

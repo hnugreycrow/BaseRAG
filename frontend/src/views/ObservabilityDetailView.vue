@@ -117,11 +117,11 @@ onMounted(loadDetail)
         </div>
         <dl>
           <div>
-            <dt>首字耗时</dt>
+            <dt>首字耗时（思考或正文）</dt>
             <dd>{{ formatDuration(detail.run.endToEndTtftMs) }}</dd>
           </div>
           <div>
-            <dt>模型首字耗时</dt>
+            <dt>模型首字耗时（思考或正文）</dt>
             <dd>{{ formatDuration(detail.run.modelTtftMs) }}</dd>
           </div>
           <div>

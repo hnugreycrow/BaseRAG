@@ -19,10 +19,15 @@ public interface ConversationMapper extends BaseMapper<Conversation> {
    * @return 受影响行数
    */
   default int insert(UUID ownerId, UUID id, String title) {
+    return insert(ownerId, id, title, false);
+  }
+
+  default int insert(UUID ownerId, UUID id, String title, boolean thinkingEnabled) {
     Conversation conversation = new Conversation();
     conversation.setId(id);
     conversation.setOwnerId(ownerId);
     conversation.setTitle(title);
+    conversation.setThinkingEnabled(thinkingEnabled);
     return insert(conversation);
   }
 
@@ -75,6 +80,16 @@ public interface ConversationMapper extends BaseMapper<Conversation> {
             .eq(Conversation::getId, id)
             .eq(Conversation::getOwnerId, ownerId)
             .set(Conversation::getTitle, title)
+            .setSql("updated_at = now()"));
+  }
+
+  /** 按所属用户更新会话的深度思考选择。 */
+  default int setThinkingEnabled(UUID ownerId, UUID id, boolean enabled) {
+    return update(
+        Wrappers.<Conversation>lambdaUpdate()
+            .eq(Conversation::getId, id)
+            .eq(Conversation::getOwnerId, ownerId)
+            .set(Conversation::isThinkingEnabled, enabled)
             .setSql("updated_at = now()"));
   }
 

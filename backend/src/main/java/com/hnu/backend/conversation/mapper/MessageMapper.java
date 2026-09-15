@@ -215,6 +215,29 @@ public interface MessageMapper extends BaseMapper<Message> {
             .setSql("updated_at = now()"));
   }
 
+  /** 保存运行中回答的思考内容检查点。 */
+  default int checkpointReasoning(UUID ownerId, UUID id, String reasoning) {
+    return update(
+        Wrappers.<Message>lambdaUpdate()
+            .eq(Message::getId, id)
+            .apply(
+                "conversation_id IN (SELECT id FROM conversations WHERE owner_id = {0})", ownerId)
+            .in(Message::getStatus, "PENDING", "STREAMING")
+            .set(Message::getReasoningContent, reasoning)
+            .setSql("updated_at = now()"));
+  }
+
+  /** 与回答终态更新同一事务保存最终或部分思考内容。 */
+  default int saveReasoning(UUID ownerId, UUID id, String reasoning) {
+    return update(
+        Wrappers.<Message>lambdaUpdate()
+            .eq(Message::getId, id)
+            .eq(Message::getRole, "ASSISTANT")
+            .apply(
+                "conversation_id IN (SELECT id FROM conversations WHERE owner_id = {0})", ownerId)
+            .set(Message::getReasoningContent, reasoning));
+  }
+
   /**
    * 将运行中的助手回答原子地标记为完成并保存最终元数据。
    *

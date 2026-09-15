@@ -43,12 +43,15 @@ class RagRunTraceTest {
     RagRunTrace trace = trace();
     RagRunTrace.Span failed =
         trace.start(RagStageName.ANSWER_MODEL, null, 1).model("first", "test", "first");
+    failed.firstContent();
+    trace.endToEndDeltaSent();
     failed.failed("MODEL_TIMEOUT");
     trace.markDegraded();
     RagRunTrace.Span answer =
         trace.start(RagStageName.ANSWER_MODEL, null, 1).model("final", "test", "final");
     answer.firstContent();
     trace.endToEndDeltaSent();
+    answer.firstContent();
     trace.endToEndDeltaSent();
     answer.success(1, "PROVIDER_FALLBACK");
     trace.finalAnswer(answer, "final", "test", "final");
@@ -60,6 +63,22 @@ class RagRunTraceTest {
     assertNotNull(snapshot.modelTtftMs());
     assertEquals("final", snapshot.modelId());
     assertTrue(snapshot.degraded());
+  }
+
+  @Test
+  void recordsFirstContentWhenOnlyReasoningWasSent() {
+    RagRunTrace trace = trace();
+    RagRunTrace.Span answer =
+        trace.start(RagStageName.ANSWER_MODEL, null, 1).model("reasoning", "test", "reasoning");
+    answer.firstContent();
+    trace.endToEndDeltaSent();
+    answer.success(0);
+    trace.finalAnswer(answer, "reasoning", "test", "reasoning");
+
+    RagRunTrace.RunSnapshot snapshot = trace.finish(RagRunStatus.COMPLETED, null);
+
+    assertNotNull(snapshot.endToEndTtftMs());
+    assertNotNull(snapshot.modelTtftMs());
   }
 
   @Test
