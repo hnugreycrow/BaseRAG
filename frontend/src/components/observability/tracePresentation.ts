@@ -1,0 +1,128 @@
+import type {
+  RagExecutionMode,
+  RagRunStatus,
+  RagStageName,
+  RagStageRun,
+  RagStageStatus,
+} from '../../api'
+
+export const RUN_STATUS_LABELS: Record<RagRunStatus, string> = {
+  RUNNING: '运行中',
+  COMPLETED: '已完成',
+  FAILED: '失败',
+  CANCELLED: '已取消',
+  INTERRUPTED: '已中断',
+}
+
+export const STAGE_STATUS_LABELS: Record<RagStageStatus, string> = {
+  SUCCESS: '成功',
+  DEGRADED: '已降级',
+  FAILED: '失败',
+  CANCELLED: '已取消',
+  SKIPPED: '已跳过',
+}
+
+export const EXECUTION_MODE_LABELS: Record<RagExecutionMode, string> = {
+  FULL_PIPELINE: '完整链路',
+  SYSTEM_CHAT: '系统闲聊',
+  FAST_PATH: '快速路径',
+}
+
+export const STAGE_NAME_LABELS: Record<RagStageName, string> = {
+  MEMORY_LOAD: '加载会话记忆',
+  MEMORY_SUMMARY: '生成记忆摘要',
+  QUERY_PLANNING: '问题改写与拆分',
+  INTENT_ROUTING: '意图路由',
+  SUBQUESTION_EXECUTION: '执行子问题',
+  EMBEDDING: '生成向量',
+  DATABASE_RETRIEVAL: '数据库检索',
+  MCP_EXECUTION: '执行 MCP 工具',
+  CANDIDATE_MERGE: '合并候选',
+  DEDUPLICATION: '候选去重',
+  RERANK: '候选重排',
+  PROMPT_ASSEMBLY: '组装上下文',
+  ANSWER_MODEL: '生成回答',
+  CITATION_VALIDATION: '校验引用',
+  RESULT_PERSISTENCE: '保存结果',
+}
+
+/** 格式化毫秒值；无样本时返回占位符。 */
+export function formatDuration(value?: number | null): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return '—'
+  if (value < 1000) return `${Math.round(value)} ms`
+  if (value < 60_000) return `${(value / 1000).toFixed(value < 10_000 ? 2 : 1)} s`
+  return `${(value / 60_000).toFixed(1)} min`
+}
+
+/** 将 0 到 1 的比例格式化为百分比。 */
+export function formatRate(value: number): string {
+  return `${(Math.max(0, Math.min(1, value)) * 100).toFixed(1)}%`
+}
+
+/** 使用当前语言环境展示后端时间。 */
+export function formatDateTime(value?: string): string {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '—'
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(date)
+}
+
+/** 瀑布图中一个阶段的相对布局。 */
+export interface WaterfallStage extends RagStageRun {
+  offsetMs: number
+  leftPercent: number
+  widthPercent: number
+}
+
+/** 阶段瀑布的统一时间轴。 */
+export interface WaterfallLayout {
+  durationMs: number
+  stages: WaterfallStage[]
+}
+
+/**
+ * 计算阶段在统一运行时间轴上的位置。
+ *
+ * 极短阶段保留 0.8% 的可视宽度，但不改变旁边展示的真实耗时。
+ */
+export function buildWaterfall(stages: RagStageRun[]): WaterfallLayout {
+  if (stages.length === 0) return { durationMs: 0, stages: [] }
+
+  const ordered = [...stages].sort((left, right) => left.sequenceNo - right.sequenceNo)
+  const starts = ordered.map((stage) => Date.parse(stage.startedAt)).filter(Number.isFinite)
+  const base = starts.length > 0 ? Math.min(...starts) : 0
+  const ends = ordered.map((stage) => {
+    const completed = Date.parse(stage.completedAt)
+    const started = Date.parse(stage.startedAt)
+    if (Number.isFinite(completed)) return completed
+    return Number.isFinite(started) ? started + Math.max(0, stage.elapsedMs) : base
+  })
+  const finish = Math.max(base, ...ends)
+  const durationMs = Math.max(1, finish - base)
+
+  // 所有并发 span 都换算到同一墙钟区间，因此重叠关系不会被 sequenceNo 拉平。
+  const positioned = ordered.map((stage) => {
+    const started = Date.parse(stage.startedAt)
+    const safeStarted = Number.isFinite(started) ? started : base
+    const offsetMs = Math.max(0, safeStarted - base)
+    const leftPercent = Math.min(100, (offsetMs / durationMs) * 100)
+    const measuredWidth = (Math.max(0, stage.elapsedMs) / durationMs) * 100
+    const widthPercent = Math.min(100 - leftPercent, Math.max(0.8, measuredWidth))
+    return { ...stage, offsetMs, leftPercent, widthPercent }
+  })
+
+  return { durationMs: finish - base, stages: positioned }
+}
+
+/** 从 UUID 或请求标识中提取适合表格展示的短标识。 */
+export function shortId(value?: string): string {
+  if (!value) return '—'
+  return value.length > 12 ? value.slice(0, 8) : value
+}

@@ -1,6 +1,13 @@
 <script setup lang="ts">
-import { ArrowRight, ChatDotRound, Collection, Cpu, HomeFilled } from '@element-plus/icons-vue'
-import type { Component } from 'vue'
+import {
+  ArrowRight,
+  ChatDotRound,
+  Collection,
+  Cpu,
+  HomeFilled,
+  Share,
+} from '@element-plus/icons-vue'
+import { computed, type Component } from 'vue'
 import { useRoute } from 'vue-router'
 
 defineProps<{
@@ -18,9 +25,11 @@ interface MenuItem {
 }
 
 const route = useRoute()
+const activeMenu = computed(() => String(route.meta.activeMenu ?? route.path))
 const menuItems: MenuItem[] = [
   { label: '工作台', path: '/admin', icon: HomeFilled },
   { label: '知识库', path: '/admin/knowledge-bases', icon: Collection },
+  { label: '链路追踪', path: '/admin/observability', icon: Share },
   { label: '模型配置', path: '/admin/models', icon: Cpu },
 ]
 </script>
@@ -58,7 +67,7 @@ const menuItems: MenuItem[] = [
 
     <div v-show="!collapsed" class="menu-caption">工作空间</div>
     <el-menu
-      :default-active="route.path"
+      :default-active="activeMenu"
       :collapse="collapsed"
       :collapse-transition="false"
       router

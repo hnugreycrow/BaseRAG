@@ -45,12 +45,29 @@ export const router = createRouter({
           component: () => import('../views/ModelView.vue'),
           meta: { title: '模型配置', section: '系统设置' },
         },
+        {
+          path: 'observability',
+          name: 'observability',
+          component: () => import('../views/ObservabilityView.vue'),
+          meta: { title: '链路追踪', section: '观测' },
+        },
+        {
+          path: 'observability/:runId',
+          name: 'observability-detail',
+          component: () => import('../views/ObservabilityDetailView.vue'),
+          meta: {
+            title: '运行详情',
+            section: '链路追踪',
+            activeMenu: '/admin/observability',
+          },
+        },
       ],
     },
     // 兼容早期后台地址，统一引导到新的页面结构。
     { path: '/conversations', redirect: '/chat' },
     { path: '/knowledge-bases', redirect: '/admin/knowledge-bases' },
     { path: '/models', redirect: '/admin/models' },
+    { path: '/observability', redirect: '/admin/observability' },
     { path: '/admin/conversations', redirect: '/chat' },
     { path: '/admin/documents', redirect: '/admin/knowledge-bases' },
     {
