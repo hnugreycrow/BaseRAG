@@ -27,9 +27,28 @@ export class ApiRequestError extends Error {
 const http: AxiosInstance = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
   timeout: 60_000,
+  withCredentials: true,
   headers: {
     Accept: 'application/json',
   },
+})
+
+let csrfToken: string | null = null
+
+export function setCsrfToken(token: string | null) {
+  csrfToken = token
+}
+
+export function getCsrfToken() {
+  return csrfToken
+}
+
+http.interceptors.request.use((config) => {
+  const method = (config.method || 'get').toLowerCase()
+  if (csrfToken && ['post', 'put', 'patch', 'delete'].includes(method)) {
+    config.headers.set('X-CSRF-Token', csrfToken)
+  }
+  return config
 })
 
 http.interceptors.response.use(
@@ -37,6 +56,11 @@ http.interceptors.response.use(
   (error: AxiosError<ApiResponse<unknown>>) => {
     const response = error.response
     const body = response?.data
+
+    const authEndpoint = ['/auth/login', '/auth/session'].includes(error.config?.url || '')
+    if (response?.status === 401 && !authEndpoint && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('baserag:unauthorized'))
+    }
 
     if (body?.message) {
       return Promise.reject(

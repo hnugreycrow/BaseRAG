@@ -1,10 +1,18 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
 import AdminLayout from '../layout/AdminLayout.vue'
+import { pinia } from '../store'
+import { useAuthStore } from '../store/auth'
 
 export const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
+    {
+      path: '/login',
+      name: 'login',
+      component: () => import('../views/LoginView.vue'),
+      meta: { title: '登录', public: true },
+    },
     {
       path: '/',
       redirect: '/chat',
@@ -52,6 +60,26 @@ export const router = createRouter({
   ],
   scrollBehavior: () => ({ top: 0 }),
 })
+
+router.beforeEach(async (to) => {
+  const auth = useAuthStore(pinia)
+  if (!auth.initialized) {
+    try {
+      await auth.restore()
+    } catch {
+      // Redis 或网络故障也保持未认证状态，受保护页面不会降级放行。
+    }
+  }
+  if (to.meta.public) return auth.authenticated ? redirectTarget(to.query.redirect) : true
+  if (auth.authenticated) return true
+  return { name: 'login', query: { redirect: to.fullPath } }
+})
+
+function redirectTarget(value: unknown) {
+  return typeof value === 'string' && value.startsWith('/') && !value.startsWith('//')
+    ? value
+    : '/chat'
+}
 
 router.afterEach((to) => {
   document.title = `${String(to.meta.title ?? '工作台')} · BaseRAG`

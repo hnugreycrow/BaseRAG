@@ -1,4 +1,4 @@
-import { ApiRequestError, request } from './http'
+import { ApiRequestError, getCsrfToken, request } from './http'
 
 export interface ConversationSummary {
   id: string
@@ -148,9 +148,11 @@ async function streamRequest(
 ) {
   const response = await fetch(`${apiBaseUrl}${path}`, {
     method: 'POST',
+    credentials: 'include',
     headers: {
       Accept: 'text/event-stream',
       'Content-Type': 'application/json',
+      ...(getCsrfToken() ? { 'X-CSRF-Token': getCsrfToken()! } : {}),
     },
     body: JSON.stringify(body),
     signal,
