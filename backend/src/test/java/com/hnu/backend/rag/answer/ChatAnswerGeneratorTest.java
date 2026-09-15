@@ -31,12 +31,14 @@ class ChatAnswerGeneratorTest {
             invocation -> {
               ChatClient.StreamObserver delegate = invocation.getArgument(2);
               delegate.started(primary, "PRIMARY");
+              delegate.requesting(primary);
               delegate.failed(
                   primary,
                   "",
                   com.hnu.backend.shared.error.ApiException.upstream(
                       "MODEL_UNAVAILABLE", "failed"));
               delegate.started(fallback, "PROVIDER_FALLBACK");
+              delegate.requesting(fallback);
               delegate.delta("answer");
               delegate.completed(fallback, "answer", "stop");
               return new ChatClient.Generation(
@@ -56,6 +58,9 @@ class ChatAnswerGeneratorTest {
             AnswerGenerator.AttemptReason.PRIMARY);
     order
         .verify(observer)
+        .requesting(new AnswerGenerator.ModelTarget("primary", "test", "primary-model"));
+    order
+        .verify(observer)
         .failed(
             eq(new AnswerGenerator.ModelTarget("primary", "test", "primary-model")), eq(""), any());
     order
@@ -63,6 +68,9 @@ class ChatAnswerGeneratorTest {
         .started(
             new AnswerGenerator.ModelTarget("fallback", "test", "fallback-model"),
             AnswerGenerator.AttemptReason.PROVIDER_FALLBACK);
+    order
+        .verify(observer)
+        .requesting(new AnswerGenerator.ModelTarget("fallback", "test", "fallback-model"));
     order.verify(observer).delta("answer");
     order
         .verify(observer)

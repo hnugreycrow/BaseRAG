@@ -20,11 +20,21 @@ import com.hnu.backend.knowledgebase.entity.KnowledgeBase;
 import com.hnu.backend.knowledgebase.mapper.KnowledgeBaseMapper;
 import com.hnu.backend.model.client.ChatClient;
 import com.hnu.backend.model.client.EmbeddingClient;
+import com.hnu.backend.observability.RagExecutionMode;
+import com.hnu.backend.observability.RagRunStatus;
+import com.hnu.backend.observability.RagStageName;
+import com.hnu.backend.observability.RagStageStatus;
+import com.hnu.backend.observability.entity.RagRun;
+import com.hnu.backend.observability.entity.RagStageRun;
+import com.hnu.backend.observability.mapper.RagRunMapper;
+import com.hnu.backend.observability.mapper.RagStageRunMapper;
 import com.hnu.backend.rag.retrieval.EmbeddingBinding;
 import com.hnu.backend.rag.retrieval.RetrievalMapper;
 import com.hnu.backend.shared.error.ApiException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.*;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
@@ -63,6 +73,8 @@ class InfrastructureIntegrationTest {
   @Autowired RetrievalMapper retrievalMapper;
   @Autowired ConversationMapper conversationMapper;
   @Autowired MessageMapper messageMapper;
+  @Autowired RagRunMapper ragRunMapper;
+  @Autowired RagStageRunMapper ragStageRunMapper;
   @Autowired DocumentService documents;
   @Autowired com.hnu.backend.configuration.RagProperties config;
   @MockitoBean EmbeddingClient embedding;
@@ -185,6 +197,80 @@ class InfrastructureIntegrationTest {
     assertEquals("部分回答", stored.getContent());
     assertEquals("GENERATION_CANCELLED", stored.getErrorCode());
     conversationMapper.delete(ownerId, conversationId);
+  }
+
+  @Test
+  void retainsTraceAfterConversationDeletionAndCascadesItAfterRetentionCleanup() {
+    UUID ownerId = ownerId();
+    UUID conversationId = UUID.randomUUID();
+    conversationMapper.insert(ownerId, conversationId, "Trace 保留测试");
+
+    Message user = new Message();
+    user.setId(UUID.randomUUID());
+    user.setConversationId(conversationId);
+    user.setClientRequestId(UUID.randomUUID());
+    user.setRole("USER");
+    user.setTurnIndex(1);
+    user.setVariantIndex(0);
+    user.setActive(true);
+    user.setStatus("COMPLETED");
+    user.setContent("不会进入 Trace 的问题正文");
+    user.setSourcesJson("[]");
+    user.setCitationsJson("[]");
+    messageMapper.insert(user);
+
+    Message assistant = new Message();
+    assistant.setId(UUID.randomUUID());
+    assistant.setConversationId(conversationId);
+    assistant.setRole("ASSISTANT");
+    assistant.setTurnIndex(1);
+    assistant.setVariantIndex(1);
+    assistant.setActive(true);
+    assistant.setReplyToId(user.getId());
+    assistant.setStatus("COMPLETED");
+    assistant.setContent("不会进入 Trace 的回答正文");
+    assistant.setSourcesJson("[]");
+    assistant.setCitationsJson("[]");
+    messageMapper.insert(assistant);
+
+    OffsetDateTime old = OffsetDateTime.now(ZoneOffset.UTC).minusDays(31);
+    RagRun run = new RagRun();
+    run.setId(UUID.randomUUID());
+    run.setOwnerId(ownerId);
+    run.setRequestId(UUID.randomUUID().toString());
+    run.setConversationId(conversationId);
+    run.setUserMessageId(user.getId());
+    run.setAssistantMessageId(assistant.getId());
+    run.setStatus(RagRunStatus.COMPLETED);
+    run.setExecutionMode(RagExecutionMode.FULL_PIPELINE);
+    run.setStartedAt(old);
+    run.setCompletedAt(old.plusSeconds(1));
+    run.setTotalMs(1000L);
+    ragRunMapper.insert(run);
+
+    RagStageRun stage = new RagStageRun();
+    stage.setId(UUID.randomUUID());
+    stage.setRagRunId(run.getId());
+    stage.setStageName(RagStageName.MEMORY_LOAD);
+    stage.setSequenceNo(1);
+    stage.setStatus(RagStageStatus.SUCCESS);
+    stage.setStartedAt(old);
+    stage.setCompletedAt(old.plusNanos(1_000_000));
+    stage.setElapsedMs(1);
+    ragStageRunMapper.insertBatch(List.of(stage));
+
+    conversationMapper.delete(ownerId, conversationId);
+
+    RagRun retained = ragRunMapper.selectById(run.getId());
+    assertNotNull(retained);
+    assertNull(retained.getConversationId());
+    assertNull(retained.getUserMessageId());
+    assertNull(retained.getAssistantMessageId());
+    assertEquals(1, ragStageRunMapper.listByRun(run.getId()).size());
+
+    assertTrue(ragRunMapper.deleteExpired(30) >= 1);
+    assertNull(ragRunMapper.selectById(run.getId()));
+    assertTrue(ragStageRunMapper.listByRun(run.getId()).isEmpty());
   }
 
   @BeforeEach

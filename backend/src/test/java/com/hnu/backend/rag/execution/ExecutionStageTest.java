@@ -6,6 +6,10 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 import com.hnu.backend.configuration.RagProperties;
+import com.hnu.backend.observability.RagRunStatus;
+import com.hnu.backend.observability.RagStageName;
+import com.hnu.backend.observability.RagStageStatus;
+import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.rag.mcp.McpToolExecutor;
 import com.hnu.backend.rag.mcp.ToolObservation;
 import com.hnu.backend.rag.planning.QueryPlan;
@@ -18,6 +22,8 @@ import com.hnu.backend.rag.routing.IntentType;
 import com.hnu.backend.rag.routing.RoutingPlan;
 import com.hnu.backend.rag.routing.RoutingReasonCode;
 import com.hnu.backend.shared.error.ApiException;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -147,6 +153,38 @@ class ExecutionStageTest {
     assertEquals(ApiException.class, error.getCause().getClass());
     verify(retrieval, timeout(1000))
         .retrieveCandidates(eq(ownerId), eq("Q1"), anyString(), isNull(), any(), any());
+  }
+
+  @Test
+  void recordsTimeoutOnOuterSubQuestionSpan() {
+    RetrievalService retrieval = mock(RetrievalService.class);
+    McpToolExecutor tools = mock(McpToolExecutor.class);
+    RagProperties config = new RagProperties();
+    config.getSearch().getChannels().setTimeoutMs(20);
+    ExecutionStage stage = stage(retrieval, tools, config);
+    QueryPlan plan = new QueryPlan("问题", List.of(new SubQuestion("Q1", "慢问题")));
+    RoutingPlan routing = new RoutingPlan(List.of(knowledge("Q1")));
+    RagRunTrace trace =
+        new RagRunTrace(UUID.randomUUID(), OffsetDateTime.now(ZoneOffset.UTC), System.nanoTime());
+    when(retrieval.retrieveCandidates(
+            eq(ownerId), eq("Q1"), anyString(), isNull(), any(), any(), same(trace)))
+        .thenAnswer(
+            ignored -> {
+              Thread.sleep(1000);
+              return List.of();
+            });
+
+    ExecutionResult result = stage.execute(ownerId, plan, routing, null, () -> false, trace);
+    var snapshot = trace.finish(RagRunStatus.COMPLETED, null);
+    var subQuestion =
+        snapshot.stages().stream()
+            .filter(value -> value.name() == RagStageName.SUBQUESTION_EXECUTION)
+            .findFirst()
+            .orElseThrow();
+
+    assertEquals(SubQuestionExecution.Status.TIMEOUT, result.subQuestions().getFirst().status());
+    assertEquals(RagStageStatus.DEGRADED, subQuestion.status());
+    assertEquals("SUBQUESTION_TIMEOUT", subQuestion.reasonCode());
   }
 
   private ExecutionStage stage(

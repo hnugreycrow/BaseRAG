@@ -15,6 +15,8 @@ import com.hnu.backend.conversation.mapper.GenerationAttemptMapper;
 import com.hnu.backend.conversation.mapper.MessageMapper;
 import com.hnu.backend.model.client.ChatClient;
 import com.hnu.backend.model.config.AiProperties;
+import com.hnu.backend.observability.service.RagTraceManager;
+import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.rag.answer.AnswerStage;
 import com.hnu.backend.rag.answer.ChatAnswerGenerator;
 import com.hnu.backend.rag.answer.ContextBuilder;
@@ -66,6 +68,7 @@ class ConversationServiceCancellationTest {
   @Mock private RagProperties rag;
   @Mock private ConversationProperties config;
   @Mock private TransactionTemplate tx;
+  @Mock private RagTraceManager traces;
 
   private ConversationService service;
   private final PromptAssemblyStage prompts =
@@ -86,7 +89,9 @@ class ConversationServiceCancellationTest {
             new AnswerStage(new ChatAnswerGenerator(chat), prompts),
             rag,
             config,
-            tx);
+            tx,
+            traces);
+    lenient().when(traces.start(any(), any(), any(), any(), any())).thenReturn(RagRunTrace.noop());
   }
 
   @AfterEach

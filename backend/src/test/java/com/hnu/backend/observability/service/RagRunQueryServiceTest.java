@@ -1,0 +1,182 @@
+package com.hnu.backend.observability.service;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
+
+import com.hnu.backend.auth.entity.User;
+import com.hnu.backend.auth.entity.UserRole;
+import com.hnu.backend.observability.RagExecutionMode;
+import com.hnu.backend.observability.RagRunStatus;
+import com.hnu.backend.observability.RagStageName;
+import com.hnu.backend.observability.RagStageStatus;
+import com.hnu.backend.observability.entity.RagStageRun;
+import com.hnu.backend.observability.mapper.RagRunMapper;
+import com.hnu.backend.observability.mapper.RagRunSummaryRow;
+import com.hnu.backend.observability.mapper.RagRunViewRow;
+import com.hnu.backend.observability.mapper.RagStageRunMapper;
+import com.hnu.backend.shared.error.ApiException;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.List;
+import java.util.UUID;
+import org.junit.jupiter.api.Test;
+
+class RagRunQueryServiceTest {
+  private final RagRunMapper runs = mock(RagRunMapper.class);
+  private final RagStageRunMapper stages = mock(RagStageRunMapper.class);
+  private final RagRunQueryService service = new RagRunQueryService(runs, stages);
+
+  @Test
+  void rejectsOtherUserFilterForRegularUser() {
+    User actor = user(UserRole.USER);
+
+    ApiException error =
+        assertThrows(
+            ApiException.class,
+            () -> service.list(actor, null, null, null, null, null, UUID.randomUUID(), 1, 20));
+
+    assertEquals("FORBIDDEN", error.code());
+    verifyNoInteractions(runs, stages);
+  }
+
+  @Test
+  void scopesRegularUserAndAllowsAdministratorGlobalSummary() {
+    User regular = user(UserRole.USER);
+    when(runs.count(argThat(filter -> regular.getId().equals(filter.ownerId())))).thenReturn(0L);
+    when(runs.list(any(), eq(20), eq(0L))).thenReturn(List.of());
+
+    assertEquals(
+        0, service.list(regular, null, null, null, null, null, null, 1, 20).items().size());
+
+    RagRunSummaryRow row = new RagRunSummaryRow();
+    row.setRequestCount(5);
+    row.setTerminalCount(4);
+    row.setSuccessCount(3);
+    row.setDegradedCount(1);
+    when(runs.summary(argThat(filter -> filter.ownerId() == null))).thenReturn(row);
+
+    var aggregate = service.summary(user(UserRole.ADMIN), null, null, null, null, null, null);
+    assertEquals(5, aggregate.requestCount());
+    assertEquals(0.75, aggregate.successRate());
+    assertEquals(0.25, aggregate.degradedRate());
+  }
+
+  @Test
+  void hidesUserFieldsFromRegularResponsesAndIncludesThemForAdministrator() {
+    User regular = user(UserRole.USER);
+    RagRunViewRow row = run(regular.getId());
+    when(runs.count(any())).thenReturn(1L);
+    when(runs.list(any(), eq(20), eq(0L))).thenReturn(List.of(row));
+
+    var regularSummary =
+        service.list(regular, null, null, null, null, null, null, 1, 20).items().getFirst();
+    assertNull(regularSummary.ownerId());
+    assertNull(regularSummary.username());
+    assertNull(regularSummary.displayName());
+
+    var adminSummary =
+        service
+            .list(user(UserRole.ADMIN), null, null, null, null, null, null, 1, 20)
+            .items()
+            .getFirst();
+    assertEquals(row.getOwnerId(), adminSummary.ownerId());
+    assertEquals("alice", adminSummary.username());
+    assertEquals("Alice", adminSummary.displayName());
+  }
+
+  @Test
+  void hidesCrossUserDetailAsNotFound() {
+    User regular = user(UserRole.USER);
+    UUID runId = UUID.randomUUID();
+    when(runs.findView(runId, regular.getId())).thenReturn(null);
+
+    ApiException error = assertThrows(ApiException.class, () -> service.get(regular, runId));
+
+    assertEquals("RAG_RUN_NOT_FOUND", error.code());
+    assertEquals(404, error.status().value());
+    verifyNoInteractions(stages);
+  }
+
+  @Test
+  void returnsDeduplicatedDegradationReasonsIncludingAnswerFallback() {
+    User admin = user(UserRole.ADMIN);
+    RagRunViewRow row = run(UUID.randomUUID());
+    RagStageRun fallback =
+        stage(RagStageName.ANSWER_MODEL, RagStageStatus.SUCCESS, "PROVIDER_FALLBACK");
+    RagStageRun duplicate =
+        stage(RagStageName.ANSWER_MODEL, RagStageStatus.SUCCESS, "PROVIDER_FALLBACK");
+    RagStageRun summary =
+        stage(RagStageName.MEMORY_SUMMARY, RagStageStatus.DEGRADED, "MODEL_TIMEOUT");
+    when(runs.findView(row.getId(), null)).thenReturn(row);
+    when(stages.listByRun(row.getId())).thenReturn(List.of(fallback, duplicate, summary));
+
+    var detail = service.get(admin, row.getId());
+
+    assertEquals(List.of("PROVIDER_FALLBACK", "MODEL_TIMEOUT"), detail.degradationReasons());
+  }
+
+  @Test
+  void returnsZeroRatesAndNullPercentilesWithoutSamples() {
+    when(runs.summary(any())).thenReturn(new RagRunSummaryRow());
+
+    var aggregate = service.summary(user(UserRole.USER), null, null, null, null, null, null);
+
+    assertEquals(0, aggregate.requestCount());
+    assertEquals(0, aggregate.successRate());
+    assertEquals(0, aggregate.degradedRate());
+    assertNull(aggregate.totalMs().p50Ms());
+    assertNull(aggregate.totalMs().p95Ms());
+    assertNull(aggregate.endToEndTtftMs().p50Ms());
+    assertNull(aggregate.modelTtftMs().p95Ms());
+  }
+
+  @Test
+  void rejectsEmptyTimeWindowAndInvalidPage() {
+    User actor = user(UserRole.USER);
+    OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+
+    assertEquals(
+        "INVALID_TIME_RANGE",
+        assertThrows(
+                ApiException.class,
+                () -> service.list(actor, now, now, null, null, null, null, 1, 20))
+            .code());
+    assertEquals(
+        "INVALID_PAGE",
+        assertThrows(
+                ApiException.class,
+                () -> service.list(actor, null, null, null, null, null, null, 0, 20))
+            .code());
+  }
+
+  private RagRunViewRow run(UUID ownerId) {
+    RagRunViewRow row = new RagRunViewRow();
+    row.setId(UUID.randomUUID());
+    row.setOwnerId(ownerId);
+    row.setUsername("alice");
+    row.setDisplayName("Alice");
+    row.setRequestId(UUID.randomUUID().toString());
+    row.setStatus(RagRunStatus.COMPLETED);
+    row.setExecutionMode(RagExecutionMode.FULL_PIPELINE);
+    row.setStartedAt(OffsetDateTime.now(ZoneOffset.UTC));
+    return row;
+  }
+
+  private RagStageRun stage(RagStageName name, RagStageStatus status, String reasonCode) {
+    RagStageRun stage = new RagStageRun();
+    stage.setId(UUID.randomUUID());
+    stage.setStageName(name);
+    stage.setStatus(status);
+    stage.setReasonCode(reasonCode);
+    return stage;
+  }
+
+  private User user(UserRole role) {
+    User user = new User();
+    user.setId(UUID.randomUUID());
+    user.setRole(role);
+    user.setEnabled(true);
+    return user;
+  }
+}

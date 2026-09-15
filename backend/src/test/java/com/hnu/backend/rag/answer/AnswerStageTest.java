@@ -74,7 +74,8 @@ class AnswerStageTest {
     assertTrue(result.content().contains("资料不足"));
     assertTrue(result.sources().isEmpty());
     assertNull(result.generation());
-    verifyNoInteractions(generator, observer);
+    verifyNoInteractions(generator);
+    verify(observer).generationSkipped("NO_EVIDENCE");
   }
 
   @Test

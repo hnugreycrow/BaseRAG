@@ -10,6 +10,8 @@ import com.hnu.backend.document.mapper.DocumentChunkMapper;
 import com.hnu.backend.document.mapper.DocumentMapper;
 import com.hnu.backend.document.mapper.DocumentVersionMapper;
 import com.hnu.backend.knowledgebase.mapper.KnowledgeBaseMapper;
+import com.hnu.backend.observability.mapper.RagRunMapper;
+import com.hnu.backend.observability.mapper.RagStageRunMapper;
 import com.hnu.backend.rag.retrieval.RetrievalMapper;
 import com.hnu.backend.shared.persistence.UuidTypeHandler;
 import java.io.IOException;
@@ -35,7 +37,12 @@ class MapperXmlTest {
                 RetrievalMapper.class,
                 new String[] {
                   "activeModelBindings", "activeModelBindingsIn", "searchAll", "searchIn", "search"
-                }));
+                }),
+            "mapper/observability/RagRunMapper.xml",
+            new ExpectedMapper(
+                RagRunMapper.class, new String[] {"list", "count", "findView", "summary"}),
+            "mapper/observability/RagStageRunMapper.xml",
+            new ExpectedMapper(RagStageRunMapper.class, new String[] {"insertBatch"}));
 
     for (var entry : expectedMappers.entrySet()) {
       try (InputStream input = resource(entry.getKey())) {
@@ -56,6 +63,8 @@ class MapperXmlTest {
           ConversationMapper.class,
           MessageMapper.class,
           GenerationAttemptMapper.class,
+          RagRunMapper.class,
+          RagStageRunMapper.class,
           KnowledgeBaseMapper.class,
           DocumentMapper.class,
           DocumentVersionMapper.class,

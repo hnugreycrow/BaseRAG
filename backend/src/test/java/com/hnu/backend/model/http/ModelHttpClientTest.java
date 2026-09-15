@@ -113,6 +113,74 @@ class ModelHttpClientTest {
   }
 
   @Test
+  void reportsProviderFallbackAndRequestBoundaryForEveryModelAttempt() {
+    server.createContext(
+        "/v1/chat/completions",
+        exchange -> {
+          exchange.sendResponseHeaders(500, -1);
+          exchange.close();
+        });
+    server.createContext(
+        "/v1/fallback",
+        exchange -> {
+          exchange.getResponseHeaders().set("Content-Type", "text/event-stream");
+          exchange.sendResponseHeaders(200, 0);
+          exchange
+              .getResponseBody()
+              .write(
+                  ("data: {\"choices\":[{\"delta\":{\"content\":\"回答\"},\"finish_reason\":\"stop\"}]}\n\n"
+                          + "data: [DONE]\n\n")
+                      .getBytes(StandardCharsets.UTF_8));
+          exchange.close();
+        });
+    AiProperties.Provider fallbackProvider = new AiProperties.Provider();
+    fallbackProvider.setUrl("http://127.0.0.1:" + server.getAddress().getPort());
+    fallbackProvider.setApiKey("test-only");
+    fallbackProvider.getEndpoints().setChat("/v1/fallback");
+    config.getProviders().put("fallback", fallbackProvider);
+    AiProperties.Candidate fallback = new AiProperties.Candidate();
+    fallback.setId("fallback-chat");
+    fallback.setProvider("fallback");
+    fallback.setModel("fallback-chat");
+    config.getChat().getCandidates().add(fallback);
+    config
+        .getChat()
+        .getTiers()
+        .get("standard")
+        .setCandidates(List.of("test-chat", "fallback-chat"));
+    List<String> reasons = new ArrayList<>();
+    List<String> requestedModels = new ArrayList<>();
+
+    var result =
+        new ChatClient(new ModelHttpClient(config), config)
+            .stream(
+                "系统",
+                "问题",
+                new ChatClient.StreamObserver() {
+                  public void started(AiProperties.ModelTarget target, String reason) {
+                    reasons.add(reason);
+                  }
+
+                  public void requesting(AiProperties.ModelTarget target) {
+                    requestedModels.add(target.id());
+                  }
+
+                  public void delta(String text) {}
+
+                  public void completed(
+                      AiProperties.ModelTarget target, String content, String finishReason) {}
+
+                  public void failed(
+                      AiProperties.ModelTarget target, String partialContent, ApiException error) {}
+                },
+                new ModelHttpClient.StreamControl());
+
+    assertEquals("fallback-chat", result.id());
+    assertEquals(List.of("PRIMARY", "PROVIDER_FALLBACK"), reasons);
+    assertEquals(List.of("test-chat", "fallback-chat"), requestedModels);
+  }
+
+  @Test
   void retriesRateLimitOnlyToConfiguredLimitAndHidesProviderBody() {
     AtomicInteger calls = new AtomicInteger();
     server.createContext(
