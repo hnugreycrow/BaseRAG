@@ -1,6 +1,6 @@
 # BaseRAG
 
-BaseRAG 是一个本地运行的单用户 RAG 知识问答系统。当前版本支持 Markdown 知识库、手动分块与向量化、问题改写与子问题拆分、分预算向量检索、候选去重与模型重排、多轮会话、SSE 流式回答和来源审计。后端采用 Java 21、Spring Boot 4、MyBatis-Plus、PostgreSQL/pgvector 与 RustFS，前端采用 Vue 3。
+BaseRAG 是一个本地运行的多用户 RAG 知识问答系统。当前版本支持 Cookie 登录、私有知识库与会话、Markdown 知识库、手动分块与向量化、多轮会话、SSE 流式回答和来源审计。后端采用 Java 21、Spring Boot 4、Sa-Token、Redis、MyBatis-Plus、PostgreSQL/pgvector 与 RustFS，前端采用 Vue 3。
 
 ## 当前范围
 
@@ -9,7 +9,8 @@ BaseRAG 是一个本地运行的单用户 RAG 知识问答系统。当前版本�
 - 问答默认检索全部知识库中当前生效的 READY 文档，不支持用户指定检索范围。
 - 支持历史摘要、独立问题改写、有限子问题拆分、安全意图路由、RRF 候选融合、三级去重、模型重排及失败降级。
 - 支持结构化提示词、流式回答、模型候选回退、停止、一次引用修复、重试、重新生成和回答版本切换。
-- 当前没有登录、多用户隔离、PDF、异步索引、关键词混合检索、Agent、可用的 MCP 工具或公网部署能力；MCP 内部安全框架默认关闭且允许列表为空。
+- 支持 ADMIN/USER 账号、管理员账号管理 API、用户自行改密和完整的数据所有权隔离；本阶段不提供管理员用户管理页面。
+- 当前没有注册、共享知识库、组织、PDF、异步索引、关键词混合检索、Agent、可用的 MCP 工具或公网部署能力；MCP 内部安全框架默认关闭且允许列表为空。
 
 当前产品范围和验收标准以 [REQUIREMENTS.md](REQUIREMENTS.md) 为唯一来源；技术实现以 [架构文档](docs/architecture.md) 为准。
 
@@ -23,7 +24,7 @@ BaseRAG 是一个本地运行的单用户 RAG 知识问答系统。当前版本�
    Copy-Item .env.example .env
    ```
 
-   编辑 `.env`：填写 `application.yaml` 当前启用服务商所需的 API Key（如 `DEEPSEEK_API_KEY`、`BAILIAN_API_KEY`、`SILICONFLOW_API_KEY`）以及 `EMBEDDING_DIMENSIONS`。Chat 与 Embedding 的候选模型、顺序和超时都以 `backend/src/main/resources/application.yaml` 为准；不要在文档或代码中依赖某个固定模型名称。为兼容已有本地配置，暂时仍接受旧的 `CHAT_API_KEY` 与 `EMBEDDING_API_KEY`。
+   编辑 `.env`：必须设置非空 `REDIS_PASSWORD`。首次升级且数据库还没有真实用户时，还必须设置合法的 `BASERAG_ADMIN_USERNAME`、`BASERAG_ADMIN_DISPLAY_NAME` 和至少 12 字符的 `BASERAG_ADMIN_PASSWORD`；管理员创建成功后，后续启动不再依赖这三个变量。另需填写当前启用模型服务商的 API Key。
 
 2. 启动存储：
 
@@ -32,7 +33,7 @@ BaseRAG 是一个本地运行的单用户 RAG 知识问答系统。当前版本�
    docker compose --env-file .env -f deploy/compose.yml ps
    ```
 
-   PostgreSQL 使用 5432，RustFS API 使用 9000、控制台使用 9001，均仅绑定本机。后端首次上传时初始化私有 bucket；原文件和数据库持久化到 Docker volumes。
+   PostgreSQL 使用 5432，Redis 使用 6379，RustFS API 使用 9000、控制台使用 9001，均仅绑定本机。Redis 使用 AOF 保存 Sa-Token 会话；原文件、数据库和 Redis 数据均持久化到 Docker volumes。
 
 3. 启动后端：
 
@@ -50,19 +51,20 @@ BaseRAG 是一个本地运行的单用户 RAG 知识问答系统。当前版本�
    npm run dev
    ```
 
-   打开终端输出的本地地址（通常 http://127.0.0.1:5173）。在 /admin 进入默认知识库并上传 evaluation/datasets/employee-handbook.md，点击文档行的“开始分块”，再回到 /chat 提问“试用期员工能申请年假吗？”，点击回答下的“检索来源”核对原文与行号。
+   打开终端输出的本地地址（通常 http://127.0.0.1:5173），使用首次管理员账号登录。在 /admin 新建知识库并上传 evaluation/datasets/employee-handbook.md，点击文档行的“开始分块”，再回到 /chat 提问并核对来源。系统不会为新账号自动创建知识库。
 
-当前版本仅用于本地开发，不提供登录、用户权限或正式部署。默认 local profile；其他 profile 启动会拒绝运行。密钥不得提交到仓库。
+当前版本仅用于本地开发，不提供注册、找回密码或正式部署。默认 local profile；其他 profile 启动会拒绝运行。密钥不得提交到仓库。
 
 后端主配置使用 backend/src/main/resources/application.yaml，按 `spring`、`server`、`mybatis-plus`、`ai`、`rag` 分组。`ai` 负责 Chat、Embedding、Rerank 的服务商、端点、候选模型、层级、超时和熔断参数；`rag` 负责分块、存储、子问题上限、路由、MCP 开关、去重、重排、检索通道和 RRF 预算。.env 仍只用于本地凭据注入和 Docker Compose，不替代 YAML 主配置。
 
 ## 前端页面
 
+- /login：账号密码登录；认证 Cookie 为 HttpOnly，前端只在内存保存用户信息和 CSRF nonce。
 - /chat/:conversationId?：持久化问答界面，支持流式回答、刷新恢复、会话搜索/重命名/删除、停止、失败重试、最新回答重新生成、版本切换和来源审计。
 - /admin：唯一后台入口，以三级表格管理知识库、文档和当前生效版本的分块；新建知识库时从 YAML 候选中选择向量模型，文档上传后由用户手动开始分块，READY 文档也可重新分块并替换旧索引。
 - /admin/documents：兼容旧地址，自动跳转到 /admin。
 
-前端名称为 BaseRAG，npm 包名为 baserag-web。会话、消息、回答版本和当时的 sources/citations/modelInfo 保存到 PostgreSQL；URL 保留当前会话，刷新后可以恢复。多轮问答使用持久化摘要、未摘要历史和最近 8 轮准备会话记忆，再执行问题规划、路由、检索、去重、重排、提示词组装和回答阶段。后台沿用本地开发接口，尚未加入登录或管理权限。
+前端名称为 BaseRAG，npm 包名为 baserag-web。会话、消息、回答版本和当时的 sources/citations/modelInfo 按用户隔离保存到 PostgreSQL；刷新页面时通过 HttpOnly Cookie 恢复会话并轮换 CSRF nonce。
 
 路由使用 HTML5 history。Vite 开发服务支持直接访问和刷新上述地址；将构建产物托管到其他 Web 服务时，需要将前端页面路由回退到 index.html，同时将 /api 请求转发到后端。
 
@@ -119,6 +121,10 @@ createdb 仅需首次执行；已存在时无需重建。测试默认连接独�
 
 | 方法 | 路径 | 输入 / 输出 |
 | --- | --- | --- |
+| POST / GET | /api/auth/login、/api/auth/session | 登录或恢复会话，返回用户和 CSRF nonce |
+| POST / PUT | /api/auth/logout、/api/auth/password | 注销当前会话或修改本人密码 |
+| GET / POST | /api/admin/users | 管理员分页查询或创建用户 |
+| PATCH / PUT | /api/admin/users/{id}/status、/password | 管理员更新状态或重置密码 |
 | GET / POST | /api/knowledge-bases | 查询或新建知识库 |
 | GET | /api/knowledge-bases/embedding-models | 查询 YAML 中配置的可选向量模型 |
 | GET | /api/evaluation/config | local profile 下查询非敏感 RAG 评测参数快照 |
@@ -138,7 +144,7 @@ createdb 仅需首次执行；已存在时无需重建。测试默认连接独�
 
 SSE v1 事件为 started、delta、reset、complete、cancelled、error，每条数据都包含 schemaVersion。sources 包含 citationId、knowledgeBaseId、knowledgeBaseName、chunkId、documentId、versionId、documentName、heading、lineStart、lineEnd、similarity、content；与 citations、modelInfo 一起按回答版本保存。/api/questions 保留为阶段 1 评测兼容入口。
 
-除 SSE 和 `204 No Content` 外，JSON 接口统一返回：
+除登录外，全部 `/api/**` 接口要求登录；所有写请求还要求 `X-CSRF-Token`。除 SSE 和 `204 No Content` 外，JSON 接口统一返回：
 
 ```json
 {
@@ -157,10 +163,10 @@ SSE v1 事件为 started、delta、reset、complete、cancelled、error，每条
 - 分块先按 Markdown 结构和自然句界识别语义块，再合并短章节；默认目标 1400、最小 500、最大 2000、超长段落重叠 180 字符。问题最多 2000 字符，最多规划 4 个子问题；每个子问题默认保留 20 个召回候选，去重后最多向 Reranker 提交 40 个候选，最终选择 10 条证据。聊天请求不发送 max_tokens；实际模型上下文上限仍由服务商决定。
 - 知识库绑定的模型从配置中移除或维度变化时会拒绝分块和问答，不能静默混用向量。恢复原配置可继续使用；需要换模型时保留旧数据并新建知识库后重新分块。该阶段没有自动迁移命令。
 - 失败版本可能保留 RustFS 文件，进程中断可能留 PROCESSING 记录；都不参与检索。通过管理界面删除文档或知识库时会清理其数据库记录，并尽力清理 RustFS 原文件。
-- 同一文件重复上传会产生新文档；尚无 PDF、文件级重复检测、版本替换或权限。当前会话仍是 local 单用户数据空间。
+- 同一文件重复上传会产生新文档；尚无 PDF、文件级重复检测或版本替换。知识库、文档、会话、消息与检索结果均按当前用户隔离，跨用户直接访问统一表现为资源不存在。
 - 当前只有向量检索通道；RRF 已作为稳定融合机制使用，但关键词通道尚未实现。Reranker 默认开启，失败、超时或 noop 时按确定性融合分继续回答。
 - MCP 注册、Schema 校验、只读白名单、超时和输出截断代码已经存在，但默认关闭、允许列表为空且没有面向用户的工具配置，不构成当前产品能力。
-- 本机已有 5432/9000 端口占用时，修改 Compose 映射及对应连接地址。
+- 本机已有 5432/6379/9000 端口占用时，修改 Compose 映射及对应连接地址。
 - 默认数据库与 RustFS 密码只是本地示例，应在个人 .env 中修改。已有 PostgreSQL volume 修改密码不会自动改变数据库用户密码。
 
 当前范围见 [REQUIREMENTS.md](REQUIREMENTS.md)，架构和目录约束见 [architecture.md](docs/architecture.md) 与 [backend-structure.md](docs/backend-structure.md)，历史决策见 [decisions.md](docs/decisions.md)。实际执行的检查见 [validation.md](docs/validation.md)，历史阶段结论见 [阶段 1 验收分析](docs/phase-1-acceptance.md)。[阶段 2 计划](docs/phase-2-plan.md) 是部分已落地的历史路线图，不覆盖当前需求基线。

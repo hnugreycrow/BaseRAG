@@ -33,7 +33,7 @@
 - AI 配置已按 provider、endpoint、candidate、tier 和 selection 分层，当前仅保留百炼 qwen-plus-latest 与 SiliconFlow Qwen/Qwen3-Embedding-8B。
 - 对话与 Embedding HTTP 协议测试覆盖实际端点拼接、认证头、dimensions 请求字段、响应解析、429 重试、超时与无效响应。
 - 后端日常测试 23 项执行，17 项通过、6 项外部基础设施测试按环境条件跳过，0 失败、0 错误。
-- 使用本地 PostgreSQL/RustFS 实际启动 Spring Boot，Flyway 与配置绑定成功；GET /api/knowledge-bases 返回默认知识库后正常关闭。
+- 使用本地 PostgreSQL/RustFS 实际启动 Spring Boot，Flyway 与配置绑定成功；当时的 GET /api/knowledge-bases 返回默认知识库后正常关闭。当前版本已取消自动创建，新账号的列表初始为空。
 - 前端 TypeScript 检查与 Vite 生产构建通过，并已适配回答中的 modelInfo。未在本轮调用付费模型，真实模型质量仍需单独验收。
 
 ## YAML 与前端分区改版验证（2026-09-12）

@@ -1,5 +1,16 @@
 # 架构决策
 
+## 阶段 3 认证与多用户隔离决策
+
+- Sa-Token 固定为 1.46.0，会话只写入带 AOF 的 Redis 8.2.9；Redis 无密码或不可用时失败关闭，不提供内存降级。
+- 浏览器使用 HttpOnly、SameSite=Strict 的会话 Cookie，服务端超时为 8 小时/30 分钟；写请求另校验存于 Token Session 的随机 CSRF nonce。
+- 用户名和直接客户端地址经 SHA-256 后作为 Redis 固定窗口限流键，未知用户执行固定虚拟 BCrypt 校验。
+- 历史数据先归属固定禁用占位用户，首次管理员初始化在事务中转交知识库和会话并删除占位用户；后续启动不再读取管理员初始化凭据。
+- 首次管理员和管理员后续创建的账号都从空知识库列表开始，由用户按需创建；已有知识库不自动删除。
+- 所有业务入口显式向 Service 传递 ownerId，后代资源通过知识库或会话校验所有权，RAG SQL 直接联结 knowledge_bases.owner_id；跨用户访问统一返回资源级 404 或空检索。
+- 账号禁用和密码变更把数据库更新、活动 SSE 取消与 Redis 会话撤销视作同一安全操作；撤销失败使数据库事务回滚。启用管理员行锁防止并发操作绕过最后管理员保护。
+- 前端不读取或持久化 Cookie Token，只在内存保存用户响应和 CSRF nonce；路由守卫恢复会话，运行期 401 保留原目标跳转登录。
+
 ## 阶段 2 RAG 流水线决策
 
 - RAG 按 memory → planning → routing → execution → deduplication → rerank → prompt → answer 划分阶段；中间结果使用 RAG 自有不可变对象，最终仍由 conversation 模块映射到既有 SSE 和消息终态。

@@ -46,14 +46,16 @@ BaseRAG 是一个本地运行的 RAG 知识问答系统。
 - 使用 SSE 流式返回回答
 - 停止、失败重试、重新生成和回答版本切换
 - 普通 JSON 统一响应、请求 ID 和全局异常转换
+- Sa-Token Cookie 登录、Redis 会话、CSRF nonce 与登录限流
+- ADMIN/USER 账号和知识库、文档、会话、检索的多用户隔离
 
 当前不支持：
 
-- 用户登录和多用户数据隔离
+- 注册、账号找回、共享知识库和组织
 - PDF、TXT、DOCX、OCR
 - 异步文档处理任务
 - 用户选择一个或多个知识库作为检索范围
-- Redis 或消息队列
+- 消息队列
 - 关键词混合检索、近似向量索引和知识图谱
 - 面向用户开放的 MCP、Tool Calling 和 Agent；现有 MCP 安全框架默认关闭且没有可用工具
 - 公网生产部署
@@ -68,6 +70,7 @@ flowchart LR
     Frontend[Vue 前端]
     Backend[Spring Boot 后端]
     PostgreSQL[(PostgreSQL + pgvector)]
+    Redis[(Redis / Sa-Token)]
     RustFS[(RustFS / S3)]
     ChatModel[Chat Model API]
     EmbeddingModel[Embedding API]
@@ -76,6 +79,7 @@ flowchart LR
     User --> Frontend
     Frontend -->|REST / SSE| Backend
     Backend --> PostgreSQL
+    Backend --> Redis
     Backend --> RustFS
     Backend --> ChatModel
     Backend --> EmbeddingModel
@@ -97,6 +101,8 @@ flowchart LR
 - Flyway
 - PostgreSQL JDBC
 - AWS SDK for Java S3 Client
+- Sa-Token 1.46.0
+- Spring Data Redis
 - Maven Wrapper
 
 ### 前端
@@ -114,6 +120,7 @@ flowchart LR
 - PostgreSQL 17
 - pgvector 0.8.6
 - RustFS S3 兼容对象存储
+- Redis 8.2.9（AOF）
 - Docker Compose
 
 ### AI 接入
@@ -149,6 +156,12 @@ baserag/
 
 ​```text
 com.hnu.backend
+├── auth
+│   ├── configuration
+│   ├── controller
+│   ├── service
+│   ├── entity
+│   └── mapper
 ├── knowledgebase
 │   ├── controller
 │   ├── dto
@@ -247,6 +260,7 @@ erDiagram
 - `documents`：逻辑文档，`active_version_id` 指向当前生效版本。
 - `document_versions`：原始文件、处理状态、解析器和模型快照。
 - `document_chunks`：文本片段、来源行号和向量。
+- 新账号不自动创建知识库；用户按需创建，升级前已经存在的知识库保持不变。
 
 只有文档当前生效且状态为 `READY` 的版本可以参与检索。
 
