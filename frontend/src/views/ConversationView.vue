@@ -33,6 +33,7 @@ import {
   type ConversationSummary,
   type ConversationTurn,
 } from '../api'
+import AccountMenu from '../components/auth/AccountMenu.vue'
 import { useConversationGenerationStore } from '../store'
 
 const route = useRoute()
@@ -75,12 +76,6 @@ const groupedConversations = computed(() => {
   })
   return Array.from(groups, ([label, items]) => ({ label, items }))
 })
-
-const suggestions = [
-  '概括知识库中的核心内容',
-  '文档里有哪些重要规则？',
-  '帮我查找与当前问题相关的依据',
-]
 
 interface AnswerBlock {
   type: 'paragraph' | 'heading' | 'unordered-list' | 'ordered-list' | 'quote' | 'code'
@@ -474,11 +469,6 @@ async function stopAnswer() {
   }
 }
 
-function useSuggestion(value: string) {
-  draft.value = value
-  void submitQuestion()
-}
-
 function handleComposerKeydown(event: KeyboardEvent) {
   if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return
   event.preventDefault()
@@ -627,11 +617,14 @@ onBeforeUnmount(() => {
         </p>
       </div>
 
-      <RouterLink class="admin-entry" to="/admin">
-        <el-icon><Setting /></el-icon>
-        <span><strong>后台管理</strong><small>知识库与模型配置</small></span>
-        <el-icon class="admin-arrow"><ArrowRight /></el-icon>
-      </RouterLink>
+      <div class="sidebar-footer">
+        <RouterLink class="admin-entry" to="/admin">
+          <el-icon><Setting /></el-icon>
+          <strong>管理工作台</strong>
+          <el-icon class="admin-arrow"><ArrowRight /></el-icon>
+        </RouterLink>
+        <AccountMenu class="chat-account" />
+      </div>
     </aside>
 
     <main class="chat-workspace">
@@ -650,20 +643,8 @@ onBeforeUnmount(() => {
 
         <section v-else-if="isEmpty" class="welcome-state">
           <div class="welcome-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
-          <p class="welcome-eyebrow">BASERAG · GROUNDED ANSWERS</p>
-          <h1>从你的资料中，<br />找到有依据的答案</h1>
-          <p class="welcome-copy">回答会标注实际检索来源。你可以继续追问，也可以随时核对原文。</p>
-          <div class="suggestion-grid" aria-label="问题示例">
-            <button
-              v-for="item in suggestions"
-              :key="item"
-              type="button"
-              @click="useSuggestion(item)"
-            >
-              <span>{{ item }}</span>
-              <el-icon><ArrowRight /></el-icon>
-            </button>
-          </div>
+          <h1>向知识库提问</h1>
+          <p class="welcome-copy">我会根据已入库资料回答，并标注可核对的来源。</p>
         </section>
 
         <div v-else class="message-list">
@@ -1002,6 +983,7 @@ onBeforeUnmount(() => {
 .sidebar-head,
 .brand,
 .conversation-link,
+.sidebar-footer,
 .admin-entry,
 .desktop-admin-entry,
 .answer-toolbar,
@@ -1253,31 +1235,50 @@ onBeforeUnmount(() => {
   text-align: center;
 }
 
-.admin-entry {
-  gap: 10px;
-  margin: 4px 2px 0;
-  padding: 11px 10px;
-  color: #4f5662;
+.sidebar-footer {
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 2px 0;
   border-top: 1px solid #e4e4e7;
+}
+
+.admin-entry {
+  width: 100%;
+  min-height: 38px;
+  gap: 9px;
+  padding: 8px;
+  color: #59616e;
+  border-radius: 8px;
+  transition:
+    color 140ms ease,
+    background 140ms ease;
+}
+
+.admin-entry:hover {
+  color: #244fd4;
+  background: #eef1f8;
+}
+
+.admin-entry:focus-visible {
+  outline: 2px solid var(--chat-blue);
+  outline-offset: 1px;
+}
+
+.chat-account {
+  width: 100%;
 }
 .admin-entry > .el-icon:first-child {
   color: #767e8b;
-  font-size: 17px;
-}
-.admin-entry span {
-  min-width: 0;
-  display: flex;
-  flex: 1;
-  flex-direction: column;
+  font-size: 16px;
 }
 .admin-entry strong {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
   font-size: 12px;
   font-weight: 650;
-}
-.admin-entry small {
-  margin-top: 2px;
-  color: #999ea7;
-  font-size: 10px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .admin-arrow {
   color: #a1a6af;
@@ -1408,7 +1409,7 @@ onBeforeUnmount(() => {
   height: 48px;
   grid-template-columns: repeat(2, 6px);
   gap: 4px;
-  margin-bottom: 22px;
+  margin-bottom: 20px;
   border-radius: 14px 14px 4px 14px;
   box-shadow: 0 12px 28px rgb(49 94 231 / 20%);
 }
@@ -1427,64 +1428,20 @@ onBeforeUnmount(() => {
   border: 3px solid #ffffff;
   border-radius: 50%;
 }
-.welcome-eyebrow {
-  margin: 0 0 10px;
-  color: var(--chat-blue);
-  font-family: var(--font-data);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 1.5px;
-}
 .welcome-state h1 {
   margin: 0;
   color: #19202d;
-  font-size: clamp(29px, 4vw, 42px);
+  font-size: clamp(29px, 4vw, 38px);
   font-weight: 650;
   line-height: 1.25;
-  letter-spacing: -1.6px;
+  letter-spacing: -1.2px;
 }
 .welcome-copy {
   max-width: 500px;
-  margin: 15px 0 27px;
+  margin: 13px 0 0;
   color: #777e8a;
   font-size: 13px;
   line-height: 1.75;
-}
-
-.suggestion-grid {
-  width: min(620px, 100%);
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 9px;
-}
-.suggestion-grid button {
-  min-height: 74px;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 14px;
-  color: #525966;
-  font-size: 11px;
-  line-height: 1.5;
-  text-align: left;
-  background: #fafafa;
-  border: 1px solid #e8e9ec;
-  border-radius: 11px;
-  transition:
-    border-color 140ms ease,
-    background 140ms ease,
-    transform 140ms ease;
-}
-.suggestion-grid button:hover {
-  background: #ffffff;
-  border-color: #bdc9f7;
-  transform: translateY(-2px);
-}
-.suggestion-grid .el-icon {
-  flex: 0 0 auto;
-  margin-top: 2px;
-  color: #a3a8b1;
 }
 
 .message-list {
@@ -2020,13 +1977,6 @@ onBeforeUnmount(() => {
   }
   .welcome-state h1 {
     font-size: 30px;
-  }
-  .suggestion-grid {
-    grid-template-columns: 1fr;
-  }
-  .suggestion-grid button {
-    min-height: 52px;
-    align-items: center;
   }
   .message-list {
     width: calc(100% - 28px);

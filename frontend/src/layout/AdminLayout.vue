@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ArrowDown, Expand, Fold, Menu } from '@element-plus/icons-vue'
+import { Expand, Fold, Menu } from '@element-plus/icons-vue'
 import { storeToRefs } from 'pinia'
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 
 import { useLayoutStore } from '../store'
+import AccountMenu from '../components/auth/AccountMenu.vue'
 import AppSidebar from './AppSidebar.vue'
 
 const route = useRoute()
@@ -66,21 +67,7 @@ function handleMenuButton() {
         </div>
 
         <div class="topbar-actions">
-          <el-dropdown trigger="click">
-            <button class="profile" type="button">
-              <span class="profile-avatar">JA</span>
-              <span class="profile-copy">
-                <strong>本地用户</strong>
-                <small>管理员</small>
-              </span>
-              <el-icon><ArrowDown /></el-icon>
-            </button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item disabled>单用户本地模式</el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
+          <AccountMenu />
         </div>
       </header>
 
@@ -142,8 +129,7 @@ function handleMenuButton() {
 }
 
 .topbar-leading,
-.topbar-actions,
-.profile {
+.topbar-actions {
   display: flex;
   align-items: center;
 }
@@ -192,54 +178,6 @@ function handleMenuButton() {
   gap: 10px;
 }
 
-.profile {
-  gap: 9px;
-  margin-left: 4px;
-  padding: 4px;
-  border-radius: 9px;
-}
-
-.profile:hover {
-  background: #f5f7fb;
-}
-
-.profile-avatar {
-  width: 33px;
-  height: 33px;
-  display: grid;
-  place-items: center;
-  color: #ffffff;
-  font-family: var(--font-data);
-  font-size: 11px;
-  font-weight: 700;
-  background: #4263eb;
-  border-radius: 9px;
-}
-
-.profile-copy {
-  display: flex;
-  flex-direction: column;
-  text-align: left;
-}
-
-.profile-copy strong {
-  color: #35425a;
-  font-size: 12px;
-  font-weight: 650;
-}
-
-.profile-copy small {
-  margin-top: 2px;
-  color: #919bad;
-  font-size: 10px;
-}
-
-.profile .el-icon {
-  margin: 0 5px 0 2px;
-  color: #9ca6b6;
-  font-size: 11px;
-}
-
 .main-content {
   min-height: calc(100vh - 68px);
   min-height: calc(100dvh - 68px);
@@ -283,11 +221,6 @@ function handleMenuButton() {
 
   .breadcrumb > span,
   .breadcrumb > i,
-  .profile-copy,
-  .profile .el-icon {
-    display: none;
-  }
-
   .main-content {
     min-height: calc(100vh - 60px);
     min-height: calc(100dvh - 60px);
