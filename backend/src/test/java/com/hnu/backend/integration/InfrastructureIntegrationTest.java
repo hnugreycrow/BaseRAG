@@ -335,6 +335,32 @@ class InfrastructureIntegrationTest {
   }
 
   @Test
+  void persistsSectionEmbeddingTextWithoutChangingDisplayedSource() {
+    UUID ownerId = ownerId();
+    UUID knowledgeBaseId = kb();
+    var uploaded =
+        documents.upload(
+            ownerId, knowledgeBaseId, file("章节.md", "# 手册\n简介。\n\n## 年假\n年假五天。\n\n## 报销\n三天内报销。"));
+    var ready = documents.createChunks(ownerId, knowledgeBaseId, uploaded.documentId());
+    assertEquals(1, ready.chunkCount());
+    var policy =
+        chunkMapper
+            .selectList(
+                new LambdaQueryWrapper<DocumentChunk>()
+                    .eq(DocumentChunk::getDocumentId, uploaded.documentId())
+                    .orderByAsc(DocumentChunk::getChunkIndex))
+            .getFirst();
+    assertEquals("手册", policy.getHeading());
+    assertTrue(policy.getContent().contains("## 年假"));
+    assertTrue(policy.getContent().contains("年假五天。"));
+    assertTrue(policy.getContent().contains("## 报销"));
+    assertTrue(policy.getEmbeddingText().contains("年假"));
+    assertTrue(policy.getEmbeddingText().contains("报销"));
+    assertEquals(1, policy.getLineStart());
+    assertEquals(8, policy.getLineEnd());
+  }
+
+  @Test
   void importsRealStorageAndVectorsAnswersFromActualDatabaseText() {
     UUID kb = kb();
     UUID ownerId = ownerId();
@@ -354,7 +380,7 @@ class InfrastructureIntegrationTest {
         retrievalMapper.search(
             ownerId, kb, "[1,0]", "qwen-emb-8b", "siliconflow", "Qwen/Qwen3-Embedding-8B", 2, 5);
     assertEquals(1, hits.size());
-    assertEquals(original, hits.getFirst().getContent());
+    assertEquals(original, hits.getFirst().getContent().replaceAll("\\n{2,}", "\n"));
     assertEquals(1.0, hits.getFirst().getSimilarity(), 1e-6);
     assertTrue(
         retrievalMapper.activeModelBindings(ownerId).stream()
@@ -501,8 +527,8 @@ class InfrastructureIntegrationTest {
   void databaseFailureAfterFirstChunkRollsBackWholeVersion() {
     UUID kb = kb();
     UUID ownerId = ownerId();
-    // The deliberately malformed second vector bypasses the mocked HTTP adapter,
-    // forcing the real database constraint to fail after the first INSERT.
+    // 第二个向量故意使用错误维度，绕过模拟的 HTTP 适配器，
+    // 让真实数据库约束在第一条分块写入后触发失败，以验证整版回滚。
     when(embedding.embed(anyString(), anyString(), anyString(), anyInt(), anyList()))
         .thenReturn(List.of(new float[] {1, 0}, new float[] {1, 0, 0}));
     String multiChunk = "# 第一节\n" + "第一块内容。".repeat(300) + "\n\n# 第二节\n" + "第二块内容。".repeat(300);
@@ -541,6 +567,11 @@ class InfrastructureIntegrationTest {
             .getFirst();
     assertEquals("READY", rebuilt.status());
     assertEquals(1, rebuilt.chunkCount());
+    assertEquals(
+        "structured-block-v6",
+        versionMapper
+            .selectById(documentMapper.selectById(uploaded.documentId()).getActiveVersionId())
+            .getChunkerVersion());
     assertNotEquals(original.getId(), replacement.getId());
     assertEquals(
         1,

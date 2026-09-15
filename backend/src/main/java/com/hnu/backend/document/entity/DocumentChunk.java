@@ -29,6 +29,9 @@ public class DocumentChunk {
   /** 分块正文。 */
   private String content;
 
+  /** 入库时用于向量化的文本，可包含原文之外的章节上下文。 */
+  private String embeddingText;
+
   /** 分块所属的 Markdown 标题路径。 */
   private String heading;
 

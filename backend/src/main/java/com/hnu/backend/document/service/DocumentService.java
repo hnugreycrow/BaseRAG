@@ -136,7 +136,7 @@ public class DocumentService {
             + ".md");
     version.setStatus("UPLOADED");
     version.setParserVersion("markdown-v1");
-    version.setChunkerVersion("semantic-pack-v2");
+    version.setChunkerVersion("markdown-block-v4");
     version.setEmbeddingModelId(knowledgeBase.getEmbeddingModelId());
     version.setEmbeddingProvider(knowledgeBase.getEmbeddingProvider());
     version.setEmbeddingModel(knowledgeBase.getEmbeddingModel());
@@ -230,7 +230,7 @@ public class DocumentService {
               version.getEmbeddingProvider(),
               version.getEmbeddingModel(),
               version.getEmbeddingDimensions(),
-              pieces.stream().map(MarkdownChunker.Piece::content).toList());
+              pieces.stream().map(MarkdownChunker.Piece::embeddingText).toList());
       tx.executeWithoutResult(
           status -> {
             // 新分块和激活版本在同一事务内切换，查询端不会观察到半成品版本。
@@ -252,6 +252,7 @@ public class DocumentService {
               chunk.setVersionId(version.getId());
               chunk.setChunkIndex(i);
               chunk.setContent(piece.content());
+              chunk.setEmbeddingText(piece.embeddingText());
               chunk.setHeading(piece.heading());
               chunk.setLineStart(piece.lineStart());
               chunk.setLineEnd(piece.lineEnd());
@@ -260,7 +261,7 @@ public class DocumentService {
               chunks.insertVector(chunk);
             }
             version.setStatus("READY");
-            version.setChunkerVersion("semantic-pack-v2");
+            version.setChunkerVersion("structured-block-v6");
             versions.updateById(version);
             document.setActiveVersionId(version.getId());
             documents.updateById(document);
