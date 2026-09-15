@@ -39,7 +39,7 @@ class ConversationContextServiceTest {
             5);
     QueryPlan plan = QueryPlan.fallback("制度有什么要求？");
     RoutingPlan routes = knowledgeRoutes(plan);
-    when(memories.load(conversation.getId(), 6)).thenReturn(memory);
+    when(memories.load(conversation.getOwnerId(), conversation.getId(), 6)).thenReturn(memory);
     when(planning.execute(memory, "它有什么要求？")).thenReturn(plan);
     when(routing.execute(plan)).thenReturn(routes);
 
@@ -48,7 +48,7 @@ class ConversationContextServiceTest {
     assertEquals(plan, prepared.queryPlan());
     assertEquals(routes, prepared.routingPlan());
     assertEquals(memory, prepared.memory());
-    verify(memories).load(conversation.getId(), 6);
+    verify(memories).load(conversation.getOwnerId(), conversation.getId(), 6);
     verify(planning).execute(memory, "它有什么要求？");
     verify(routing).execute(plan);
   }
@@ -59,7 +59,7 @@ class ConversationContextServiceTest {
     RagMemory memory = new RagMemory("{}", 0, List.of(), List.of(), 0);
     QueryPlan plan = QueryPlan.fallback("原问题");
     RoutingPlan routes = knowledgeRoutes(plan);
-    when(memories.load(conversation.getId(), 1)).thenReturn(memory);
+    when(memories.load(conversation.getOwnerId(), conversation.getId(), 1)).thenReturn(memory);
     when(planning.execute(memory, "原问题")).thenReturn(plan);
     when(routing.execute(plan)).thenReturn(routes);
 
@@ -85,6 +85,7 @@ class ConversationContextServiceTest {
   private Conversation conversation() {
     Conversation value = new Conversation();
     value.setId(UUID.randomUUID());
+    value.setOwnerId(UUID.randomUUID());
     return value;
   }
 }

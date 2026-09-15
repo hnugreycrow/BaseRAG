@@ -18,6 +18,9 @@ public class Conversation {
   @TableId(type = IdType.INPUT)
   private UUID id;
 
+  /** 所属用户标识。 */
+  private UUID ownerId;
+
   /** 会话标题。 */
   private String title;
 

@@ -1,12 +1,17 @@
 package com.hnu.backend.shared.error;
 
+import cn.dev33.satoken.exception.NotLoginException;
+import cn.dev33.satoken.exception.NotRoleException;
 import com.hnu.backend.shared.web.ApiResponse;
 import com.hnu.backend.shared.web.RequestIdFilter;
+import io.lettuce.core.RedisException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.RedisConnectionFailureException;
+import org.springframework.data.redis.RedisSystemException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
@@ -36,6 +41,46 @@ public class GlobalExceptionHandler {
   ResponseEntity<ApiResponse<Void>> api(ApiException e, HttpServletRequest request) {
     log.warn("requestId={} code={}", requestId(request), e.code());
     return failure(e.status(), e.code(), e.getMessage(), request);
+  }
+
+  /**
+   * 将 Sa-Token 未登录、过期和被踢下线场景统一映射为 401。
+   *
+   * @param e Sa-Token 未登录异常
+   * @param request 当前请求
+   * @return 统一认证失败响应
+   */
+  @ExceptionHandler(NotLoginException.class)
+  ResponseEntity<ApiResponse<Void>> notLoggedIn(NotLoginException e, HttpServletRequest request) {
+    return failure(HttpStatus.UNAUTHORIZED, "AUTH_REQUIRED", "请先登录", request);
+  }
+
+  /**
+   * 将 Sa-Token 角色校验失败映射为 403。
+   *
+   * @param e Sa-Token 角色异常
+   * @param request 当前请求
+   * @return 统一无权限响应
+   */
+  @ExceptionHandler(NotRoleException.class)
+  ResponseEntity<ApiResponse<Void>> roleDenied(NotRoleException e, HttpServletRequest request) {
+    return failure(HttpStatus.FORBIDDEN, "FORBIDDEN", "当前账号无权执行此操作", request);
+  }
+
+  /**
+   * Redis 不可用时显式关闭认证，避免回退到非持久会话。
+   *
+   * @param request 当前请求
+   * @return 统一认证存储故障响应
+   */
+  @ExceptionHandler({
+    RedisConnectionFailureException.class,
+    RedisSystemException.class,
+    RedisException.class
+  })
+  ResponseEntity<ApiResponse<Void>> redisUnavailable(HttpServletRequest request) {
+    return failure(
+        HttpStatus.SERVICE_UNAVAILABLE, "AUTH_STORE_UNAVAILABLE", "认证服务暂时不可用，请稍后重试", request);
   }
 
   @ExceptionHandler(MaxUploadSizeExceededException.class)
@@ -83,9 +128,27 @@ public class GlobalExceptionHandler {
 
   @ExceptionHandler(Exception.class)
   ResponseEntity<ApiResponse<Void>> unexpected(Exception e, HttpServletRequest request) {
+    if (isAuthStoreFailure(e)) return redisUnavailable(request);
     // Do not log raw provider responses, SQL values, credentials or document text.
     log.error("requestId={} exceptionType={}", requestId(request), e.getClass().getSimpleName());
     return failure(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "服务暂时不可用，请稍后重试", request);
+  }
+
+  /**
+   * 识别被 Sa-Token 或基础设施适配层包装的 Redis 异常。
+   *
+   * @param error 顶层异常
+   * @return 异常链中是否存在 Redis 客户端故障
+   */
+  private boolean isAuthStoreFailure(Throwable error) {
+    Throwable current = error;
+    while (current != null) {
+      if (current instanceof RedisConnectionFailureException
+          || current instanceof RedisSystemException
+          || current instanceof RedisException) return true;
+      current = current.getCause();
+    }
+    return false;
   }
 
   private ResponseEntity<ApiResponse<Void>> failure(

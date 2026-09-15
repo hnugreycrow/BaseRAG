@@ -13,23 +13,31 @@ public interface MessageMapper extends BaseMapper<Message> {
   /**
    * 按标识查询消息。
    *
+   * @param ownerId 所属用户标识
    * @param id 消息标识
    * @return 消息；不存在时返回 {@code null}
    */
-  default Message find(UUID id) {
-    return selectById(id);
+  default Message find(UUID ownerId, UUID id) {
+    return selectOne(
+        Wrappers.<Message>lambdaQuery()
+            .eq(Message::getId, id)
+            .apply(
+                "conversation_id IN (SELECT id FROM conversations WHERE owner_id = {0})", ownerId));
   }
 
   /**
    * 按轮次和回答版本顺序列出会话中的全部消息。
    *
+   * @param ownerId 所属用户标识
    * @param conversationId 会话标识
    * @return 有序消息列表
    */
-  default List<Message> list(UUID conversationId) {
+  default List<Message> list(UUID ownerId, UUID conversationId) {
     return selectList(
         Wrappers.<Message>lambdaQuery()
             .eq(Message::getConversationId, conversationId)
+            .apply(
+                "conversation_id IN (SELECT id FROM conversations WHERE owner_id = {0})", ownerId)
             .orderByAsc(Message::getTurnIndex)
             .orderByDesc(Message::getRole)
             .orderByAsc(Message::getVariantIndex));
@@ -38,27 +46,33 @@ public interface MessageMapper extends BaseMapper<Message> {
   /**
    * 使用客户端请求标识查询已创建的消息，以支持幂等重试。
    *
+   * @param ownerId 所属用户标识
    * @param conversationId 会话标识
    * @param clientRequestId 客户端请求标识
    * @return 已存在的消息；不存在时返回 {@code null}
    */
-  default Message findByClientRequest(UUID conversationId, UUID clientRequestId) {
+  default Message findByClientRequest(UUID ownerId, UUID conversationId, UUID clientRequestId) {
     return selectOne(
         Wrappers.<Message>lambdaQuery()
             .eq(Message::getConversationId, conversationId)
+            .apply(
+                "conversation_id IN (SELECT id FROM conversations WHERE owner_id = {0})", ownerId)
             .eq(Message::getClientRequestId, clientRequestId));
   }
 
   /**
    * 查询指定用户消息的最新助手回答版本。
    *
+   * @param ownerId 所属用户标识
    * @param userMessageId 用户消息标识
    * @return 最新回答；不存在时返回 {@code null}
    */
-  default Message latestReply(UUID userMessageId) {
+  default Message latestReply(UUID ownerId, UUID userMessageId) {
     return selectOne(
         Wrappers.<Message>lambdaQuery()
             .eq(Message::getReplyToId, userMessageId)
+            .apply(
+                "conversation_id IN (SELECT id FROM conversations WHERE owner_id = {0})", ownerId)
             .orderByDesc(Message::getVariantIndex)
             .last("LIMIT 1"));
   }
@@ -66,15 +80,19 @@ public interface MessageMapper extends BaseMapper<Message> {
   /**
    * 计算会话中下一个用户轮次序号。
    *
+   * @param ownerId 所属用户标识
    * @param conversationId 会话标识
    * @return 从 1 开始的下一个轮次序号
    */
-  default int nextTurn(UUID conversationId) {
+  default int nextTurn(UUID ownerId, UUID conversationId) {
     Object value =
         selectObjs(
                 Wrappers.<Message>query()
                     .select("COALESCE(MAX(turn_index), 0) + 1")
                     .eq("conversation_id", conversationId)
+                    .apply(
+                        "conversation_id IN (SELECT id FROM conversations WHERE owner_id = {0})",
+                        ownerId)
                     .eq("role", "USER"))
             .getFirst();
     return ((Number) value).intValue();
@@ -83,15 +101,19 @@ public interface MessageMapper extends BaseMapper<Message> {
   /**
    * 计算指定用户消息的下一个助手回答版本序号。
    *
+   * @param ownerId 所属用户标识
    * @param userMessageId 用户消息标识
    * @return 从 1 开始的下一个版本序号
    */
-  default int nextVariant(UUID userMessageId) {
+  default int nextVariant(UUID ownerId, UUID userMessageId) {
     Object value =
         selectObjs(
                 Wrappers.<Message>query()
                     .select("COALESCE(MAX(variant_index), 0) + 1")
                     .eq("reply_to_id", userMessageId)
+                    .apply(
+                        "conversation_id IN (SELECT id FROM conversations WHERE owner_id = {0})",
+                        ownerId)
                     .eq("role", "ASSISTANT"))
             .getFirst();
     return ((Number) value).intValue();
@@ -100,13 +122,16 @@ public interface MessageMapper extends BaseMapper<Message> {
   /**
    * 将指定用户消息下当前生效的助手回答全部停用。
    *
+   * @param ownerId 所属用户标识
    * @param userMessageId 用户消息标识
    * @return 受影响行数
    */
-  default int deactivateReplies(UUID userMessageId) {
+  default int deactivateReplies(UUID ownerId, UUID userMessageId) {
     return update(
         Wrappers.<Message>lambdaUpdate()
             .eq(Message::getReplyToId, userMessageId)
+            .apply(
+                "conversation_id IN (SELECT id FROM conversations WHERE owner_id = {0})", ownerId)
             .eq(Message::getRole, "ASSISTANT")
             .eq(Message::isActive, true)
             .set(Message::isActive, false)
@@ -116,15 +141,18 @@ public interface MessageMapper extends BaseMapper<Message> {
   /**
    * 保存生成前的检索问题与来源，仅允许更新尚未终止的回答。
    *
+   * @param ownerId 所属用户标识
    * @param id 助手消息标识
    * @param query 实际检索问题
    * @param sourcesJson 检索来源的 JSON 表示
    * @return 受影响行数
    */
-  default int prepare(UUID id, String query, String sourcesJson) {
+  default int prepare(UUID ownerId, UUID id, String query, String sourcesJson) {
     return update(
         Wrappers.<Message>lambdaUpdate()
             .eq(Message::getId, id)
+            .apply(
+                "conversation_id IN (SELECT id FROM conversations WHERE owner_id = {0})", ownerId)
             .in(Message::getStatus, "PENDING", "STREAMING")
             .set(Message::getRetrievalQuery, query)
             .setSql("sources = CAST({0} AS jsonb)", sourcesJson)
@@ -134,13 +162,16 @@ public interface MessageMapper extends BaseMapper<Message> {
   /**
    * 将待处理回答原子地切换为流式生成状态。
    *
+   * @param ownerId 所属用户标识
    * @param id 助手消息标识
    * @return 受影响行数；为 0 表示状态已变化
    */
-  default int markStreaming(UUID id) {
+  default int markStreaming(UUID ownerId, UUID id) {
     return update(
         Wrappers.<Message>lambdaUpdate()
             .eq(Message::getId, id)
+            .apply(
+                "conversation_id IN (SELECT id FROM conversations WHERE owner_id = {0})", ownerId)
             .eq(Message::getStatus, "PENDING")
             .set(Message::getStatus, "STREAMING")
             .setSql("updated_at = now()"));
@@ -149,14 +180,17 @@ public interface MessageMapper extends BaseMapper<Message> {
   /**
    * 保存当前生成尝试所使用的模型信息。
    *
+   * @param ownerId 所属用户标识
    * @param id 助手消息标识
    * @param modelInfoJson 模型信息的 JSON 表示
    * @return 受影响行数
    */
-  default int setModelInfo(UUID id, String modelInfoJson) {
+  default int setModelInfo(UUID ownerId, UUID id, String modelInfoJson) {
     return update(
         Wrappers.<Message>lambdaUpdate()
             .eq(Message::getId, id)
+            .apply(
+                "conversation_id IN (SELECT id FROM conversations WHERE owner_id = {0})", ownerId)
             .in(Message::getStatus, "PENDING", "STREAMING")
             .setSql("model_info = CAST({0} AS jsonb)", modelInfoJson)
             .setSql("updated_at = now()"));
@@ -165,14 +199,17 @@ public interface MessageMapper extends BaseMapper<Message> {
   /**
    * 持久化流式生成的阶段性正文，仅允许更新运行中的回答。
    *
+   * @param ownerId 所属用户标识
    * @param id 助手消息标识
    * @param content 当前完整正文
    * @return 受影响行数
    */
-  default int checkpoint(UUID id, String content) {
+  default int checkpoint(UUID ownerId, UUID id, String content) {
     return update(
         Wrappers.<Message>lambdaUpdate()
             .eq(Message::getId, id)
+            .apply(
+                "conversation_id IN (SELECT id FROM conversations WHERE owner_id = {0})", ownerId)
             .in(Message::getStatus, "PENDING", "STREAMING")
             .set(Message::getContent, content)
             .setSql("updated_at = now()"));
@@ -181,16 +218,20 @@ public interface MessageMapper extends BaseMapper<Message> {
   /**
    * 将运行中的助手回答原子地标记为完成并保存最终元数据。
    *
+   * @param ownerId 所属用户标识
    * @param id 助手消息标识
    * @param content 最终正文
    * @param citationsJson 引用标识列表的 JSON 表示
    * @param modelInfoJson 模型信息的 JSON 表示；允许为空
    * @return 受影响行数
    */
-  default int complete(UUID id, String content, String citationsJson, String modelInfoJson) {
+  default int complete(
+      UUID ownerId, UUID id, String content, String citationsJson, String modelInfoJson) {
     var wrapper =
         Wrappers.<Message>lambdaUpdate()
             .eq(Message::getId, id)
+            .apply(
+                "conversation_id IN (SELECT id FROM conversations WHERE owner_id = {0})", ownerId)
             .in(Message::getStatus, "PENDING", "STREAMING")
             .set(Message::getStatus, "COMPLETED")
             .set(Message::getContent, content)
@@ -211,6 +252,7 @@ public interface MessageMapper extends BaseMapper<Message> {
   /**
    * 将运行中的助手回答切换为失败或取消终态。
    *
+   * @param ownerId 所属用户标识
    * @param id 助手消息标识
    * @param status 目标终态
    * @param content 失败前已生成的正文
@@ -218,10 +260,13 @@ public interface MessageMapper extends BaseMapper<Message> {
    * @param message 错误信息
    * @return 受影响行数
    */
-  default int terminalFailure(UUID id, String status, String content, String code, String message) {
+  default int terminalFailure(
+      UUID ownerId, UUID id, String status, String content, String code, String message) {
     return update(
         Wrappers.<Message>lambdaUpdate()
             .eq(Message::getId, id)
+            .apply(
+                "conversation_id IN (SELECT id FROM conversations WHERE owner_id = {0})", ownerId)
             .in(Message::getStatus, "PENDING", "STREAMING")
             .set(Message::getStatus, status)
             .set(Message::getContent, content)
@@ -234,16 +279,19 @@ public interface MessageMapper extends BaseMapper<Message> {
   /**
    * 在会话范围内取消指定的运行中助手回答。
    *
+   * @param ownerId 所属用户标识
    * @param id 助手消息标识
    * @param conversationId 会话标识，用于防止跨会话误操作
    * @param content 取消前已生成的正文
    * @return 受影响行数
    */
-  default int cancelRunning(UUID id, UUID conversationId, String content) {
+  default int cancelRunning(UUID ownerId, UUID id, UUID conversationId, String content) {
     return update(
         Wrappers.<Message>lambdaUpdate()
             .eq(Message::getId, id)
             .eq(Message::getConversationId, conversationId)
+            .apply(
+                "conversation_id IN (SELECT id FROM conversations WHERE owner_id = {0})", ownerId)
             .eq(Message::getRole, "ASSISTANT")
             .in(Message::getStatus, "PENDING", "STREAMING")
             .set(Message::getStatus, "CANCELLED")
@@ -274,13 +322,16 @@ public interface MessageMapper extends BaseMapper<Message> {
   /**
    * 统计会话中仍在生成的助手回答数量。
    *
+   * @param ownerId 所属用户标识
    * @param conversationId 会话标识
    * @return 运行中回答数量
    */
-  default long countRunning(UUID conversationId) {
+  default long countRunning(UUID ownerId, UUID conversationId) {
     return selectCount(
         Wrappers.<Message>lambdaQuery()
             .eq(Message::getConversationId, conversationId)
+            .apply(
+                "conversation_id IN (SELECT id FROM conversations WHERE owner_id = {0})", ownerId)
             .eq(Message::getRole, "ASSISTANT")
             .in(Message::getStatus, "PENDING", "STREAMING"));
   }

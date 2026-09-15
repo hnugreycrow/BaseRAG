@@ -16,6 +16,9 @@ public class KnowledgeBase {
   @TableId(type = IdType.INPUT)
   private UUID id;
 
+  /** 所属用户标识。 */
+  private UUID ownerId;
+
   /** 知识库名称。 */
   private String name;
 

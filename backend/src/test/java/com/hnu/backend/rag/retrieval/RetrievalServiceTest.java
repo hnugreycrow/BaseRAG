@@ -12,6 +12,8 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 class RetrievalServiceTest {
+  private final UUID ownerId = UUID.randomUUID();
+
   @Test
   void embedsPerModelAndMergesByRankInsteadOfRawSimilarity() {
     EmbeddingClient embedding = mock(EmbeddingClient.class);
@@ -21,20 +23,21 @@ class RetrievalServiceTest {
     config.getSearch().setRecallBudget(2);
     var first = new EmbeddingBinding("model-a", 2);
     var second = new EmbeddingBinding("model-b", 3);
-    when(mapper.activeModelBindings()).thenReturn(List.of(first, second));
+    when(mapper.activeModelBindings(ownerId)).thenReturn(List.of(first, second));
     when(embedding.embed("model-a", 2, List.of("问题"))).thenReturn(List.of(new float[] {1, 0}));
     when(embedding.embed("model-b", 3, List.of("问题"))).thenReturn(List.of(new float[] {0, 1, 0}));
     SearchHit modelAFirst = hit(id(1), .60);
     SearchHit modelASecond = hit(id(4), .59);
     SearchHit modelBFirst = hit(id(2), .99);
     SearchHit modelBSecond = hit(id(3), .98);
-    when(mapper.searchAll("[1.0, 0.0]", "model-a", 2, 2))
+    when(mapper.searchAll(ownerId, "[1.0, 0.0]", "model-a", 2, 2))
         .thenReturn(List.of(modelAFirst, modelASecond));
-    when(mapper.searchAll("[0.0, 1.0, 0.0]", "model-b", 3, 2))
+    when(mapper.searchAll(ownerId, "[0.0, 1.0, 0.0]", "model-b", 3, 2))
         .thenReturn(List.of(modelBFirst, modelBSecond));
 
     var result =
-        new RetrievalService(embedding, mapper, config, new CandidateMerge()).retrieve("问题");
+        new RetrievalService(embedding, mapper, config, new CandidateMerge())
+            .retrieve(ownerId, "问题");
 
     assertEquals(List.of(id(1), id(2)), result.stream().map(SearchHit::getChunkId).toList());
     verify(embedding).embed("model-a", 2, List.of("问题"));
@@ -52,19 +55,20 @@ class RetrievalServiceTest {
     UUID second = UUID.randomUUID();
     List<UUID> scope = List.of(first, second);
     var binding = new EmbeddingBinding("model-a", 2);
-    when(mapper.activeModelBindingsIn(scope)).thenReturn(List.of(binding));
+    when(mapper.activeModelBindingsIn(ownerId, scope)).thenReturn(List.of(binding));
     when(embedding.embed("model-a", 2, List.of("问题"))).thenReturn(List.of(new float[] {1, 0}));
-    when(mapper.searchIn(scope, "[1.0, 0.0]", "model-a", 2, 2))
+    when(mapper.searchIn(ownerId, scope, "[1.0, 0.0]", "model-a", 2, 2))
         .thenReturn(List.of(hit(id(1), .91)));
 
     var result =
-        new RetrievalService(embedding, mapper, config, new CandidateMerge()).retrieve("问题", scope);
+        new RetrievalService(embedding, mapper, config, new CandidateMerge())
+            .retrieve(ownerId, "问题", scope);
 
     assertEquals(List.of(.91), result.stream().map(SearchHit::getSimilarity).toList());
-    verify(mapper).activeModelBindingsIn(scope);
-    verify(mapper).searchIn(scope, "[1.0, 0.0]", "model-a", 2, 2);
-    verify(mapper, never()).activeModelBindings();
-    verify(mapper, never()).searchAll(anyString(), anyString(), anyInt(), anyInt());
+    verify(mapper).activeModelBindingsIn(ownerId, scope);
+    verify(mapper).searchIn(ownerId, scope, "[1.0, 0.0]", "model-a", 2, 2);
+    verify(mapper, never()).activeModelBindings(any());
+    verify(mapper, never()).searchAll(any(), anyString(), anyString(), anyInt(), anyInt());
   }
 
   @Test
@@ -74,7 +78,7 @@ class RetrievalServiceTest {
 
     var result =
         new RetrievalService(embedding, mapper, new RagProperties(), new CandidateMerge())
-            .retrieve("问题", List.of());
+            .retrieve(ownerId, "问题", List.of());
 
     assertTrue(result.isEmpty());
     verifyNoInteractions(embedding, mapper);
@@ -88,7 +92,8 @@ class RetrievalServiceTest {
     config.getSearch().getChannels().getVector().setEnabled(false);
 
     var result =
-        new RetrievalService(embedding, mapper, config, new CandidateMerge()).retrieve("问题");
+        new RetrievalService(embedding, mapper, config, new CandidateMerge())
+            .retrieve(ownerId, "问题");
 
     assertTrue(result.isEmpty());
     verifyNoInteractions(embedding, mapper);

@@ -1,5 +1,6 @@
 package com.hnu.backend.document.controller;
 
+import com.hnu.backend.auth.service.CurrentUserService;
 import com.hnu.backend.document.dto.DocumentRequest;
 import com.hnu.backend.document.service.DocumentService;
 import com.hnu.backend.document.vo.DocumentChunkDetailResponse;
@@ -35,16 +36,24 @@ import org.springframework.web.multipart.MultipartFile;
 @RequestMapping("/api/knowledge-bases/{knowledgeBaseId}/documents")
 public class DocumentController {
   private final DocumentService documents;
+  private final CurrentUserService currentUsers;
 
-  public DocumentController(DocumentService documents) {
+  /**
+   * 创建文档控制器。
+   *
+   * @param documents 文档服务
+   * @param currentUsers 当前用户解析服务
+   */
+  public DocumentController(DocumentService documents, CurrentUserService currentUsers) {
     this.documents = documents;
+    this.currentUsers = currentUsers;
   }
 
   /** 上传 Markdown 原文件；分块和向量化由独立接口显式触发。 */
   @PostMapping
   public DocumentImportResponse upload(
       @PathVariable UUID knowledgeBaseId, @RequestPart("file") MultipartFile file) {
-    return documents.upload(knowledgeBaseId, file);
+    return documents.upload(currentUsers.require().getId(), knowledgeBaseId, file);
   }
 
   /** 分页查询知识库中的文档及其最新处理状态。 */
@@ -54,7 +63,7 @@ public class DocumentController {
       @RequestParam(defaultValue = "1") @Min(1) int page,
       @RequestParam(defaultValue = "10") @Min(1) @Max(100) int pageSize,
       @RequestParam(required = false) @Size(max = 200) String query) {
-    return documents.list(knowledgeBaseId, page, pageSize, query);
+    return documents.list(currentUsers.require().getId(), knowledgeBaseId, page, pageSize, query);
   }
 
   /** 修改文档显示名称，不改变存储文件与已有版本。 */
@@ -63,14 +72,15 @@ public class DocumentController {
       @PathVariable UUID knowledgeBaseId,
       @PathVariable UUID documentId,
       @Valid @RequestBody DocumentRequest request) {
-    return documents.rename(knowledgeBaseId, documentId, request.name());
+    return documents.rename(
+        currentUsers.require().getId(), knowledgeBaseId, documentId, request.name());
   }
 
   /** 删除文档、版本、分块及对应的存储文件。 */
   @DeleteMapping("/{documentId}")
   @ResponseStatus(HttpStatus.NO_CONTENT)
   public void delete(@PathVariable UUID knowledgeBaseId, @PathVariable UUID documentId) {
-    documents.delete(knowledgeBaseId, documentId);
+    documents.delete(currentUsers.require().getId(), knowledgeBaseId, documentId);
   }
 
   /** 分页查询文档当前生效版本的分块摘要。 */
@@ -81,14 +91,15 @@ public class DocumentController {
       @RequestParam(defaultValue = "1") @Min(1) int page,
       @RequestParam(defaultValue = "10") @Min(1) @Max(100) int pageSize,
       @RequestParam(required = false) @Size(max = 200) String query) {
-    return documents.listChunks(knowledgeBaseId, documentId, page, pageSize, query);
+    return documents.listChunks(
+        currentUsers.require().getId(), knowledgeBaseId, documentId, page, pageSize, query);
   }
 
   /** 对文档最新版本执行分块和向量化，已就绪版本可通过该接口重建。 */
   @PostMapping("/{documentId}/chunks")
   public DocumentImportResponse createChunks(
       @PathVariable UUID knowledgeBaseId, @PathVariable UUID documentId) {
-    return documents.createChunks(knowledgeBaseId, documentId);
+    return documents.createChunks(currentUsers.require().getId(), knowledgeBaseId, documentId);
   }
 
   /** 获取当前生效版本中的指定分块全文。 */
@@ -97,6 +108,6 @@ public class DocumentController {
       @PathVariable UUID knowledgeBaseId,
       @PathVariable UUID documentId,
       @PathVariable UUID chunkId) {
-    return documents.chunk(knowledgeBaseId, documentId, chunkId);
+    return documents.chunk(currentUsers.require().getId(), knowledgeBaseId, documentId, chunkId);
   }
 }

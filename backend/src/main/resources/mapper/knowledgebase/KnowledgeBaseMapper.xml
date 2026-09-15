@@ -7,6 +7,7 @@
         SELECT *
         FROM knowledge_bases
         WHERE id = #{id}
+          AND owner_id = #{ownerId}
         FOR UPDATE
     </select>
 
@@ -15,9 +16,10 @@
         FROM knowledge_bases kb
         LEFT JOIN documents d ON d.knowledge_base_id = kb.id
         <where>
+            kb.owner_id = #{ownerId}
             <if test="query != null and query != ''">
-                LOWER(kb.name) LIKE CONCAT('%', LOWER(#{query}), '%')
-                OR LOWER(COALESCE(kb.embedding_model, '')) LIKE CONCAT('%', LOWER(#{query}), '%')
+                AND (LOWER(kb.name) LIKE CONCAT('%', LOWER(#{query}), '%')
+                OR LOWER(COALESCE(kb.embedding_model, '')) LIKE CONCAT('%', LOWER(#{query}), '%'))
             </if>
         </where>
         GROUP BY kb.id
@@ -29,9 +31,10 @@
         SELECT COUNT(*)
         FROM knowledge_bases kb
         <where>
+            kb.owner_id = #{ownerId}
             <if test="query != null and query != ''">
-                LOWER(kb.name) LIKE CONCAT('%', LOWER(#{query}), '%')
-                OR LOWER(COALESCE(kb.embedding_model, '')) LIKE CONCAT('%', LOWER(#{query}), '%')
+                AND (LOWER(kb.name) LIKE CONCAT('%', LOWER(#{query}), '%')
+                OR LOWER(COALESCE(kb.embedding_model, '')) LIKE CONCAT('%', LOWER(#{query}), '%'))
             </if>
         </where>
     </select>

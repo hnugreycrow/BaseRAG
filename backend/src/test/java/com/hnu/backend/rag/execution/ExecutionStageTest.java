@@ -21,12 +21,14 @@ import com.hnu.backend.shared.error.ApiException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 class ExecutionStageTest {
+  private final UUID ownerId = UUID.randomUUID();
   private final List<ExecutionStage> stages = new ArrayList<>();
 
   @AfterEach
@@ -67,7 +69,7 @@ class ExecutionStageTest {
     EvidenceCandidate candidate =
         com.hnu.backend.rag.retrieval.CandidateMergeTest.candidate(
             com.hnu.backend.rag.retrieval.CandidateMergeTest.id(1), "Q1", "model-a", .9, 1, .05);
-    when(retrieval.retrieveCandidates(eq("Q1"), eq("年假制度"), isNull(), any(), any()))
+    when(retrieval.retrieveCandidates(eq(ownerId), eq("Q1"), eq("年假制度"), isNull(), any(), any()))
         .thenReturn(List.of(candidate));
     when(tools.execute(any()))
         .thenReturn(
@@ -81,7 +83,7 @@ class ExecutionStageTest {
                 false,
                 1));
 
-    ExecutionResult result = stage.execute(plan, routing);
+    ExecutionResult result = stage.execute(ownerId, plan, routing);
 
     assertEquals(1, result.candidates().size());
     assertEquals(
@@ -103,16 +105,16 @@ class ExecutionStageTest {
     QueryPlan plan =
         new QueryPlan("两个问题", List.of(new SubQuestion("Q1", "慢问题"), new SubQuestion("Q2", "失败问题")));
     RoutingPlan routing = new RoutingPlan(List.of(knowledge("Q1"), knowledge("Q2")));
-    when(retrieval.retrieveCandidates(eq("Q1"), anyString(), isNull(), any(), any()))
+    when(retrieval.retrieveCandidates(eq(ownerId), eq("Q1"), anyString(), isNull(), any(), any()))
         .thenAnswer(
             ignored -> {
               Thread.sleep(1000);
               return List.of();
             });
-    when(retrieval.retrieveCandidates(eq("Q2"), anyString(), isNull(), any(), any()))
+    when(retrieval.retrieveCandidates(eq(ownerId), eq("Q2"), anyString(), isNull(), any(), any()))
         .thenThrow(new IllegalStateException("boom"));
 
-    ExecutionResult result = stage.execute(plan, routing);
+    ExecutionResult result = stage.execute(ownerId, plan, routing);
 
     assertEquals(SubQuestionExecution.Status.TIMEOUT, result.subQuestions().get(0).status());
     assertEquals(SubQuestionExecution.Status.FAILED, result.subQuestions().get(1).status());
@@ -128,7 +130,7 @@ class ExecutionStageTest {
     QueryPlan plan = new QueryPlan("问题", List.of(new SubQuestion("Q1", "运行中")));
     RoutingPlan routing = new RoutingPlan(List.of(knowledge("Q1")));
     AtomicBoolean cancelled = new AtomicBoolean();
-    when(retrieval.retrieveCandidates(eq("Q1"), anyString(), isNull(), any(), any()))
+    when(retrieval.retrieveCandidates(eq(ownerId), eq("Q1"), anyString(), isNull(), any(), any()))
         .thenAnswer(
             ignored -> {
               Thread.sleep(1000);
@@ -137,14 +139,14 @@ class ExecutionStageTest {
 
     var future =
         java.util.concurrent.CompletableFuture.supplyAsync(
-            () -> stage.execute(plan, routing, null, cancelled::get));
+            () -> stage.execute(ownerId, plan, routing, null, cancelled::get));
     Thread.sleep(30);
     cancelled.set(true);
 
     CompletionException error = assertThrows(CompletionException.class, future::join);
     assertEquals(ApiException.class, error.getCause().getClass());
     verify(retrieval, timeout(1000))
-        .retrieveCandidates(eq("Q1"), anyString(), isNull(), any(), any());
+        .retrieveCandidates(eq(ownerId), eq("Q1"), anyString(), isNull(), any(), any());
   }
 
   private ExecutionStage stage(

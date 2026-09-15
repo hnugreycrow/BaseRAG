@@ -13,6 +13,7 @@ import java.util.*;
 import org.junit.jupiter.api.Test;
 
 class RagServiceTest {
+  private final UUID ownerId = UUID.randomUUID();
   private final RagProperties config = new RagProperties();
   private final RetrievalService retrieval = mock(RetrievalService.class);
   private final ChatClient chat = mock(ChatClient.class);
@@ -28,8 +29,8 @@ class RagServiceTest {
 
   @Test
   void emptyRetrievalDoesNotCallGeneration() {
-    when(retrieval.retrieve("问题")).thenReturn(List.of());
-    var result = service.ask("问题");
+    when(retrieval.retrieve(ownerId, "问题")).thenReturn(List.of());
+    var result = service.ask(ownerId, "问题");
     assertTrue(result.answer().contains("资料不足"));
     assertTrue(result.sources().isEmpty());
     verifyNoInteractions(chat);
@@ -38,10 +39,10 @@ class RagServiceTest {
   @Test
   void repairsInvalidCitationOnceAndReturnsActualContext() {
     var hit = ContextAndCitationsTest.hit("员工年假为五天。");
-    when(retrieval.retrieve("年假？")).thenReturn(List.of(hit));
+    when(retrieval.retrieve(ownerId, "年假？")).thenReturn(List.of(hit));
     when(chat.stream(anyString(), anyString(), any(), any()))
         .thenReturn(generation("五天 [S99]"), generation("五天 [S1]"));
-    var result = service.ask("年假？");
+    var result = service.ask(ownerId, "年假？");
     assertEquals(List.of("S1"), result.citations());
     assertEquals(hit.getContent(), result.sources().getFirst().content());
     assertEquals("qwen-plus-latest", result.modelInfo().model());
@@ -50,28 +51,29 @@ class RagServiceTest {
 
   @Test
   void secondIllegalCitationFailsInsteadOfReturningAnswer() {
-    when(retrieval.retrieve(anyString())).thenReturn(List.of(ContextAndCitationsTest.hit("依据")));
+    when(retrieval.retrieve(eq(ownerId), anyString()))
+        .thenReturn(List.of(ContextAndCitationsTest.hit("依据")));
     when(chat.stream(anyString(), anyString(), any(), any())).thenReturn(generation("[S99]"));
-    assertThrows(ApiException.class, () -> service.ask("问题"));
+    assertThrows(ApiException.class, () -> service.ask(ownerId, "问题"));
     verify(chat, times(2)).stream(anyString(), anyString(), any(), any());
   }
 
   @Test
   void rejectsEmptyAndOverBudgetQuestions() {
-    assertThrows(ApiException.class, () -> service.ask(" "));
-    assertThrows(ApiException.class, () -> service.ask("甲".repeat(2001)));
+    assertThrows(ApiException.class, () -> service.ask(ownerId, " "));
+    assertThrows(ApiException.class, () -> service.ask(ownerId, "甲".repeat(2001)));
     verifyNoInteractions(retrieval, chat);
   }
 
   @Test
   void passesRequestedKnowledgeBaseScopeToRetrieval() {
     UUID knowledgeBaseId = UUID.randomUUID();
-    when(retrieval.retrieve("年假？", List.of(knowledgeBaseId))).thenReturn(List.of());
+    when(retrieval.retrieve(ownerId, "年假？", List.of(knowledgeBaseId))).thenReturn(List.of());
 
-    service.ask("年假？", List.of(knowledgeBaseId));
+    service.ask(ownerId, "年假？", List.of(knowledgeBaseId));
 
-    verify(retrieval).retrieve("年假？", List.of(knowledgeBaseId));
-    verify(retrieval, never()).retrieve("年假？");
+    verify(retrieval).retrieve(ownerId, "年假？", List.of(knowledgeBaseId));
+    verify(retrieval, never()).retrieve(ownerId, "年假？");
   }
 
   private ChatClient.Generation generation(String content) {

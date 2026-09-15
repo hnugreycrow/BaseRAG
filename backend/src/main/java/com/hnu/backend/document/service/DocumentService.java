@@ -51,6 +51,18 @@ public class DocumentService {
   private final TransactionTemplate tx;
   private final Semaphore imports = new Semaphore(2);
 
+  /**
+   * 创建文档服务。
+   *
+   * @param knowledgeBases 知识库所有权与模型服务
+   * @param documents 文档持久化接口
+   * @param versions 文档版本持久化接口
+   * @param chunks 文档分块持久化接口
+   * @param chunker Markdown 分块器
+   * @param embedding 向量模型客户端
+   * @param storage 对象存储接口
+   * @param tx 事务模板
+   */
   public DocumentService(
       KnowledgeBaseService knowledgeBases,
       DocumentMapper documents,
@@ -75,12 +87,13 @@ public class DocumentService {
    *
    * <p>该方法不执行耗时的分块与向量化；若数据库写入失败，会补偿删除已上传的对象。
    *
+   * @param ownerId 所属用户
    * @param knowledgeBaseId 所属知识库
    * @param file 上传文件
    * @return 状态为 {@code UPLOADED} 的导入结果
    */
-  public DocumentImportResponse upload(UUID knowledgeBaseId, MultipartFile file) {
-    var knowledgeBase = knowledgeBases.ensureModel(knowledgeBaseId);
+  public DocumentImportResponse upload(UUID ownerId, UUID knowledgeBaseId, MultipartFile file) {
+    var knowledgeBase = knowledgeBases.ensureModel(ownerId, knowledgeBaseId);
     String name = Optional.ofNullable(file.getOriginalFilename()).orElse("");
     name = name.replace('\\', '/');
     name = name.substring(name.lastIndexOf('/') + 1);
@@ -111,7 +124,16 @@ public class DocumentService {
     version.setDocumentId(document.getId());
     version.setKnowledgeBaseId(knowledgeBaseId);
     version.setFileHash(hash(bytes));
-    version.setStorageKey(knowledgeBaseId + "/" + document.getId() + "/" + version.getId() + ".md");
+    version.setStorageKey(
+        "users/"
+            + ownerId
+            + "/knowledge-bases/"
+            + knowledgeBaseId
+            + "/documents/"
+            + document.getId()
+            + "/"
+            + version.getId()
+            + ".md");
     version.setStatus("UPLOADED");
     version.setParserVersion("markdown-v1");
     version.setChunkerVersion("semantic-pack-v2");
@@ -123,7 +145,10 @@ public class DocumentService {
       tx.executeWithoutResult(
           status -> {
             knowledgeBases.lockAndBindModel(
-                knowledgeBaseId, version.getEmbeddingModel(), version.getEmbeddingDimensions());
+                ownerId,
+                knowledgeBaseId,
+                version.getEmbeddingModel(),
+                version.getEmbeddingDimensions());
             documents.insert(document);
             versions.insert(version);
           });
@@ -140,19 +165,33 @@ public class DocumentService {
    * 对文档最新版本执行分块和向量化。
    *
    * <p>进程内最多允许两个导入任务并发，防止模型和数据库连接被批量任务耗尽。
+   *
+   * @param ownerId 所属用户标识
+   * @param knowledgeBaseId 知识库标识
+   * @param documentId 文档标识
+   * @return 最新导入状态
    */
-  public DocumentImportResponse createChunks(UUID knowledgeBaseId, UUID documentId) {
+  public DocumentImportResponse createChunks(UUID ownerId, UUID knowledgeBaseId, UUID documentId) {
     if (!imports.tryAcquire())
       throw new ApiException("IMPORT_BUSY", "正在处理其他文档，请稍后重试", HttpStatus.TOO_MANY_REQUESTS);
     try {
-      return processChunks(knowledgeBaseId, documentId);
+      return processChunks(ownerId, knowledgeBaseId, documentId);
     } finally {
       imports.release();
     }
   }
 
-  private DocumentImportResponse processChunks(UUID knowledgeBaseId, UUID documentId) {
-    Document document = requireDocument(knowledgeBaseId, documentId);
+  /**
+   * 在所有权校验后执行分块、向量化和原子版本切换。
+   *
+   * @param ownerId 所属用户标识；异步链路不得从请求线程隐式读取
+   * @param knowledgeBaseId 知识库标识
+   * @param documentId 文档标识
+   * @return 处理结果
+   */
+  private DocumentImportResponse processChunks(
+      UUID ownerId, UUID knowledgeBaseId, UUID documentId) {
+    Document document = requireDocument(ownerId, knowledgeBaseId, documentId);
     DocumentVersion version = latestVersion(documentId);
     boolean rebuilding = "READY".equals(version.getStatus());
     if ("PROCESSING".equals(version.getStatus())) {
@@ -186,7 +225,10 @@ public class DocumentService {
           status -> {
             // 新分块和激活版本在同一事务内切换，查询端不会观察到半成品版本。
             knowledgeBases.lockAndBindModel(
-                knowledgeBaseId, version.getEmbeddingModel(), version.getEmbeddingDimensions());
+                ownerId,
+                knowledgeBaseId,
+                version.getEmbeddingModel(),
+                version.getEmbeddingDimensions());
             chunks.delete(
                 new LambdaQueryWrapper<DocumentChunk>()
                     .eq(DocumentChunk::getDocumentId, document.getId()));
@@ -231,9 +273,19 @@ public class DocumentService {
     }
   }
 
-  /** 分页查询知识库内文档及其最新版本状态和生效分块数。 */
-  public PageResponse<DocumentResponse> list(UUID id, int page, int pageSize, String rawQuery) {
-    knowledgeBases.requireEntity(id);
+  /**
+   * 分页查询知识库内文档及其最新版本状态和生效分块数。
+   *
+   * @param ownerId 所属用户标识
+   * @param id 知识库标识
+   * @param page 页码
+   * @param pageSize 每页数量
+   * @param rawQuery 可选搜索词
+   * @return 文档分页
+   */
+  public PageResponse<DocumentResponse> list(
+      UUID ownerId, UUID id, int page, int pageSize, String rawQuery) {
+    knowledgeBases.requireEntity(ownerId, id);
     String query = normalizeQuery(rawQuery);
     long rowOffset = offset(page, pageSize);
     long total = documents.selectCount(documentQuery(id, query));
@@ -250,18 +302,33 @@ public class DocumentService {
     return PageResponse.of(items, total, page, pageSize);
   }
 
-  /** 修改文档显示名称。 */
-  public DocumentResponse rename(UUID knowledgeBaseId, UUID documentId, String rawName) {
-    Document document = requireDocument(knowledgeBaseId, documentId);
+  /**
+   * 修改文档显示名称。
+   *
+   * @param ownerId 所属用户标识
+   * @param knowledgeBaseId 知识库标识
+   * @param documentId 文档标识
+   * @param rawName 新名称
+   * @return 更新后的文档
+   */
+  public DocumentResponse rename(
+      UUID ownerId, UUID knowledgeBaseId, UUID documentId, String rawName) {
+    Document document = requireDocument(ownerId, knowledgeBaseId, documentId);
     String name = normalizeDocumentName(rawName);
     document.setName(name);
     documents.updateById(document);
     return toDocumentResponse(document);
   }
 
-  /** 在事务内删除文档关系数据，提交后尽力移除各版本对应的对象存储文件。 */
-  public void delete(UUID knowledgeBaseId, UUID documentId) {
-    requireDocument(knowledgeBaseId, documentId);
+  /**
+   * 在事务内删除文档关系数据，提交后尽力移除各版本对应的对象存储文件。
+   *
+   * @param ownerId 所属用户标识
+   * @param knowledgeBaseId 知识库标识
+   * @param documentId 文档标识
+   */
+  public void delete(UUID ownerId, UUID knowledgeBaseId, UUID documentId) {
+    requireDocument(ownerId, knowledgeBaseId, documentId);
     List<DocumentVersion> storedVersions =
         versions.selectList(
             new LambdaQueryWrapper<DocumentVersion>()
@@ -282,10 +349,25 @@ public class DocumentService {
     storedVersions.forEach(version -> removeStoredFile(version.getStorageKey()));
   }
 
-  /** 分页查询文档当前生效版本的分块摘要；尚无生效版本时返回空页。 */
+  /**
+   * 分页查询文档当前生效版本的分块摘要；尚无生效版本时返回空页。
+   *
+   * @param ownerId 所属用户标识
+   * @param knowledgeBaseId 知识库标识
+   * @param documentId 文档标识
+   * @param page 页码
+   * @param pageSize 每页数量
+   * @param rawQuery 可选搜索词
+   * @return 分块分页
+   */
   public PageResponse<DocumentChunkResponse> listChunks(
-      UUID knowledgeBaseId, UUID documentId, int page, int pageSize, String rawQuery) {
-    Document document = requireDocument(knowledgeBaseId, documentId);
+      UUID ownerId,
+      UUID knowledgeBaseId,
+      UUID documentId,
+      int page,
+      int pageSize,
+      String rawQuery) {
+    Document document = requireDocument(ownerId, knowledgeBaseId, documentId);
     long rowOffset = offset(page, pageSize);
     if (document.getActiveVersionId() == null) return PageResponse.empty(page, pageSize);
     String query = normalizeQuery(rawQuery);
@@ -302,9 +384,18 @@ public class DocumentService {
     return PageResponse.of(items, total, page, pageSize);
   }
 
-  /** 获取文档当前生效版本中的指定分块。 */
-  public DocumentChunkDetailResponse chunk(UUID knowledgeBaseId, UUID documentId, UUID chunkId) {
-    Document document = requireDocument(knowledgeBaseId, documentId);
+  /**
+   * 获取文档当前生效版本中的指定分块。
+   *
+   * @param ownerId 所属用户标识
+   * @param knowledgeBaseId 知识库标识
+   * @param documentId 文档标识
+   * @param chunkId 分块标识
+   * @return 分块详情
+   */
+  public DocumentChunkDetailResponse chunk(
+      UUID ownerId, UUID knowledgeBaseId, UUID documentId, UUID chunkId) {
+    Document document = requireDocument(ownerId, knowledgeBaseId, documentId);
     DocumentChunk chunk = chunks.selectById(chunkId);
     if (chunk == null
         || !chunk.getDocumentId().equals(documentId)
@@ -418,8 +509,16 @@ public class DocumentService {
     return text;
   }
 
-  private Document requireDocument(UUID knowledgeBaseId, UUID documentId) {
-    knowledgeBases.requireEntity(knowledgeBaseId);
+  /**
+   * 在知识库所有权校验后加载文档，跨用户访问与不存在统一返回 404。
+   *
+   * @param ownerId 所属用户标识
+   * @param knowledgeBaseId 知识库标识
+   * @param documentId 文档标识
+   * @return 文档实体
+   */
+  private Document requireDocument(UUID ownerId, UUID knowledgeBaseId, UUID documentId) {
+    knowledgeBases.requireEntity(ownerId, knowledgeBaseId);
     Document document = documents.selectById(documentId);
     if (document == null || !document.getKnowledgeBaseId().equals(knowledgeBaseId))
       throw new ApiException("DOCUMENT_NOT_FOUND", "文档不存在", HttpStatus.NOT_FOUND);

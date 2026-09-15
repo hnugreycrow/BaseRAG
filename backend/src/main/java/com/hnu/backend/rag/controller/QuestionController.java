@@ -1,5 +1,6 @@
 package com.hnu.backend.rag.controller;
 
+import com.hnu.backend.auth.service.CurrentUserService;
 import com.hnu.backend.rag.answer.RagService;
 import com.hnu.backend.rag.dto.QuestionRequest;
 import com.hnu.backend.rag.vo.AnswerResponse;
@@ -16,14 +17,27 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/questions")
 public class QuestionController {
   private final RagService rag;
+  private final CurrentUserService currentUsers;
 
-  public QuestionController(RagService rag) {
+  /**
+   * 创建单轮问答控制器。
+   *
+   * @param rag 单轮 RAG 服务
+   * @param currentUsers 当前用户解析服务
+   */
+  public QuestionController(RagService rag, CurrentUserService currentUsers) {
     this.rag = rag;
+    this.currentUsers = currentUsers;
   }
 
-  /** 检索知识库并生成带来源引用的回答。 */
+  /**
+   * 只检索当前用户的知识库并生成带来源引用的回答。
+   *
+   * @param request 问题与可选知识库范围
+   * @return 回答、引用和来源
+   */
   @PostMapping
   public AnswerResponse ask(@Valid @RequestBody QuestionRequest request) {
-    return rag.ask(request.question(), request.knowledgeBaseIds());
+    return rag.ask(currentUsers.require().getId(), request.question(), request.knowledgeBaseIds());
   }
 }

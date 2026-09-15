@@ -21,14 +21,16 @@ public final class MemoryStage {
   /**
    * 加载当前轮次之前的会话记忆。
    *
+   * @param ownerId 所属用户标识
    * @param conversationId 会话标识
    * @param beforeTurn 当前问题所在轮次
    * @return 已校验的会话记忆
    */
-  public RagMemory execute(UUID conversationId, int beforeTurn) {
+  public RagMemory execute(UUID ownerId, UUID conversationId, int beforeTurn) {
+    Objects.requireNonNull(ownerId, "ownerId");
     Objects.requireNonNull(conversationId, "conversationId");
     if (beforeTurn < 1) throw new IllegalArgumentException("beforeTurn must be positive");
     return Objects.requireNonNull(
-        provider.load(conversationId, beforeTurn), "MemoryProvider returned null");
+        provider.load(ownerId, conversationId, beforeTurn), "MemoryProvider returned null");
   }
 }

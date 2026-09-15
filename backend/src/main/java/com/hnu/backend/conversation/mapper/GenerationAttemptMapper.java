@@ -6,19 +6,24 @@ import com.hnu.backend.conversation.entity.GenerationAttempt;
 import java.util.UUID;
 import org.apache.ibatis.annotations.Mapper;
 
+/** 按回答所属用户约束生成尝试状态迁移的数据访问接口。 */
 @Mapper
 public interface GenerationAttemptMapper extends BaseMapper<GenerationAttempt> {
   /**
    * 更新仍在流式生成的尝试正文检查点。
    *
+   * @param ownerId 所属用户标识
    * @param id 生成尝试 ID
    * @param content 当前完整正文
    * @return 实际更新行数
    */
-  default int checkpoint(UUID id, String content) {
+  default int checkpoint(UUID ownerId, UUID id, String content) {
     return update(
         Wrappers.<GenerationAttempt>lambdaUpdate()
             .eq(GenerationAttempt::getId, id)
+            .apply(
+                "assistant_message_id IN (SELECT m.id FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE c.owner_id = {0})",
+                ownerId)
             .eq(GenerationAttempt::getStatus, "STREAMING")
             .set(GenerationAttempt::getContent, content));
   }
@@ -26,15 +31,19 @@ public interface GenerationAttemptMapper extends BaseMapper<GenerationAttempt> {
   /**
    * 将流式尝试标记为成功完成。
    *
+   * @param ownerId 所属用户标识
    * @param id 生成尝试 ID
    * @param content 完整回答正文
    * @param finishReason 供应商返回的结束原因
    * @return 实际更新行数
    */
-  default int complete(UUID id, String content, String finishReason) {
+  default int complete(UUID ownerId, UUID id, String content, String finishReason) {
     return update(
         Wrappers.<GenerationAttempt>lambdaUpdate()
             .eq(GenerationAttempt::getId, id)
+            .apply(
+                "assistant_message_id IN (SELECT m.id FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE c.owner_id = {0})",
+                ownerId)
             .eq(GenerationAttempt::getStatus, "STREAMING")
             .set(GenerationAttempt::getStatus, "COMPLETED")
             .set(GenerationAttempt::getContent, content)
@@ -45,6 +54,7 @@ public interface GenerationAttemptMapper extends BaseMapper<GenerationAttempt> {
   /**
    * 将仍在流式生成的尝试更新为失败或取消终态。
    *
+   * @param ownerId 所属用户标识
    * @param id 生成尝试 ID
    * @param status 目标终态
    * @param content 已生成的部分正文
@@ -52,10 +62,14 @@ public interface GenerationAttemptMapper extends BaseMapper<GenerationAttempt> {
    * @param message 用户可读错误信息
    * @return 实际更新行数
    */
-  default int fail(UUID id, String status, String content, String code, String message) {
+  default int fail(
+      UUID ownerId, UUID id, String status, String content, String code, String message) {
     return update(
         Wrappers.<GenerationAttempt>lambdaUpdate()
             .eq(GenerationAttempt::getId, id)
+            .apply(
+                "assistant_message_id IN (SELECT m.id FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE c.owner_id = {0})",
+                ownerId)
             .eq(GenerationAttempt::getStatus, "STREAMING")
             .set(GenerationAttempt::getStatus, status)
             .set(GenerationAttempt::getContent, content)
@@ -69,15 +83,19 @@ public interface GenerationAttemptMapper extends BaseMapper<GenerationAttempt> {
    *
    * <p>状态条件严格限制为 {@code COMPLETED}，避免并发取消或其他失败覆盖既有终态。
    *
+   * @param ownerId 所属用户标识
    * @param id 生成尝试 ID
    * @param code 稳定引用错误码
    * @param message 引用校验失败说明
    * @return 实际更新行数
    */
-  default int invalidateCompleted(UUID id, String code, String message) {
+  default int invalidateCompleted(UUID ownerId, UUID id, String code, String message) {
     return update(
         Wrappers.<GenerationAttempt>lambdaUpdate()
             .eq(GenerationAttempt::getId, id)
+            .apply(
+                "assistant_message_id IN (SELECT m.id FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE c.owner_id = {0})",
+                ownerId)
             .eq(GenerationAttempt::getStatus, "COMPLETED")
             .set(GenerationAttempt::getStatus, "FAILED")
             .set(GenerationAttempt::getErrorCode, code)
@@ -88,13 +106,17 @@ public interface GenerationAttemptMapper extends BaseMapper<GenerationAttempt> {
   /**
    * 取消指定回答下仍处于流式状态的全部模型尝试。
    *
+   * @param ownerId 所属用户标识
    * @param assistantMessageId assistant 消息 ID
    * @return 实际更新行数
    */
-  default int cancelRunning(UUID assistantMessageId) {
+  default int cancelRunning(UUID ownerId, UUID assistantMessageId) {
     return update(
         Wrappers.<GenerationAttempt>lambdaUpdate()
             .eq(GenerationAttempt::getAssistantMessageId, assistantMessageId)
+            .apply(
+                "assistant_message_id IN (SELECT m.id FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE c.owner_id = {0})",
+                ownerId)
             .eq(GenerationAttempt::getStatus, "STREAMING")
             .set(GenerationAttempt::getStatus, "CANCELLED")
             .set(GenerationAttempt::getErrorCode, "GENERATION_CANCELLED")

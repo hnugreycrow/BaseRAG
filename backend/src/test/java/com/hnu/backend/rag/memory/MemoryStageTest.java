@@ -18,14 +18,15 @@ class MemoryStageTest {
   @Test
   void delegatesToMemoryProvider() {
     UUID conversationId = UUID.randomUUID();
+    UUID ownerId = UUID.randomUUID();
     RagMemory expected =
         new RagMemory("{}", 1, List.of(), List.of(new MemoryTurn(2, "question", "answer")), 2);
-    when(provider.load(conversationId, 3)).thenReturn(expected);
+    when(provider.load(ownerId, conversationId, 3)).thenReturn(expected);
 
-    RagMemory actual = stage.execute(conversationId, 3);
+    RagMemory actual = stage.execute(ownerId, conversationId, 3);
 
     assertEquals(expected, actual);
-    verify(provider).load(conversationId, 3);
+    verify(provider).load(ownerId, conversationId, 3);
   }
 
   @Test
@@ -45,9 +46,10 @@ class MemoryStageTest {
   @Test
   void acceptsEmptyHistory() {
     UUID conversationId = UUID.randomUUID();
+    UUID ownerId = UUID.randomUUID();
     RagMemory empty = new RagMemory("{}", 0, List.of(), List.of(), 0);
-    when(provider.load(conversationId, 1)).thenReturn(empty);
+    when(provider.load(ownerId, conversationId, 1)).thenReturn(empty);
 
-    assertEquals(empty, stage.execute(conversationId, 1));
+    assertEquals(empty, stage.execute(ownerId, conversationId, 1));
   }
 }

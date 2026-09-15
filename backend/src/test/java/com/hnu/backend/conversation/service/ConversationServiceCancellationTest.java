@@ -54,6 +54,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 @ExtendWith(MockitoExtension.class)
 class ConversationServiceCancellationTest {
+  private final UUID ownerId = UUID.randomUUID();
   @Mock private ConversationMapper conversations;
   @Mock private MessageMapper messages;
   @Mock private GenerationAttemptMapper attempts;
@@ -97,27 +98,29 @@ class ConversationServiceCancellationTest {
   void cancelsPersistedRunningGenerationWhenInMemoryTaskIsMissing() {
     UUID conversationId = UUID.randomUUID();
     UUID generationId = UUID.randomUUID();
+    when(conversations.find(ownerId, conversationId)).thenReturn(conversation(conversationId));
     Message pending = assistant(conversationId, generationId, "PENDING");
-    when(messages.find(generationId)).thenReturn(pending);
-    when(messages.cancelRunning(generationId, conversationId, "partial")).thenReturn(1);
+    when(messages.find(ownerId, generationId)).thenReturn(pending);
+    when(messages.cancelRunning(ownerId, generationId, conversationId, "partial")).thenReturn(1);
     runTransactionsImmediately();
 
-    service.cancel(conversationId, generationId);
+    service.cancel(ownerId, conversationId, generationId);
 
     InOrder order = inOrder(messages, attempts, conversations);
-    order.verify(messages).cancelRunning(generationId, conversationId, "partial");
-    order.verify(attempts).cancelRunning(generationId);
-    order.verify(conversations).touch(conversationId);
+    order.verify(messages).cancelRunning(ownerId, generationId, conversationId, "partial");
+    order.verify(attempts).cancelRunning(ownerId, generationId);
+    order.verify(conversations).touch(ownerId, conversationId);
   }
 
   @Test
   void repeatedCancellationOfTerminalGenerationIsIdempotent() {
     UUID conversationId = UUID.randomUUID();
     UUID generationId = UUID.randomUUID();
-    when(messages.find(generationId))
+    when(conversations.find(ownerId, conversationId)).thenReturn(conversation(conversationId));
+    when(messages.find(ownerId, generationId))
         .thenReturn(assistant(conversationId, generationId, "CANCELLED"));
 
-    service.cancel(conversationId, generationId);
+    service.cancel(ownerId, conversationId, generationId);
 
     verify(tx, never()).executeWithoutResult(any());
   }
@@ -126,11 +129,13 @@ class ConversationServiceCancellationTest {
   void rejectsGenerationFromAnotherConversation() {
     UUID conversationId = UUID.randomUUID();
     UUID generationId = UUID.randomUUID();
-    when(messages.find(generationId))
+    when(conversations.find(ownerId, conversationId)).thenReturn(conversation(conversationId));
+    when(messages.find(ownerId, generationId))
         .thenReturn(assistant(UUID.randomUUID(), generationId, "PENDING"));
 
     ApiException error =
-        assertThrows(ApiException.class, () -> service.cancel(conversationId, generationId));
+        assertThrows(
+            ApiException.class, () -> service.cancel(ownerId, conversationId, generationId));
 
     assertEquals("GENERATION_NOT_FOUND", error.code());
     verify(tx, never()).executeWithoutResult(any());
@@ -141,14 +146,15 @@ class ConversationServiceCancellationTest {
     UUID conversationId = UUID.randomUUID();
     Conversation conversation = new Conversation();
     conversation.setId(conversationId);
-    when(conversations.find(conversationId)).thenReturn(conversation);
-    when(messages.nextTurn(conversationId)).thenReturn(1);
+    conversation.setOwnerId(ownerId);
+    when(conversations.find(ownerId, conversationId)).thenReturn(conversation);
+    when(messages.nextTurn(ownerId, conversationId)).thenReturn(1);
     when(rag.getMaxQuestionChars()).thenReturn(2000);
     when(conversationContext.prepare(any(Conversation.class), eq(1), eq("原问题")))
         .thenReturn(preparedMixed("改写后的独立问题"));
     ExecutionResult empty =
         new ExecutionResult(List.of(), List.of(), RagBudgetSnapshot.from(new RagProperties()));
-    when(executionStage.execute(any(), any(), isNull(), any(CancellationToken.class)))
+    when(executionStage.execute(eq(ownerId), any(), any(), isNull(), any(CancellationToken.class)))
         .thenReturn(empty);
     when(deduplicationStage.execute(empty.candidates(), empty.budget()))
         .thenReturn(new DeduplicationResult(List.of(), 0, 0, 0));
@@ -169,14 +175,14 @@ class ConversationServiceCancellationTest {
     runTransactionsWithResultImmediately();
     runTransactionsImmediately();
 
-    service.ask(conversationId, UUID.randomUUID(), "原问题", "request-id");
+    service.ask(ownerId, conversationId, UUID.randomUUID(), "原问题", "request-id");
 
     verify(executionStage, timeout(2000))
-        .execute(any(), any(), isNull(), any(CancellationToken.class));
+        .execute(eq(ownerId), any(), any(), isNull(), any(CancellationToken.class));
     verify(deduplicationStage, timeout(2000)).execute(empty.candidates(), empty.budget());
     verify(rerankStage, timeout(2000))
         .execute(any(), eq(empty), eq(List.of()), any(CancellationToken.class));
-    verify(messages, timeout(2000)).prepare(any(UUID.class), eq("改写后的独立问题"), eq("[]"));
+    verify(messages, timeout(2000)).prepare(eq(ownerId), any(UUID.class), eq("改写后的独立问题"), eq("[]"));
   }
 
   @Test
@@ -184,8 +190,9 @@ class ConversationServiceCancellationTest {
     UUID conversationId = UUID.randomUUID();
     Conversation conversation = new Conversation();
     conversation.setId(conversationId);
-    when(conversations.find(conversationId)).thenReturn(conversation);
-    when(messages.nextTurn(conversationId)).thenReturn(1);
+    conversation.setOwnerId(ownerId);
+    when(conversations.find(ownerId, conversationId)).thenReturn(conversation);
+    when(messages.nextTurn(ownerId, conversationId)).thenReturn(1);
     when(rag.getMaxQuestionChars()).thenReturn(2000);
     when(conversationContext.prepare(any(Conversation.class), eq(1), eq("你好")))
         .thenReturn(preparedSystemChat("你好"));
@@ -193,10 +200,10 @@ class ConversationServiceCancellationTest {
         .thenReturn(new ChatClient.Generation("你好，有什么可以帮你？", "chat", "test", "model"));
     runTransactionsWithResultImmediately();
 
-    service.ask(conversationId, UUID.randomUUID(), "你好", "request-id");
+    service.ask(ownerId, conversationId, UUID.randomUUID(), "你好", "request-id");
 
     verify(chat, timeout(2000)).stream(anyString(), contains("你好"), any(), any());
-    verify(messages, timeout(2000)).prepare(any(UUID.class), isNull(), eq("[]"));
+    verify(messages, timeout(2000)).prepare(eq(ownerId), any(UUID.class), isNull(), eq("[]"));
     verifyNoInteractions(executionStage);
   }
 
@@ -205,8 +212,9 @@ class ConversationServiceCancellationTest {
     UUID conversationId = UUID.randomUUID();
     Conversation conversation = new Conversation();
     conversation.setId(conversationId);
-    when(conversations.find(conversationId)).thenReturn(conversation);
-    when(messages.nextTurn(conversationId)).thenReturn(1);
+    conversation.setOwnerId(ownerId);
+    when(conversations.find(ownerId, conversationId)).thenReturn(conversation);
+    when(messages.nextTurn(ownerId, conversationId)).thenReturn(1);
     when(rag.getMaxQuestionChars()).thenReturn(2000);
     ConversationContextService.PreparedContext prepared = preparedTool("查询今日排班");
     when(conversationContext.prepare(any(Conversation.class), eq(1), eq("查询今日排班")))
@@ -235,6 +243,7 @@ class ConversationServiceCancellationTest {
                     1)),
             RagBudgetSnapshot.from(new RagProperties()));
     when(executionStage.execute(
+            eq(ownerId),
             eq(prepared.queryPlan()),
             eq(prepared.routingPlan()),
             isNull(),
@@ -259,11 +268,11 @@ class ConversationServiceCancellationTest {
         .thenReturn(new ChatClient.Generation("根据工具 T1，今天值班", "chat", "test", "model"));
     runTransactionsWithResultImmediately();
 
-    service.ask(conversationId, UUID.randomUUID(), "查询今日排班", "request-id");
+    service.ask(ownerId, conversationId, UUID.randomUUID(), "查询今日排班", "request-id");
 
     verify(chat, timeout(2000)).stream(
         anyString(), contains("\"referenceId\":\"T1\""), any(), any());
-    verify(messages, timeout(2000)).prepare(any(UUID.class), eq("查询今日排班"), eq("[]"));
+    verify(messages, timeout(2000)).prepare(eq(ownerId), any(UUID.class), eq("查询今日排班"), eq("[]"));
   }
 
   @Test
@@ -271,14 +280,15 @@ class ConversationServiceCancellationTest {
     UUID conversationId = UUID.randomUUID();
     Conversation conversation = new Conversation();
     conversation.setId(conversationId);
-    when(conversations.find(conversationId)).thenReturn(conversation);
-    when(messages.nextTurn(conversationId)).thenReturn(1);
+    conversation.setOwnerId(ownerId);
+    when(conversations.find(ownerId, conversationId)).thenReturn(conversation);
+    when(messages.nextTurn(ownerId, conversationId)).thenReturn(1);
     when(rag.getMaxQuestionChars()).thenReturn(2000);
     when(config.getCheckpointChars()).thenReturn(1000);
     when(config.getCheckpointIntervalMs()).thenReturn(60_000L);
     when(conversationContext.prepare(any(Conversation.class), eq(1), eq("你好")))
         .thenReturn(preparedSystemChat("你好"));
-    when(messages.markStreaming(any(UUID.class))).thenReturn(1);
+    when(messages.markStreaming(eq(ownerId), any(UUID.class))).thenReturn(1);
     AiProperties.ModelTarget target =
         new AiProperties.ModelTarget(
             "chat", "test", "model", "http://localhost", "/chat", "", 1000, 0, false);
@@ -302,13 +312,14 @@ class ConversationServiceCancellationTest {
     runTransactionsWithResultImmediately();
     runTransactionsImmediately();
 
-    service.ask(conversationId, UUID.randomUUID(), "你好", "request-id");
+    service.ask(ownerId, conversationId, UUID.randomUUID(), "你好", "request-id");
 
-    verify(messages, timeout(2000).times(1)).markStreaming(any(UUID.class));
+    verify(messages, timeout(2000).times(1)).markStreaming(eq(ownerId), any(UUID.class));
     verify(attempts, timeout(2000))
-        .invalidateCompleted(any(UUID.class), eq("INVALID_CITATIONS"), anyString());
-    verify(messages, timeout(2000)).checkpoint(any(UUID.class), eq(""));
-    verify(messages, timeout(2000)).complete(any(UUID.class), eq("你好"), eq("[]"), anyString());
+        .invalidateCompleted(eq(ownerId), any(UUID.class), eq("INVALID_CITATIONS"), anyString());
+    verify(messages, timeout(2000)).checkpoint(eq(ownerId), any(UUID.class), eq(""));
+    verify(messages, timeout(2000))
+        .complete(eq(ownerId), any(UUID.class), eq("你好"), eq("[]"), anyString());
     ArgumentCaptor<GenerationAttempt> captured = ArgumentCaptor.forClass(GenerationAttempt.class);
     verify(attempts, timeout(2000).times(2)).insert(captured.capture());
     assertEquals(
@@ -376,6 +387,13 @@ class ConversationServiceCancellationTest {
     message.setStatus(status);
     message.setContent("partial");
     return message;
+  }
+
+  private Conversation conversation(UUID conversationId) {
+    Conversation conversation = new Conversation();
+    conversation.setId(conversationId);
+    conversation.setOwnerId(ownerId);
+    return conversation;
   }
 
   private void runTransactionsImmediately() {

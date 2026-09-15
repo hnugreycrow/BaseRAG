@@ -39,9 +39,11 @@ public class ConversationContextService {
    * @param currentTurn 当前用户轮次
    * @param question 用户原始问题
    * @return 原始记忆、规划和安全路由的不可变组合
+   * @throws IllegalArgumentException 会话所有者或记忆输入无效时抛出
    */
   public PreparedContext prepare(Conversation conversation, int currentTurn, String question) {
-    RagMemory memory = memoryStage.execute(conversation.getId(), currentTurn);
+    RagMemory memory =
+        memoryStage.execute(conversation.getOwnerId(), conversation.getId(), currentTurn);
     QueryPlan queryPlan = queryPlanningStage.execute(memory, question);
     RoutingPlan routingPlan = intentRoutingStage.execute(queryPlan);
     return new PreparedContext(memory, queryPlan, routingPlan);

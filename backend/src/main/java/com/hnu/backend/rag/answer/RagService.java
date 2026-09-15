@@ -50,21 +50,23 @@ public class RagService {
    *
    * <p>模型首次返回非法引用时会使用相同证据修复一次，仍不合法则向上游报告错误。
    *
+   * @param ownerId 所属用户标识
    * @param question 用户问题
    * @return 回答、来源、实际引用和模型信息
    */
-  public AnswerResponse ask(String question) {
-    return ask(question, null);
+  public AnswerResponse ask(UUID ownerId, String question) {
+    return ask(ownerId, question, null);
   }
 
   /**
    * 根据问题和可选知识库范围生成回答。
    *
+   * @param ownerId 所属用户标识；外部知识库范围不能扩大该用户权限
    * @param question 用户问题
    * @param knowledgeBaseIds 允许检索的知识库；null 表示全部知识库
    * @return 回答、来源、实际引用和模型信息
    */
-  public AnswerResponse ask(String question, List<UUID> knowledgeBaseIds) {
+  public AnswerResponse ask(UUID ownerId, String question, List<UUID> knowledgeBaseIds) {
     if (question == null
         || question.isBlank()
         || question.length() > config.getMaxQuestionChars()) {
@@ -75,8 +77,8 @@ public class RagService {
     String normalizedQuestion = question.strip();
     var hits =
         knowledgeBaseIds == null
-            ? retrieval.retrieve(normalizedQuestion)
-            : retrieval.retrieve(normalizedQuestion, knowledgeBaseIds);
+            ? retrieval.retrieve(ownerId, normalizedQuestion)
+            : retrieval.retrieve(ownerId, normalizedQuestion, knowledgeBaseIds);
     var context = contexts.build(hits);
     long retrieved = System.nanoTime();
     AssembledPrompt prompt = prompts.assembleLegacy(normalizedQuestion, context);

@@ -7,9 +7,10 @@ public interface MemoryProvider {
   /**
    * 加载目标轮次之前的摘要和历史消息。
    *
+   * @param ownerId 所属用户标识
    * @param conversationId 会话标识
    * @param beforeTurn 当前问题所在轮次，返回内容不包含该轮
    * @return 会话记忆
    */
-  RagMemory load(UUID conversationId, int beforeTurn);
+  RagMemory load(UUID ownerId, UUID conversationId, int beforeTurn);
 }

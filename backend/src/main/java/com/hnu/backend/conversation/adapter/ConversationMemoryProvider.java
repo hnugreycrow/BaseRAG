@@ -63,15 +63,16 @@ public class ConversationMemoryProvider implements MemoryProvider {
   /**
    * 加载指定轮次之前的有效会话记忆，并在满足批次条件时尝试刷新持久化摘要。
    *
+   * @param ownerId 所属用户标识
    * @param conversationId 会话 ID
    * @param beforeTurn 当前用户消息轮次，返回内容不包含该轮
    * @return 与会话实体隔离的不可变 RAG 记忆
    */
   @Override
-  public RagMemory load(UUID conversationId, int beforeTurn) {
-    Conversation conversation = conversations.find(conversationId);
+  public RagMemory load(UUID ownerId, UUID conversationId, int beforeTurn) {
+    Conversation conversation = conversations.find(ownerId, conversationId);
     if (conversation == null) throw new IllegalArgumentException("conversation does not exist");
-    List<MemoryTurn> turns = completeTurns(conversationId, beforeTurn);
+    List<MemoryTurn> turns = completeTurns(ownerId, conversationId, beforeTurn);
     conversation = refreshSummaryIfNeeded(conversation, turns);
     int covered = conversation.getSummarizedThroughTurn();
     List<MemoryTurn> uncovered = turns.stream().filter(turn -> turn.turnIndex() > covered).toList();
@@ -125,12 +126,17 @@ public class ConversationMemoryProvider implements MemoryProvider {
       String encoded = json.writeValueAsString(parsed);
       int updated =
           conversations.updateSummary(
-              conversation.getId(), encoded, through, conversation.getSummaryRevision());
+              conversation.getOwnerId(),
+              conversation.getId(),
+              encoded,
+              through,
+              conversation.getSummaryRevision());
       if (updated == 1) {
-        Conversation refreshed = conversations.find(conversation.getId());
+        Conversation refreshed =
+            conversations.find(conversation.getOwnerId(), conversation.getId());
         return refreshed == null ? conversation : refreshed;
       }
-      Conversation winner = conversations.find(conversation.getId());
+      Conversation winner = conversations.find(conversation.getOwnerId(), conversation.getId());
       return winner == null ? conversation : winner;
     } catch (RuntimeException e) {
       log.warn(
@@ -203,12 +209,13 @@ public class ConversationMemoryProvider implements MemoryProvider {
   /**
    * 读取并配对当前轮之前的有效用户消息与激活完成回答。
    *
+   * @param ownerId 所属用户标识
    * @param conversationId 会话 ID
    * @param beforeTurn 当前轮次上界
    * @return 按轮次升序排列的完整对话轮次
    */
-  private List<MemoryTurn> completeTurns(UUID conversationId, int beforeTurn) {
-    List<Message> all = messages.list(conversationId);
+  private List<MemoryTurn> completeTurns(UUID ownerId, UUID conversationId, int beforeTurn) {
+    List<Message> all = messages.list(ownerId, conversationId);
     Map<Integer, Message> users = new LinkedHashMap<>();
     all.stream()
         .filter(message -> "USER".equals(message.getRole()))

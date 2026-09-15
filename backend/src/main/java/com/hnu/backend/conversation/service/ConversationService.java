@@ -124,41 +124,44 @@ public class ConversationService {
   /**
    * 创建会话。
    *
+   * @param ownerId 所属用户标识；新会话只对该用户可见
    * @param rawTitle 未归一化标题
    * @return 新会话摘要
    */
-  public ConversationResponses.Summary create(String rawTitle) {
+  public ConversationResponses.Summary create(UUID ownerId, String rawTitle) {
     String title = normalizeTitle(rawTitle);
     UUID id = UUID.randomUUID();
-    conversations.insert(id, title);
-    return summary(require(id));
+    conversations.insert(ownerId, id, title);
+    return summary(require(ownerId, id));
   }
 
   /**
    * 按标题查询会话列表。
    *
+   * @param ownerId 所属用户标识
    * @param rawQuery 未转义的标题查询文本
    * @param rawLimit 调用方请求的数量上限
    * @return 按持久化层规则排序的会话摘要
    */
-  public List<ConversationResponses.Summary> list(String rawQuery, int rawLimit) {
+  public List<ConversationResponses.Summary> list(UUID ownerId, String rawQuery, int rawLimit) {
     String query =
         rawQuery == null
             ? ""
             : rawQuery.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     int limit = rawLimit <= 0 ? 50 : Math.min(rawLimit, 100);
-    return conversations.list(query, limit).stream().map(this::summary).toList();
+    return conversations.list(ownerId, query, limit).stream().map(this::summary).toList();
   }
 
   /**
    * 加载会话详情及每轮全部回答版本。
    *
+   * @param ownerId 所属用户标识
    * @param id 会话 ID
    * @return 可直接返回给前端的会话详情
    */
-  public ConversationResponses.Detail get(UUID id) {
-    Conversation conversation = require(id);
-    List<Message> all = messages.list(id);
+  public ConversationResponses.Detail get(UUID ownerId, UUID id) {
+    Conversation conversation = require(ownerId, id);
+    List<Message> all = messages.list(ownerId, id);
     Map<Integer, Message> users = new LinkedHashMap<>();
     Map<Integer, List<Message>> assistants = new LinkedHashMap<>();
     for (Message message : all) {
@@ -198,33 +201,36 @@ public class ConversationService {
   /**
    * 修改会话标题。
    *
+   * @param ownerId 所属用户标识
    * @param id 会话 ID
    * @param rawTitle 未归一化标题
    * @return 更新后的会话摘要
    */
-  public ConversationResponses.Summary rename(UUID id, String rawTitle) {
-    require(id);
-    conversations.rename(id, normalizeTitle(rawTitle));
-    return summary(require(id));
+  public ConversationResponses.Summary rename(UUID ownerId, UUID id, String rawTitle) {
+    require(ownerId, id);
+    conversations.rename(ownerId, id, normalizeTitle(rawTitle));
+    return summary(require(ownerId, id));
   }
 
   /**
    * 删除没有运行中生成任务的会话。
    *
+   * @param ownerId 所属用户标识
    * @param id 会话 ID
    */
-  public void delete(UUID id) {
-    require(id);
-    if (activeByConversation.containsKey(id) || messages.countRunning(id) > 0) {
+  public void delete(UUID ownerId, UUID id) {
+    require(ownerId, id);
+    if (activeByConversation.containsKey(id) || messages.countRunning(ownerId, id) > 0) {
       throw ApiException.conflict("GENERATION_IN_PROGRESS", "请先停止当前生成再删除会话");
     }
-    conversations.delete(id);
+    conversations.delete(ownerId, id);
     conversationLocks.remove(id);
   }
 
   /**
    * 新建用户消息和待生成回答，并立即返回 SSE 输出通道。
    *
+   * @param ownerId 所属用户标识；异步任务会显式捕获该值
    * @param conversationId 会话 ID
    * @param clientMessageId 客户端幂等消息 ID
    * @param rawQuestion 未归一化用户问题
@@ -232,27 +238,33 @@ public class ConversationService {
    * @return 当前生成或历史幂等结果的 SSE 通道
    */
   public SseEmitter ask(
-      UUID conversationId, UUID clientMessageId, String rawQuestion, String requestId) {
+      UUID ownerId,
+      UUID conversationId,
+      UUID clientMessageId,
+      String rawQuestion,
+      String requestId) {
     String question = normalizeQuestion(rawQuestion);
     Object lock = conversationLocks.computeIfAbsent(conversationId, ignored -> new Object());
     synchronized (lock) {
-      Conversation conversation = require(conversationId);
-      Message existing = messages.findByClientRequest(conversationId, clientMessageId);
+      Conversation conversation = require(ownerId, conversationId);
+      Message existing = messages.findByClientRequest(ownerId, conversationId, clientMessageId);
       if (existing != null) {
         Message assistant =
-            "USER".equals(existing.getRole()) ? messages.latestReply(existing.getId()) : existing;
+            "USER".equals(existing.getRole())
+                ? messages.latestReply(ownerId, existing.getId())
+                : existing;
         return replayOrConflict(conversation, existing, assistant, requestId);
       }
-      ensureIdle(conversationId);
+      ensureIdle(ownerId, conversationId);
       PreparedMessages prepared =
           tx.execute(
               ignored -> {
-                int turn = messages.nextTurn(conversationId);
+                int turn = messages.nextTurn(ownerId, conversationId);
                 Message user = userMessage(conversationId, clientMessageId, turn, question);
                 messages.insert(user);
                 Message assistant = assistantMessage(conversationId, null, turn, 1, user.getId());
                 messages.insert(assistant);
-                conversations.touch(conversationId);
+                conversations.touch(ownerId, conversationId);
                 return new PreparedMessages(user, assistant);
               });
       return launch(conversation, prepared.user(), prepared.assistant(), requestId);
@@ -269,8 +281,12 @@ public class ConversationService {
    * @return 新回答版本的 SSE 通道
    */
   public SseEmitter retry(
-      UUID conversationId, UUID assistantMessageId, UUID clientRequestId, String requestId) {
-    return restart(conversationId, assistantMessageId, clientRequestId, requestId, false);
+      UUID ownerId,
+      UUID conversationId,
+      UUID assistantMessageId,
+      UUID clientRequestId,
+      String requestId) {
+    return restart(ownerId, conversationId, assistantMessageId, clientRequestId, requestId, false);
   }
 
   /**
@@ -283,8 +299,12 @@ public class ConversationService {
    * @return 新回答版本的 SSE 通道
    */
   public SseEmitter regenerate(
-      UUID conversationId, UUID assistantMessageId, UUID clientRequestId, String requestId) {
-    return restart(conversationId, assistantMessageId, clientRequestId, requestId, true);
+      UUID ownerId,
+      UUID conversationId,
+      UUID assistantMessageId,
+      UUID clientRequestId,
+      String requestId) {
+    return restart(ownerId, conversationId, assistantMessageId, clientRequestId, requestId, true);
   }
 
   /**
@@ -298,6 +318,7 @@ public class ConversationService {
    * @return 新回答版本的 SSE 通道
    */
   private SseEmitter restart(
+      UUID ownerId,
       UUID conversationId,
       UUID assistantMessageId,
       UUID clientRequestId,
@@ -305,21 +326,21 @@ public class ConversationService {
       boolean regenerate) {
     Object lock = conversationLocks.computeIfAbsent(conversationId, ignored -> new Object());
     synchronized (lock) {
-      Conversation conversation = require(conversationId);
-      Message duplicate = messages.findByClientRequest(conversationId, clientRequestId);
+      Conversation conversation = require(ownerId, conversationId);
+      Message duplicate = messages.findByClientRequest(ownerId, conversationId, clientRequestId);
       if (duplicate != null) {
-        Message user = messages.find(duplicate.getReplyToId());
+        Message user = messages.find(ownerId, duplicate.getReplyToId());
         return replayOrConflict(conversation, user, duplicate, requestId);
       }
-      ensureIdle(conversationId);
-      Message previous = messages.find(assistantMessageId);
+      ensureIdle(ownerId, conversationId);
+      Message previous = messages.find(ownerId, assistantMessageId);
       if (previous == null
           || !conversationId.equals(previous.getConversationId())
           || !"ASSISTANT".equals(previous.getRole())) {
         throw ApiException.notFound("MESSAGE_NOT_FOUND", "回答不存在");
       }
       if (regenerate) {
-        int lastTurn = messages.nextTurn(conversationId) - 1;
+        int lastTurn = messages.nextTurn(ownerId, conversationId) - 1;
         if (!previous.isActive()
             || !"COMPLETED".equals(previous.getStatus())
             || previous.getTurnIndex() != lastTurn) {
@@ -329,20 +350,20 @@ public class ConversationService {
           || "CANCELLED".equals(previous.getStatus()))) {
         throw ApiException.conflict("RETRY_NOT_ALLOWED", "只能重试失败或已停止的回答");
       }
-      Message user = messages.find(previous.getReplyToId());
+      Message user = messages.find(ownerId, previous.getReplyToId());
       Message next =
           tx.execute(
               ignored -> {
-                messages.deactivateReplies(user.getId());
+                messages.deactivateReplies(ownerId, user.getId());
                 Message value =
                     assistantMessage(
                         conversationId,
                         clientRequestId,
                         user.getTurnIndex(),
-                        messages.nextVariant(user.getId()),
+                        messages.nextVariant(ownerId, user.getId()),
                         user.getId());
                 messages.insert(value);
-                conversations.touch(conversationId);
+                conversations.touch(ownerId, conversationId);
                 return value;
               });
       return launch(conversation, user, next, requestId);
@@ -352,18 +373,22 @@ public class ConversationService {
   /**
    * 取消内存中或仅存在于数据库中的运行中回答。
    *
+   * @param ownerId 所属用户标识
    * @param conversationId 会话 ID
    * @param generationId 回答生成 ID
    */
-  public void cancel(UUID conversationId, UUID generationId) {
+  public void cancel(UUID ownerId, UUID conversationId, UUID generationId) {
+    require(ownerId, conversationId);
     ActiveGeneration active = activeByGeneration.get(generationId);
-    if (active != null && active.conversation().getId().equals(conversationId)) {
+    if (active != null
+        && active.ownerId.equals(ownerId)
+        && active.conversation().getId().equals(conversationId)) {
       active.cancel();
       cancelTerminal(active);
       return;
     }
 
-    Message stored = messages.find(generationId);
+    Message stored = messages.find(ownerId, generationId);
     if (stored == null
         || !conversationId.equals(stored.getConversationId())
         || !"ASSISTANT".equals(stored.getRole())) {
@@ -372,20 +397,40 @@ public class ConversationService {
     if (!("PENDING".equals(stored.getStatus()) || "STREAMING".equals(stored.getStatus()))) return;
     tx.executeWithoutResult(
         ignored -> {
-          int changed = messages.cancelRunning(generationId, conversationId, stored.getContent());
-          attempts.cancelRunning(generationId);
-          if (changed > 0) conversations.touch(conversationId);
+          int changed =
+              messages.cancelRunning(ownerId, generationId, conversationId, stored.getContent());
+          attempts.cancelRunning(ownerId, generationId);
+          if (changed > 0) conversations.touch(ownerId, conversationId);
         });
+  }
+
+  /**
+   * 取消指定用户当前仍在运行的全部回答。
+   *
+   * <p>账号禁用或密码重置会调用此方法，防止已建立的 SSE 连接在会话撤销后继续输出。
+   *
+   * @param ownerId 用户标识
+   */
+  public void cancelByOwner(UUID ownerId) {
+    activeByGeneration.values().stream()
+        .filter(active -> active.ownerId.equals(ownerId))
+        .toList()
+        .forEach(
+            active -> {
+              active.cancel();
+              cancelTerminal(active);
+            });
   }
 
   /**
    * 确认会话当前没有运行中的回答，避免并发轮次破坏顺序。
    *
+   * @param ownerId 所属用户标识
    * @param conversationId 会话 ID
    */
-  private void ensureIdle(UUID conversationId) {
+  private void ensureIdle(UUID ownerId, UUID conversationId) {
     if (activeByConversation.containsKey(conversationId)
-        || messages.countRunning(conversationId) > 0) {
+        || messages.countRunning(ownerId, conversationId) > 0) {
       throw ApiException.conflict("GENERATION_IN_PROGRESS", "该会话正在生成回答");
     }
   }
@@ -484,7 +529,11 @@ public class ConversationService {
       }
       var execution =
           executionStage.execute(
-              prepared.queryPlan(), prepared.routingPlan(), null, active.control::cancelled);
+              active.ownerId,
+              prepared.queryPlan(),
+              prepared.routingPlan(),
+              null,
+              active.control::cancelled);
       ensureNotCancelled(active);
       var deduplicated = deduplicationStage.execute(execution.candidates(), execution.budget());
       ensureNotCancelled(active);
@@ -504,7 +553,10 @@ public class ConversationService {
               execution,
               reranked.selectedCandidates());
       messages.prepare(
-          active.assistant.getId(), standaloneQuestion, json.writeValueAsString(prompt.sources()));
+          active.ownerId,
+          active.assistant.getId(),
+          standaloneQuestion,
+          json.writeValueAsString(prompt.sources()));
       ensureNotCancelled(active);
       active.assistant.setRetrievalQuery(standaloneQuestion);
       active.assistant.setSourcesJson(json.writeValueAsString(prompt.sources()));
@@ -538,7 +590,7 @@ public class ConversationService {
    */
   private void answerSystemChat(
       ActiveGeneration active, ConversationContextService.PreparedContext prepared) {
-    messages.prepare(active.assistant.getId(), null, "[]");
+    messages.prepare(active.ownerId, active.assistant.getId(), null, "[]");
     ensureNotCancelled(active);
     active.assistant.setRetrievalQuery(null);
     active.assistant.setSourcesJson("[]");
@@ -581,7 +633,7 @@ public class ConversationService {
       ensureNotCancelled(active);
       int index = active.attemptCounter.incrementAndGet();
       // 消息状态只在首个候选开始时迁移一次；provider fallback 和引用修复沿用 STREAMING。
-      if (index == 1 && messages.markStreaming(active.assistant.getId()) == 0) {
+      if (index == 1 && messages.markStreaming(active.ownerId, active.assistant.getId()) == 0) {
         throw ApiException.cancelled();
       }
       GenerationAttempt attempt = new GenerationAttempt();
@@ -597,6 +649,7 @@ public class ConversationService {
       attempts.insert(attempt);
       active.currentAttemptId = attempt.getId();
       messages.setModelInfo(
+          active.ownerId,
           active.assistant.getId(),
           json.writeValueAsString(
               new ModelInfoResponse(target.id(), target.provider(), target.model())));
@@ -614,7 +667,7 @@ public class ConversationService {
     /** {@inheritDoc} */
     @Override
     public void completed(AnswerGenerator.ModelTarget target, String content, String finishReason) {
-      attempts.complete(active.currentAttemptId, content, finishReason);
+      attempts.complete(active.ownerId, active.currentAttemptId, content, finishReason);
     }
 
     /** {@inheritDoc} */
@@ -623,6 +676,7 @@ public class ConversationService {
         AnswerGenerator.ModelTarget target, String partialContent, ApiException error) {
       if (active.currentAttemptId != null) {
         attempts.fail(
+            active.ownerId,
             active.currentAttemptId,
             active.control.cancelled() ? "CANCELLED" : "FAILED",
             partialContent,
@@ -636,12 +690,13 @@ public class ConversationService {
     public void invalidReferences(String reasonCode, boolean repairScheduled) {
       if (active.currentAttemptId != null) {
         // 模型流已经正常结束，引用校验发生在其后，因此需要显式作废 COMPLETED 尝试。
-        attempts.invalidateCompleted(active.currentAttemptId, reasonCode, "模型返回了非法引用");
+        attempts.invalidateCompleted(
+            active.ownerId, active.currentAttemptId, reasonCode, "模型返回了非法引用");
       }
       if (!repairScheduled) return;
       // reset 之前同步清空数据库和检查点游标，避免修复流继续沿用首次正文的长度基线。
       active.buffer.setLength(0);
-      messages.checkpoint(active.assistant.getId(), "");
+      messages.checkpoint(active.ownerId, active.assistant.getId(), "");
       active.lastCheckpointLength = 0;
       active.lastCheckpointAt = System.currentTimeMillis();
       send(active.emitter, "reset", event("reason", reasonCode));
@@ -657,9 +712,9 @@ public class ConversationService {
     long now = System.currentTimeMillis();
     if (active.buffer.length() - active.lastCheckpointLength >= config.getCheckpointChars()
         || now - active.lastCheckpointAt >= config.getCheckpointIntervalMs()) {
-      messages.checkpoint(active.assistant.getId(), active.buffer.toString());
+      messages.checkpoint(active.ownerId, active.assistant.getId(), active.buffer.toString());
       if (active.currentAttemptId != null)
-        attempts.checkpoint(active.currentAttemptId, active.buffer.toString());
+        attempts.checkpoint(active.ownerId, active.currentAttemptId, active.buffer.toString());
       active.lastCheckpointLength = active.buffer.length();
       active.lastCheckpointAt = now;
     }
@@ -676,7 +731,8 @@ public class ConversationService {
   private void failCurrentAttempt(
       ActiveGeneration active, String status, String code, String message) {
     if (active.currentAttemptId != null)
-      attempts.fail(active.currentAttemptId, status, active.buffer.toString(), code, message);
+      attempts.fail(
+          active.ownerId, active.currentAttemptId, status, active.buffer.toString(), code, message);
   }
 
   /**
@@ -708,8 +764,12 @@ public class ConversationService {
           ignored -> {
             int changed =
                 messages.complete(
-                    active.generationId, content, json.writeValueAsString(citations), modelInfo);
-            if (changed > 0) conversations.touch(active.conversation.getId());
+                    active.ownerId,
+                    active.generationId,
+                    content,
+                    json.writeValueAsString(citations),
+                    modelInfo);
+            if (changed > 0) conversations.touch(active.ownerId, active.conversation.getId());
           });
       finishPersisted(active, "complete", "INTERNAL_ERROR", "回答保存失败，请重试");
     } catch (RuntimeException e) {
@@ -730,9 +790,10 @@ public class ConversationService {
       tx.executeWithoutResult(
           ignored -> {
             int changed =
-                messages.cancelRunning(active.generationId, active.conversation.getId(), content);
-            attempts.cancelRunning(active.generationId);
-            if (changed > 0) conversations.touch(active.conversation.getId());
+                messages.cancelRunning(
+                    active.ownerId, active.generationId, active.conversation.getId(), content);
+            attempts.cancelRunning(active.ownerId, active.generationId);
+            if (changed > 0) conversations.touch(active.ownerId, active.conversation.getId());
           });
       finishPersisted(active, "cancelled", "GENERATION_CANCELLED", "生成已停止");
     } catch (RuntimeException e) {
@@ -755,10 +816,11 @@ public class ConversationService {
       tx.executeWithoutResult(
           ignored -> {
             int changed =
-                messages.terminalFailure(active.generationId, "FAILED", content, code, message);
+                messages.terminalFailure(
+                    active.ownerId, active.generationId, "FAILED", content, code, message);
             if (changed > 0) {
               failCurrentAttempt(active, "FAILED", code, message);
-              conversations.touch(active.conversation.getId());
+              conversations.touch(active.ownerId, active.conversation.getId());
             }
           });
       finishPersisted(active, "error", code, message);
@@ -796,7 +858,7 @@ public class ConversationService {
    */
   private void finishPersisted(
       ActiveGeneration active, String fallbackEvent, String fallbackCode, String fallbackMessage) {
-    Message stored = messages.find(active.generationId);
+    Message stored = messages.find(active.ownerId, active.generationId);
     if (stored == null) {
       finish(active, fallbackEvent, terminalEvent(fallbackCode, fallbackMessage, active.requestId));
       return;
@@ -956,11 +1018,12 @@ public class ConversationService {
   /**
    * 加载会话，不存在时抛出统一业务异常。
    *
+   * @param ownerId 所属用户标识；不匹配时与不存在统一处理
    * @param id 会话 ID
    * @return 持久化会话实体
    */
-  private Conversation require(UUID id) {
-    Conversation value = conversations.find(id);
+  private Conversation require(UUID ownerId, UUID id) {
+    Conversation value = conversations.find(ownerId, id);
     if (value == null) throw ApiException.notFound("CONVERSATION_NOT_FOUND", "会话不存在");
     return value;
   }
@@ -1066,6 +1129,7 @@ public class ConversationService {
 
   /** 跨异步回调维护一次流式生成的取消、缓冲、尝试和终态竞争状态。 */
   private static final class ActiveGeneration {
+    private final UUID ownerId;
     private final Conversation conversation;
     private final Message user;
     private final UUID generationId;
@@ -1100,6 +1164,8 @@ public class ConversationService {
         SseEmitter emitter,
         AnswerGenerator.Control control) {
       this.conversation = conversation;
+      // 异步线程不读取请求上下文；所有权在通过 Controller 校验后随任务显式捕获。
+      this.ownerId = conversation.getOwnerId();
       this.user = user;
       this.generationId = assistant.getId();
       this.assistant = assistant;

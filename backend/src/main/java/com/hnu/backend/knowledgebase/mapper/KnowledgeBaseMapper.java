@@ -13,27 +13,33 @@ public interface KnowledgeBaseMapper extends BaseMapper<KnowledgeBase> {
   /**
    * 按标识查询并锁定知识库行。
    *
+   * @param ownerId 所属用户标识
    * @param id 知识库标识
    * @return 已锁定的知识库；不存在时返回 {@code null}
    */
-  KnowledgeBase lock(@Param("id") UUID id);
+  KnowledgeBase lock(@Param("ownerId") UUID ownerId, @Param("id") UUID id);
 
   /**
    * 分页查询知识库，并附带各知识库的文档数量。
    *
+   * @param ownerId 所属用户标识
    * @param query 可选的名称搜索词
    * @param limit 最大返回数量
    * @param offset 分页偏移量
    * @return 知识库列表
    */
   List<KnowledgeBase> selectWithDocumentCount(
-      @Param("query") String query, @Param("limit") int limit, @Param("offset") long offset);
+      @Param("ownerId") UUID ownerId,
+      @Param("query") String query,
+      @Param("limit") int limit,
+      @Param("offset") long offset);
 
   /**
    * 统计匹配名称条件的知识库数量。
    *
+   * @param ownerId 所属用户标识
    * @param query 可选的名称搜索词
    * @return 匹配数量
    */
-  long countWithDocumentCount(@Param("query") String query);
+  long countWithDocumentCount(@Param("ownerId") UUID ownerId, @Param("query") String query);
 }

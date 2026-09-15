@@ -1,0 +1,105 @@
+package com.hnu.backend.auth.service;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
+
+import com.hnu.backend.auth.entity.User;
+import com.hnu.backend.auth.entity.UserRole;
+import com.hnu.backend.auth.mapper.UserMapper;
+import com.hnu.backend.shared.error.ApiException;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
+
+class AdminUserServiceTest {
+  private final UserMapper users = mock(UserMapper.class);
+  private final PasswordEncoder passwords = mock(PasswordEncoder.class);
+  private final SessionRevocationService revocations = mock(SessionRevocationService.class);
+  private final TransactionTemplate tx = mock(TransactionTemplate.class);
+  private final AdminUserService service =
+      new AdminUserService(users, new AccountPolicy(), passwords, revocations, tx);
+
+  @BeforeEach
+  void runTransactionsImmediately() {
+    when(tx.execute(any()))
+        .thenAnswer(
+            invocation -> {
+              TransactionCallback<?> callback = invocation.getArgument(0);
+              return callback.doInTransaction(mock(TransactionStatus.class));
+            });
+  }
+
+  @Test
+  void createsUserWithoutCreatingKnowledgeBase() {
+    AtomicReference<User> inserted = new AtomicReference<>();
+    when(passwords.encode("StrongPass123!")).thenReturn("bcrypt-hash");
+    when(users.insert(any(User.class)))
+        .thenAnswer(
+            invocation -> {
+              inserted.set(invocation.getArgument(0));
+              return 1;
+            });
+    when(users.find(any(UUID.class))).thenAnswer(ignored -> inserted.get());
+
+    var response = service.create(" New.User ", " 新用户 ", "StrongPass123!", UserRole.USER);
+
+    assertEquals("new.user", response.username());
+    assertEquals("新用户", response.displayName());
+    assertEquals(UserRole.USER, response.role());
+    assertEquals("bcrypt-hash", inserted.get().getPasswordHash());
+    verify(users).insert(inserted.get());
+  }
+
+  @Test
+  void rejectsDisablingTheCurrentAdministrator() {
+    UUID actorId = UUID.randomUUID();
+
+    ApiException error =
+        assertThrows(ApiException.class, () -> service.setEnabled(actorId, actorId, false));
+
+    assertEquals("SELF_DISABLE_NOT_ALLOWED", error.code());
+    verifyNoInteractions(users, revocations);
+  }
+
+  @Test
+  void locksAdministratorsBeforeRejectingTheLastEnabledAdministrator() {
+    UUID actorId = UUID.randomUUID();
+    UUID targetId = UUID.randomUUID();
+    User target = user(targetId, UserRole.ADMIN, true);
+    when(users.find(targetId)).thenReturn(target);
+    when(users.lockEnabledAdmins()).thenReturn(List.of(target));
+    when(users.countEnabledAdmins()).thenReturn(1L);
+
+    ApiException error =
+        assertThrows(ApiException.class, () -> service.setEnabled(actorId, targetId, false));
+
+    assertEquals("LAST_ADMIN_REQUIRED", error.code());
+    var order = inOrder(users);
+    order.verify(users).find(targetId);
+    order.verify(users).lockEnabledAdmins();
+    order.verify(users).countEnabledAdmins();
+    verifyNoInteractions(revocations);
+  }
+
+  private User user(UUID id, UserRole role, boolean enabled) {
+    User user = new User();
+    user.setId(id);
+    user.setUsername("admin");
+    user.setDisplayName("管理员");
+    user.setRole(role);
+    user.setEnabled(enabled);
+    return user;
+  }
+}

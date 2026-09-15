@@ -8,7 +8,9 @@
                         v.embedding_dimensions AS dimensions
         FROM document_versions v
         JOIN documents d ON d.active_version_id = v.id
+        JOIN knowledge_bases kb ON kb.id = d.knowledge_base_id
         WHERE v.status = 'READY'
+          AND kb.owner_id = #{ownerId}
         ORDER BY v.embedding_model, v.embedding_dimensions
     </select>
 
@@ -17,7 +19,9 @@
                         v.embedding_dimensions AS dimensions
         FROM document_versions v
         JOIN documents d ON d.active_version_id = v.id
+        JOIN knowledge_bases kb ON kb.id = d.knowledge_base_id
         WHERE v.status = 'READY'
+          AND kb.owner_id = #{ownerId}
           AND d.knowledge_base_id IN
           <foreach collection="knowledgeBaseIds" item="knowledgeBaseId" open="(" separator="," close=")">
               #{knowledgeBaseId}
@@ -45,6 +49,7 @@
         JOIN knowledge_bases kb ON kb.id = d.knowledge_base_id
         JOIN document_versions v ON v.id = c.version_id
         WHERE v.status = 'READY'
+          AND kb.owner_id = #{ownerId}
           AND v.embedding_model = #{model}
           AND v.embedding_dimensions = #{dimensions}
         ORDER BY c.embedding <=> CAST(#{vector} AS vector), c.id
@@ -72,6 +77,7 @@
         JOIN knowledge_bases kb ON kb.id = d.knowledge_base_id
         JOIN document_versions v ON v.id = c.version_id
         WHERE v.status = 'READY'
+          AND kb.owner_id = #{ownerId}
           AND v.embedding_model = #{model}
           AND v.embedding_dimensions = #{dimensions}
           AND d.knowledge_base_id IN
@@ -87,7 +93,9 @@
 
     <select id="search" resultType="com.hnu.backend.rag.retrieval.SearchHit">
         <![CDATA[
-        SELECT c.id AS chunk_id,
+        SELECT kb.id AS knowledge_base_id,
+               kb.name AS knowledge_base_name,
+               c.id AS chunk_id,
                c.document_id,
                c.version_id,
                d.name AS document_name,
@@ -100,8 +108,10 @@
         FROM document_chunks c
         JOIN documents d ON d.id = c.document_id
             AND d.active_version_id = c.version_id
+        JOIN knowledge_bases kb ON kb.id = d.knowledge_base_id
         JOIN document_versions v ON v.id = c.version_id
         WHERE d.knowledge_base_id = #{knowledgeBaseId}
+          AND kb.owner_id = #{ownerId}
           AND v.status = 'READY'
           AND v.embedding_model = #{model}
           AND v.embedding_dimensions = #{dimensions}

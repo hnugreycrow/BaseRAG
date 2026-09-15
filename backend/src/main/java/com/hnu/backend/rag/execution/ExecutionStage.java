@@ -39,6 +39,14 @@ public class ExecutionStage {
   private final RagProperties config;
   private final ExecutorService executor;
 
+  /**
+   * 创建子问题执行阶段。
+   *
+   * @param retrieval 用户隔离的检索服务
+   * @param tools MCP 工具执行器
+   * @param candidateMerge 候选合并器
+   * @param config RAG 预算配置
+   */
   public ExecutionStage(
       RetrievalService retrieval,
       McpToolExecutor tools,
@@ -54,11 +62,30 @@ public class ExecutionStage {
             config.getPipeline().getMaxSubQuestions(), Thread.ofVirtual().factory());
   }
 
-  public ExecutionResult execute(QueryPlan plan, RoutingPlan routing) {
-    return execute(plan, routing, null, CancellationToken.NONE);
+  /**
+   * 按路由执行全部子问题，默认不限制知识库范围且不提供外部取消信号。
+   *
+   * @param ownerId 所属用户标识
+   * @param plan 查询计划
+   * @param routing 与查询计划对齐的路由计划
+   * @return 执行结果
+   */
+  public ExecutionResult execute(UUID ownerId, QueryPlan plan, RoutingPlan routing) {
+    return execute(ownerId, plan, routing, null, CancellationToken.NONE);
   }
 
+  /**
+   * 在用户所有权范围内并发执行检索或工具子问题。
+   *
+   * @param ownerId 所属用户标识；会被显式传入异步检索任务
+   * @param plan 查询计划
+   * @param routing 路由计划
+   * @param knowledgeBaseIds 可选知识库范围
+   * @param cancellationToken 取消信号
+   * @return 聚合后的执行结果
+   */
   public ExecutionResult execute(
+      UUID ownerId,
       QueryPlan plan,
       RoutingPlan routing,
       List<UUID> knowledgeBaseIds,
@@ -90,7 +117,9 @@ public class ExecutionStage {
       long timeoutMs = timeoutFor(route, snapshot);
       Future<SubQuestionExecution> future =
           executor.submit(
-              () -> executeOne(question, route, knowledgeBaseIds, snapshot, cancellationToken));
+              () ->
+                  executeOne(
+                      ownerId, question, route, knowledgeBaseIds, snapshot, cancellationToken));
       handles.add(new TaskHandle(question, route, future, System.nanoTime(), timeoutMs));
     }
 
@@ -132,6 +161,7 @@ public class ExecutionStage {
   }
 
   private SubQuestionExecution executeOne(
+      UUID ownerId,
       SubQuestion question,
       IntentRoute route,
       List<UUID> knowledgeBaseIds,
@@ -143,6 +173,7 @@ public class ExecutionStage {
       if (route.intent() == IntentType.KNOWLEDGE_RETRIEVAL) {
         List<EvidenceCandidate> candidates =
             retrieval.retrieveCandidates(
+                ownerId,
                 question.id(),
                 question.question(),
                 knowledgeBaseIds,

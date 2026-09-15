@@ -1,5 +1,6 @@
 package com.hnu.backend.knowledgebase.controller;
 
+import com.hnu.backend.auth.service.CurrentUserService;
 import com.hnu.backend.knowledgebase.dto.KnowledgeBaseRequest;
 import com.hnu.backend.knowledgebase.service.KnowledgeBaseService;
 import com.hnu.backend.knowledgebase.vo.EmbeddingModelResponse;
@@ -32,49 +33,88 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/knowledge-bases")
 public class KnowledgeBaseController {
   private final KnowledgeBaseService knowledgeBases;
+  private final CurrentUserService currentUsers;
 
-  public KnowledgeBaseController(KnowledgeBaseService knowledgeBases) {
+  /**
+   * 创建知识库控制器。
+   *
+   * @param knowledgeBases 知识库服务
+   * @param currentUsers 当前用户解析服务
+   */
+  public KnowledgeBaseController(
+      KnowledgeBaseService knowledgeBases, CurrentUserService currentUsers) {
     this.knowledgeBases = knowledgeBases;
+    this.currentUsers = currentUsers;
   }
 
-  /** 分页查询知识库及各自的文档数量。 */
+  /**
+   * 分页查询当前用户的知识库及文档数量。
+   *
+   * @param page 页码
+   * @param pageSize 每页数量
+   * @param query 可选搜索词
+   * @return 当前用户的知识库分页
+   */
   @GetMapping
   public PageResponse<KnowledgeBaseResponse> list(
       @RequestParam(defaultValue = "1") @Min(1) int page,
       @RequestParam(defaultValue = "10") @Min(1) @Max(100) int pageSize,
       @RequestParam(required = false) @Size(max = 200) String query) {
-    return knowledgeBases.list(page, pageSize, query);
+    return knowledgeBases.list(currentUsers.require().getId(), page, pageSize, query);
   }
 
-  /** 查询配置中可供新知识库绑定的向量模型。 */
+  /**
+   * @return 配置中可供新知识库绑定的向量模型
+   */
   @GetMapping("/embedding-models")
   public List<EmbeddingModelResponse> embeddingModels() {
     return knowledgeBases.embeddingModels();
   }
 
-  /** 获取指定知识库。 */
+  /**
+   * 获取当前用户的指定知识库。
+   *
+   * @param id 知识库标识
+   * @return 知识库
+   */
   @GetMapping("/{id}")
   public KnowledgeBaseResponse get(@PathVariable UUID id) {
-    return knowledgeBases.get(id);
+    return knowledgeBases.get(currentUsers.require().getId(), id);
   }
 
-  /** 创建知识库并绑定所选向量模型。 */
+  /**
+   * 为当前用户创建知识库并绑定所选向量模型。
+   *
+   * @param request 知识库字段
+   * @return 新知识库
+   */
   @PostMapping
   public KnowledgeBaseResponse create(@Valid @RequestBody KnowledgeBaseRequest request) {
-    return knowledgeBases.create(request.name(), request.embeddingModelId());
+    return knowledgeBases.create(
+        currentUsers.require().getId(), request.name(), request.embeddingModelId());
   }
 
-  /** 修改知识库名称。 */
+  /**
+   * 修改当前用户的知识库名称。
+   *
+   * @param id 知识库标识
+   * @param request 新名称
+   * @return 更新后的知识库
+   */
   @PatchMapping("/{id}")
   public KnowledgeBaseResponse rename(
       @PathVariable UUID id, @Valid @RequestBody KnowledgeBaseRequest request) {
-    return knowledgeBases.rename(id, request.name());
+    return knowledgeBases.rename(currentUsers.require().getId(), id, request.name());
   }
 
-  /** 删除知识库及其全部文档资源。 */
+  /**
+   * 删除当前用户的知识库及其全部文档资源。
+   *
+   * @param id 知识库标识
+   */
   @DeleteMapping("/{id}")
   @ResponseStatus(HttpStatus.NO_CONTENT)
   public void delete(@PathVariable UUID id) {
-    knowledgeBases.delete(id);
+    knowledgeBases.delete(currentUsers.require().getId(), id);
   }
 }
