@@ -4,6 +4,6 @@
 **/target/
 **/node_modules/
 **/dist/
+**/dist-prototype/
 **/.idea/
 .artifacts/
-

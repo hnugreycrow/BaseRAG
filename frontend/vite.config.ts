@@ -4,9 +4,16 @@ import { defineConfig } from 'vitest/config'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
+  const prototype = mode === 'prototype'
 
   return {
     plugins: [vue()],
+    build: {
+      outDir: prototype ? 'dist-prototype' : 'dist',
+      rollupOptions: {
+        input: prototype ? 'prototype.html' : 'index.html',
+      },
+    },
     test: {
       environment: 'jsdom',
       globals: true,
