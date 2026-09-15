@@ -1,6 +1,5 @@
 package com.hnu.backend.rag.rerank;
 
-import com.hnu.backend.model.config.AiProperties;
 import com.hnu.backend.observability.RagStageName;
 import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.rag.execution.CancellationToken;
@@ -43,7 +42,6 @@ public class RerankStage {
 
   private final CandidateReranker reranker;
   private final CandidateMerge candidateMerge;
-  private final AiProperties ai;
   private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
   /**
@@ -51,12 +49,10 @@ public class RerankStage {
    *
    * @param reranker 候选重排模型端口
    * @param candidateMerge 候选截断和配额分配器
-   * @param ai 模型配置
    */
-  public RerankStage(CandidateReranker reranker, CandidateMerge candidateMerge, AiProperties ai) {
+  public RerankStage(CandidateReranker reranker, CandidateMerge candidateMerge) {
     this.reranker = reranker;
     this.candidateMerge = candidateMerge;
-    this.ai = ai;
   }
 
   /**
@@ -162,7 +158,9 @@ public class RerankStage {
               knowledgeQuestionIds,
               budget.selectedEvidenceLimit(),
               RerankResult.Status.DEGRADED,
-              "RERANK_TIMEOUT".equals(error.code()) ? "RERANK_TIMEOUT" : "RERANK_FAILED",
+              "MODEL_TIMEOUT".equals(error.code()) || "RERANK_TIMEOUT".equals(error.code())
+                  ? "RERANK_TIMEOUT"
+                  : "RERANK_FAILED",
               output,
               startedAt));
     } catch (RuntimeException error) {
@@ -194,7 +192,7 @@ public class RerankStage {
     return result;
   }
 
-  /** 停止重排超时控制使用的虚拟线程执行器。 */
+  /** 停止重排取消控制使用的虚拟线程执行器。 */
   @PreDestroy
   void close() {
     executor.shutdownNow();
@@ -206,23 +204,15 @@ public class RerankStage {
       CancellationToken cancellationToken) {
     Future<CandidateReranker.Output> future =
         executor.submit(() -> reranker.rerank(standaloneQuestion, candidates));
-    long deadline =
-        System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(ai.getRerank().getTimeoutMs());
     while (true) {
       if (cancellationToken.cancelled()) {
         future.cancel(true);
         throw ApiException.cancelled();
       }
       try {
-        long remaining = deadline - System.nanoTime();
-        if (remaining <= 0) {
-          future.cancel(true);
-          throw ApiException.upstream("RERANK_TIMEOUT", "重排模型请求超时");
-        }
-        long wait = Math.min(remaining, TimeUnit.MILLISECONDS.toNanos(CANCELLATION_POLL_MS));
-        return future.get(wait, TimeUnit.NANOSECONDS);
+        return future.get(CANCELLATION_POLL_MS, TimeUnit.MILLISECONDS);
       } catch (TimeoutException ignored) {
-        // 短轮询用于观察会话取消令牌；模型自身的 HTTP 超时仍是最终网络边界。
+        // 短轮询用于观察会话取消令牌；共享的模型 HTTP 超时是网络边界。
       } catch (InterruptedException error) {
         future.cancel(true);
         Thread.currentThread().interrupt();

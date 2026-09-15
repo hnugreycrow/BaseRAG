@@ -20,6 +20,20 @@ class AiPropertiesRerankTest {
   }
 
   @Test
+  void embeddingAndRerankUseSharedHttpRequestTimeout() {
+    AiProperties config = configured();
+    config.setRequestTimeoutMs(42_000);
+    config.getProviders().get("bailian").getEndpoints().setEmbedding("/embeddings");
+    AiProperties.Candidate embedding = candidate("embedding", "bailian", "embedding-model", 1);
+    embedding.setDimension(2);
+    config.getEmbedding().setDefaultModel("embedding");
+    config.getEmbedding().setCandidates(List.of(embedding));
+
+    assertEquals(42_000, config.embeddingModel().timeoutMs());
+    assertEquals(42_000, config.rerankModels().getFirst().timeoutMs());
+  }
+
+  @Test
   void embeddingAddressOverrideDoesNotChangeBailianRerankAddress() {
     AiProperties config = configured();
     config

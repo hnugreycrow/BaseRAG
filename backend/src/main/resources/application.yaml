@@ -55,6 +55,8 @@ mybatis-plus:
     banner: false
 
 ai:
+  # Shared HTTP boundary for embedding and rerank requests; neither has a stage-specific timeout.
+  request-timeout-ms: 60000
   providers:
     bailian:
       url: https://dashscope.aliyuncs.com
@@ -99,7 +101,6 @@ ai:
   embedding:
     default-model: qwen-emb-8b
     batch-size: 16
-    timeout-ms: 60000
     candidates:
       - id: qwen-emb-8b
         provider: siliconflow
@@ -115,7 +116,6 @@ ai:
 
   rerank:
     default-model: qwen3-rerank
-    timeout-ms: 8000
     candidates:
       - id: qwen3-rerank
         provider: bailian

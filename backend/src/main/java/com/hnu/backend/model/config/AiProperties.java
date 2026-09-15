@@ -17,6 +17,7 @@ public class AiProperties {
   private Chat chat = new Chat();
   private Embedding embedding = new Embedding();
   private Rerank rerank = new Rerank();
+  private int requestTimeoutMs = 60_000;
 
   @PostConstruct
   void validate() {
@@ -27,7 +28,7 @@ public class AiProperties {
         || stream.messageChunkSize < 1
         || embedding.batchSize < 1
         || embedding.batchSize > 128
-        || rerank.timeoutMs < 1) {
+        || requestTimeoutMs < 1) {
       throw new IllegalArgumentException("Invalid AI selection, stream or batch configuration");
     }
     chatModels();
@@ -55,7 +56,7 @@ public class AiProperties {
   public ModelTarget embeddingModel(String id) {
     Candidate candidate = index(embedding.candidates).get(id);
     int dimension = candidate == null ? 0 : candidate.dimension;
-    return resolve(candidate, id, "embedding", embedding.timeoutMs, dimension);
+    return resolve(candidate, id, "embedding", requestTimeoutMs, dimension);
   }
 
   public List<ModelTarget> embeddingModels() {
@@ -155,12 +156,12 @@ public class AiProperties {
     }
     // noop 不访问网络，因此刻意不要求在 providers 下配置地址、端点或密钥。
     if ("noop".equals(candidate.provider) && "noop".equals(candidate.model)) {
-      return new ModelTarget(candidate.id, "noop", "noop", "", "", "", rerank.timeoutMs, 0, false);
+      return new ModelTarget(candidate.id, "noop", "noop", "", "", "", requestTimeoutMs, 0, false);
     }
     if ("noop".equals(candidate.provider) || "noop".equals(candidate.model)) {
       throw new IllegalArgumentException("Incomplete noop rerank candidate: " + candidate.id);
     }
-    return resolve(candidate, candidate.id, "rerank", rerank.timeoutMs, 0);
+    return resolve(candidate, candidate.id, "rerank", requestTimeoutMs, 0);
   }
 
   public record ModelTarget(
@@ -218,14 +219,12 @@ public class AiProperties {
     private String defaultModel = "";
     private List<Candidate> candidates = new ArrayList<>();
     private int batchSize = 16;
-    private int timeoutMs = 60_000;
   }
 
   @Data
   public static class Rerank {
     private String defaultModel = "";
     private List<Candidate> candidates = new ArrayList<>();
-    private int timeoutMs = 8_000;
   }
 
   @Data

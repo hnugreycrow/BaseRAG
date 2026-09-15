@@ -11,7 +11,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.hnu.backend.configuration.RagProperties;
-import com.hnu.backend.model.config.AiProperties;
 import com.hnu.backend.rag.execution.ExecutionResult;
 import com.hnu.backend.rag.execution.RagBudgetSnapshot;
 import com.hnu.backend.rag.execution.SubQuestionExecution;
@@ -138,21 +137,15 @@ class RerankStageTest {
   }
 
   @Test
-  void modelTimeoutDegradesToDeterministicEvidence() {
+  void modelRequestTimeoutDegradesToDeterministicEvidence() {
     CandidateReranker reranker = mock(CandidateReranker.class);
     RagProperties rag = new RagProperties();
     EvidenceCandidate candidate = candidate(1, "Q1", .10);
     when(reranker.rerank("组合问题", List.of(candidate)))
-        .thenAnswer(
-            ignored -> {
-              Thread.sleep(5_000);
-              return output(List.of(score(candidate, .5)));
-            });
-    AiProperties ai = new AiProperties();
-    ai.getRerank().setTimeoutMs(20);
+        .thenThrow(ApiException.upstream("MODEL_TIMEOUT", "模型请求超时"));
 
     RerankResult result =
-        stage(reranker, ai)
+        stage(reranker)
             .execute(plan(), execution(rag, List.of(candidate)), List.of(candidate), () -> false);
 
     assertEquals(RerankResult.Status.DEGRADED, result.status());
@@ -191,11 +184,7 @@ class RerankStageTest {
   }
 
   private RerankStage stage(CandidateReranker reranker) {
-    return stage(reranker, new AiProperties());
-  }
-
-  private RerankStage stage(CandidateReranker reranker, AiProperties ai) {
-    RerankStage stage = new RerankStage(reranker, new CandidateMerge(), ai);
+    RerankStage stage = new RerankStage(reranker, new CandidateMerge());
     stages.add(stage);
     return stage;
   }
