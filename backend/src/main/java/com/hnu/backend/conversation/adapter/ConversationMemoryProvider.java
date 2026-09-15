@@ -12,6 +12,7 @@ import com.hnu.backend.rag.memory.MemoryProvider;
 import com.hnu.backend.rag.memory.MemoryTurn;
 import com.hnu.backend.rag.memory.RagMemory;
 import com.hnu.backend.rag.prompt.MemorySummaryPrompts;
+import com.hnu.backend.shared.error.ApiException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -82,31 +83,36 @@ public class ConversationMemoryProvider implements MemoryProvider {
     if (conversation == null) throw new IllegalArgumentException("conversation does not exist");
     List<MemoryTurn> turns = completeTurns(ownerId, conversationId, beforeTurn);
     conversation = refreshSummaryIfNeeded(conversation, turns, trace);
-    int covered = conversation.getSummarizedThroughTurn();
-    List<MemoryTurn> uncovered = turns.stream().filter(turn -> turn.turnIndex() > covered).toList();
-    int recentStart = Math.max(0, uncovered.size() - config.getRecentTurns());
-    List<MemoryTurn> unsummarized = uncovered.subList(0, recentStart);
-    List<MemoryTurn> recent = uncovered.subList(recentStart, uncovered.size());
-    int loadedThroughTurn = turns.isEmpty() ? 0 : turns.getLast().turnIndex();
     RagMemory memory =
-        new RagMemory(
+        toMemory(
             normalizedSummary(conversation.getSummaryJson()),
             conversation.getSummaryRevision(),
-            unsummarized,
-            recent,
-            loadedThroughTurn);
-    log.debug(
-        "conversation={} memory loaded summaryRevision={} unsummarizedTurns={} recentTurns={} loadedThroughTurn={}",
+            conversation.getSummarizedThroughTurn(),
+            turns);
+    int memoryChars = json.writeValueAsString(memory).length();
+    log.info(
+        "conversation={} memory loaded summaryRevision={} unsummarizedTurns={} recentTurns={} loadedThroughTurn={} memoryChars={}",
         conversationId,
         memory.summaryRevision(),
         memory.unsummarizedTurns().size(),
         memory.recentTurns().size(),
-        memory.loadedThroughTurn());
+        memory.loadedThroughTurn(),
+        memoryChars);
     return memory;
   }
 
+  /** 从摘要覆盖游标、有效完整轮次和最近原文窗口构造提示词记忆。 */
+  private RagMemory toMemory(String summary, int revision, int covered, List<MemoryTurn> turns) {
+    int recentStart = Math.max(0, turns.size() - config.getRecentTurns());
+    List<MemoryTurn> unsummarized =
+        turns.subList(0, recentStart).stream().filter(turn -> turn.turnIndex() > covered).toList();
+    List<MemoryTurn> recent = turns.subList(recentStart, turns.size());
+    int loadedThroughTurn = turns.isEmpty() ? 0 : turns.getLast().turnIndex();
+    return new RagMemory(summary, revision, unsummarized, recent, loadedThroughTurn);
+  }
+
   /**
-   * 将尚未摘要且已移出最近窗口的完整批次合并到持久化摘要。
+   * 当上次摘要覆盖轮次滑出最近窗口时，更新一批与窗口前半部分重叠的轮次。
    *
    * @param conversation 当前会话和摘要版本
    * @param turns 当前轮之前全部有效完整轮次
@@ -115,18 +121,27 @@ public class ConversationMemoryProvider implements MemoryProvider {
    */
   private Conversation refreshSummaryIfNeeded(
       Conversation conversation, List<MemoryTurn> turns, RagRunTrace trace) {
-    int eligibleCount = Math.max(0, turns.size() - config.getRecentTurns());
-    List<MemoryTurn> eligible = turns.subList(0, eligibleCount);
-    List<MemoryTurn> pending =
-        eligible.stream()
-            .filter(turn -> turn.turnIndex() > conversation.getSummarizedThroughTurn())
-            .toList();
-    int batches = pending.size() / config.getSummaryBatchTurns();
-    if (batches == 0) {
+    int recentStart = turns.size() - config.getRecentTurns();
+    if (recentStart <= 0) {
       trace.skipped(RagStageName.MEMORY_SUMMARY, null, "SUMMARY_NOT_DUE");
       return conversation;
     }
-    List<MemoryTurn> batch = pending.subList(0, batches * config.getSummaryBatchTurns());
+    int covered = conversation.getSummarizedThroughTurn();
+    if (covered >= turns.get(recentStart).turnIndex()) {
+      trace.skipped(RagStageName.MEMORY_SUMMARY, null, "SUMMARY_NOT_DUE");
+      return conversation;
+    }
+    int cutoff = Math.min(turns.size(), recentStart + config.getSummaryBatchTurns());
+    List<MemoryTurn> eligible = turns.subList(0, cutoff);
+    List<MemoryTurn> pending =
+        eligible.stream().filter(turn -> turn.turnIndex() > covered).toList();
+    int batchSize =
+        covered == 0 ? config.getSummaryBatchTurns() + 1 : config.getSummaryBatchTurns();
+    if (pending.size() < config.getSummaryBatchTurns()) {
+      trace.skipped(RagStageName.MEMORY_SUMMARY, null, "SUMMARY_NOT_DUE");
+      return conversation;
+    }
+    List<MemoryTurn> batch = pending.subList(0, Math.min(pending.size(), batchSize));
     int through = batch.getLast().turnIndex();
     RagRunTrace.Span span = trace.start(RagStageName.MEMORY_SUMMARY, null, batch.size());
     try {
@@ -137,7 +152,12 @@ public class ConversationMemoryProvider implements MemoryProvider {
       ChatClient.Generation generation = chat.generate(MemorySummaryPrompts.system(), prompt);
       span.model(generation.id(), generation.provider(), generation.model());
       String candidate = generation.content().strip();
-      JsonNode parsed = json.readTree(stripFence(candidate));
+      JsonNode parsed;
+      try {
+        parsed = json.readTree(stripFence(candidate));
+      } catch (RuntimeException error) {
+        throw ApiException.upstream("SUMMARY_INVALID_OUTPUT", "摘要格式不正确，请稍后重试");
+      }
       validateSummary(parsed);
       String encoded = json.writeValueAsString(parsed);
       int updated =
@@ -157,10 +177,12 @@ public class ConversationMemoryProvider implements MemoryProvider {
       span.success(1);
       return winner == null ? conversation : winner;
     } catch (RuntimeException e) {
-      span.degraded(0, summaryErrorCode(e));
+      String reasonCode = summaryErrorCode(e);
+      span.degraded(0, reasonCode);
       log.warn(
-          "conversation={} summary degraded exceptionType={}",
+          "conversation={} summary degraded reasonCode={} exceptionType={}",
           conversation.getId(),
+          reasonCode,
           e.getClass().getSimpleName());
       return conversation;
     }
@@ -168,9 +190,9 @@ public class ConversationMemoryProvider implements MemoryProvider {
 
   /** 将摘要异常归一化为不包含异常正文的稳定原因码。 */
   private String summaryErrorCode(RuntimeException error) {
-    return error instanceof com.hnu.backend.shared.error.ApiException api
-        ? api.code()
-        : "SUMMARY_FAILED";
+    if (error instanceof ApiException api) return api.code();
+    if (error instanceof IllegalArgumentException) return "SUMMARY_INVALID_OUTPUT";
+    return "SUMMARY_FAILED";
   }
 
   /**
@@ -188,6 +210,12 @@ public class ConversationMemoryProvider implements MemoryProvider {
       if (!values.isArray()) throw new IllegalArgumentException("invalid summary field");
       for (JsonNode value : values) {
         if (!value.isTextual()) throw new IllegalArgumentException("invalid summary item");
+        String item = value.asString();
+        String prefix =
+            item.startsWith("用户称：") ? "用户称：" : item.startsWith("助手曾回答：") ? "助手曾回答：" : null;
+        if (prefix == null || item.substring(prefix.length()).isBlank()) {
+          throw new IllegalArgumentException("summary item missing source");
+        }
       }
     }
   }

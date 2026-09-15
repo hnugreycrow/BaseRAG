@@ -13,7 +13,7 @@ public class ConversationProperties {
   /** 每次构造上下文时保留的最近完整轮次数。 */
   private int recentTurns = 8;
 
-  /** 单次摘要更新最多合并的历史轮次数。 */
+  /** 摘要与最近原文重叠的轮次数，也是后续更新的最大批次大小。 */
   private int summaryBatchTurns = 4;
 
   /** 流式内容累计到该字符数时触发持久化检查点。 */
@@ -27,6 +27,7 @@ public class ConversationProperties {
   void validate() {
     if (recentTurns < 1
         || summaryBatchTurns < 1
+        || summaryBatchTurns >= recentTurns
         || checkpointChars < 1
         || checkpointIntervalMs < 100) {
       throw new IllegalArgumentException("Invalid conversation configuration");

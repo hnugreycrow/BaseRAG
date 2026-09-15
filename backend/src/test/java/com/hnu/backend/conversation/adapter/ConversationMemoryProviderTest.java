@@ -38,29 +38,105 @@ class ConversationMemoryProviderTest {
       new ConversationMemoryProvider(conversations, messages, config, chat);
 
   @Test
-  void separatesOlderUncoveredTurnsFromRecentWindow() {
+  void keepsEightRawTurnsBeforeSummaryStarts() {
     Conversation conversation = conversation();
     when(conversations.find(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(conversation);
     when(messages.list(conversation.getOwnerId(), conversation.getId()))
-        .thenReturn(turns(conversation.getId(), 11));
+        .thenReturn(turns(conversation.getId(), 8));
 
-    var memory = provider.load(conversation.getOwnerId(), conversation.getId(), 12);
+    var memory = provider.load(conversation.getOwnerId(), conversation.getId(), 9);
 
-    assertEquals(List.of(1, 2, 3), indexes(memory.unsummarizedTurns()));
-    assertEquals(List.of(4, 5, 6, 7, 8, 9, 10, 11), indexes(memory.recentTurns()));
-    assertEquals(11, memory.loadedThroughTurn());
+    assertTrue(memory.unsummarizedTurns().isEmpty());
+    assertEquals(List.of(1, 2, 3, 4, 5, 6, 7, 8), indexes(memory.recentTurns()));
+    assertEquals(8, memory.loadedThroughTurn());
     verify(chat, never()).generate(anyString(), anyString());
   }
 
   @Test
-  void summarizesAllCompleteBatchesAndAdvancesCursor() {
+  void firstSummaryOverlapsHalfOfTheEightTurnWindow() {
     Conversation conversation = conversation();
     Conversation updated = conversation();
     updated.setId(conversation.getId());
     updated.setOwnerId(conversation.getOwnerId());
     updated.setSummaryJson(VALID_SUMMARY);
-    updated.setSummarizedThroughTurn(8);
+    updated.setSummarizedThroughTurn(5);
+    updated.setSummaryRevision(1);
+    when(conversations.find(conversation.getOwnerId(), conversation.getId()))
+        .thenReturn(conversation, updated);
+    when(messages.list(conversation.getOwnerId(), conversation.getId()))
+        .thenReturn(turns(conversation.getId(), 9));
+    when(chat.generate(anyString(), anyString())).thenReturn(generation(VALID_SUMMARY));
+    when(conversations.updateSummary(
+            eq(conversation.getOwnerId()), eq(conversation.getId()), anyString(), eq(5), eq(0)))
+        .thenReturn(1);
+
+    var memory = provider.load(conversation.getOwnerId(), conversation.getId(), 10);
+
+    assertEquals(VALID_SUMMARY, memory.summary());
+    assertEquals(1, memory.summaryRevision());
+    assertTrue(memory.unsummarizedTurns().isEmpty());
+    assertEquals(List.of(2, 3, 4, 5, 6, 7, 8, 9), indexes(memory.recentTurns()));
+    verify(conversations)
+        .updateSummary(
+            eq(conversation.getOwnerId()), eq(conversation.getId()), anyString(), eq(5), eq(0));
+    ArgumentCaptor<String> system = ArgumentCaptor.forClass(String.class);
+    ArgumentCaptor<String> user = ArgumentCaptor.forClass(String.class);
+    verify(chat).generate(system.capture(), user.capture());
+    assertEquals(MemorySummaryPrompts.system(), system.getValue());
+    var input = JsonMapper.builder().build().readTree(user.getValue());
+    assertTrue(input.path("oldSummary").isObject());
+    assertEquals(5, input.path("completedTurns").size());
+    assertTrue(input.path("summaryMaxChars").isMissingNode());
+  }
+
+  @Test
+  void refreshesOnceThePreviousCutoffSlidesOutOfTheWindow() {
+    Conversation conversation = conversation();
+    conversation.setSummaryJson(VALID_SUMMARY);
+    conversation.setSummarizedThroughTurn(5);
+    conversation.setSummaryRevision(1);
+    Conversation updated = conversation();
+    updated.setId(conversation.getId());
+    updated.setOwnerId(conversation.getOwnerId());
+    updated.setSummaryJson(VALID_SUMMARY);
+    updated.setSummarizedThroughTurn(9);
+    updated.setSummaryRevision(2);
+    when(conversations.find(conversation.getOwnerId(), conversation.getId()))
+        .thenReturn(conversation, conversation, updated);
+    when(messages.list(conversation.getOwnerId(), conversation.getId()))
+        .thenReturn(turns(conversation.getId(), 12), turns(conversation.getId(), 13));
+    when(chat.generate(anyString(), anyString())).thenReturn(generation(VALID_SUMMARY));
+    when(conversations.updateSummary(
+            eq(conversation.getOwnerId()), eq(conversation.getId()), anyString(), eq(9), eq(1)))
+        .thenReturn(1);
+
+    var before = provider.load(conversation.getOwnerId(), conversation.getId(), 13);
+    assertEquals(List.of(5, 6, 7, 8, 9, 10, 11, 12), indexes(before.recentTurns()));
+    verify(chat, never()).generate(anyString(), anyString());
+
+    var after = provider.load(conversation.getOwnerId(), conversation.getId(), 14);
+    assertEquals(List.of(6, 7, 8, 9, 10, 11, 12, 13), indexes(after.recentTurns()));
+    assertTrue(after.unsummarizedTurns().isEmpty());
+    ArgumentCaptor<String> user = ArgumentCaptor.forClass(String.class);
+    verify(chat).generate(anyString(), user.capture());
+    var input = JsonMapper.builder().build().readTree(user.getValue());
+    assertEquals(
+        List.of(6, 7, 8, 9),
+        java.util.stream.IntStream.range(0, input.path("completedTurns").size())
+            .map(index -> input.path("completedTurns").path(index).path("turnIndex").asInt())
+            .boxed()
+            .toList());
+  }
+
+  @Test
+  void summarizesOnlyOneBoundedBatchWhenOlderTurnsAccumulate() {
+    Conversation conversation = conversation();
+    Conversation updated = conversation();
+    updated.setId(conversation.getId());
+    updated.setOwnerId(conversation.getOwnerId());
+    updated.setSummaryJson(VALID_SUMMARY);
+    updated.setSummarizedThroughTurn(5);
     updated.setSummaryRevision(1);
     when(conversations.find(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(conversation, updated);
@@ -68,25 +144,53 @@ class ConversationMemoryProviderTest {
         .thenReturn(turns(conversation.getId(), 16));
     when(chat.generate(anyString(), anyString())).thenReturn(generation(VALID_SUMMARY));
     when(conversations.updateSummary(
-            eq(conversation.getOwnerId()), eq(conversation.getId()), anyString(), eq(8), eq(0)))
+            eq(conversation.getOwnerId()), eq(conversation.getId()), anyString(), eq(5), eq(0)))
         .thenReturn(1);
 
     var memory = provider.load(conversation.getOwnerId(), conversation.getId(), 17);
 
-    assertEquals(VALID_SUMMARY, memory.summary());
-    assertEquals(1, memory.summaryRevision());
-    assertTrue(memory.unsummarizedTurns().isEmpty());
+    assertEquals(List.of(6, 7, 8), indexes(memory.unsummarizedTurns()));
     assertEquals(List.of(9, 10, 11, 12, 13, 14, 15, 16), indexes(memory.recentTurns()));
-    verify(conversations)
-        .updateSummary(
-            eq(conversation.getOwnerId()), eq(conversation.getId()), anyString(), eq(8), eq(0));
-    ArgumentCaptor<String> system = ArgumentCaptor.forClass(String.class);
     ArgumentCaptor<String> user = ArgumentCaptor.forClass(String.class);
-    verify(chat).generate(system.capture(), user.capture());
-    assertEquals(MemorySummaryPrompts.system(), system.getValue());
+    verify(chat).generate(anyString(), user.capture());
+    assertEquals(
+        5, JsonMapper.builder().build().readTree(user.getValue()).path("completedTurns").size());
+  }
+
+  @Test
+  void continuesAnExistingConversationWithoutResettingItsSummaryCursor() {
+    Conversation conversation = conversation();
+    conversation.setSummaryJson(VALID_SUMMARY);
+    conversation.setSummarizedThroughTurn(8);
+    conversation.setSummaryRevision(3);
+    Conversation updated = conversation();
+    updated.setId(conversation.getId());
+    updated.setOwnerId(conversation.getOwnerId());
+    updated.setSummaryJson(VALID_SUMMARY);
+    updated.setSummarizedThroughTurn(12);
+    updated.setSummaryRevision(4);
+    when(conversations.find(conversation.getOwnerId(), conversation.getId()))
+        .thenReturn(conversation, updated);
+    when(messages.list(conversation.getOwnerId(), conversation.getId()))
+        .thenReturn(turns(conversation.getId(), 16));
+    when(chat.generate(anyString(), anyString())).thenReturn(generation(VALID_SUMMARY));
+    when(conversations.updateSummary(
+            eq(conversation.getOwnerId()), eq(conversation.getId()), anyString(), eq(12), eq(3)))
+        .thenReturn(1);
+
+    var memory = provider.load(conversation.getOwnerId(), conversation.getId(), 17);
+
+    assertEquals(4, memory.summaryRevision());
+    assertEquals(List.of(9, 10, 11, 12, 13, 14, 15, 16), indexes(memory.recentTurns()));
+    ArgumentCaptor<String> user = ArgumentCaptor.forClass(String.class);
+    verify(chat).generate(anyString(), user.capture());
     var input = JsonMapper.builder().build().readTree(user.getValue());
-    assertTrue(input.path("oldSummary").isObject());
-    assertEquals(8, input.path("completedTurns").size());
+    assertEquals(
+        List.of(9, 10, 11, 12),
+        java.util.stream.IntStream.range(0, input.path("completedTurns").size())
+            .map(index -> input.path("completedTurns").path(index).path("turnIndex").asInt())
+            .boxed()
+            .toList());
   }
 
   @Test
@@ -104,7 +208,7 @@ class ConversationMemoryProviderTest {
     assertEquals(List.of(1, 2, 3, 4), indexes(memory.unsummarizedTurns()));
     verify(conversations, never())
         .updateSummary(
-            eq(conversation.getOwnerId()), eq(conversation.getId()), anyString(), eq(4), eq(0));
+            eq(conversation.getOwnerId()), eq(conversation.getId()), anyString(), eq(5), eq(0));
   }
 
   @Test
@@ -121,7 +225,10 @@ class ConversationMemoryProviderTest {
                 + "\"decisionsAndPreferences\":[],\"entitiesAndReferences\":[]}",
             "{\"goalsAndTopics\":[1],\"factsAndConstraints\":[],"
                 + "\"decisionsAndPreferences\":[],\"entitiesAndReferences\":[],\"openItems\":[]}",
-            VALID_SUMMARY.substring(0, VALID_SUMMARY.length() - 1) + ",\"extra\":[]}");
+            VALID_SUMMARY.substring(0, VALID_SUMMARY.length() - 1) + ",\"extra\":[]}",
+            VALID_SUMMARY.replace("用户称：制度", "  "),
+            VALID_SUMMARY.replace("用户称：制度", "用户称：  "),
+            VALID_SUMMARY.replace("用户称：制度", "制度"));
 
     for (String candidate : invalidCandidates) {
       clearInvocations(conversations, messages, chat);
@@ -133,7 +240,7 @@ class ConversationMemoryProviderTest {
     }
     verify(conversations, never())
         .updateSummary(
-            eq(conversation.getOwnerId()), eq(conversation.getId()), anyString(), eq(4), eq(0));
+            eq(conversation.getOwnerId()), eq(conversation.getId()), anyString(), eq(5), eq(0));
   }
 
   @Test
@@ -145,7 +252,7 @@ class ConversationMemoryProviderTest {
         .thenReturn(turns(conversation.getId(), 12));
     when(chat.generate(anyString(), anyString())).thenReturn(generation(VALID_SUMMARY));
     when(conversations.updateSummary(
-            eq(conversation.getOwnerId()), eq(conversation.getId()), anyString(), eq(4), eq(0)))
+            eq(conversation.getOwnerId()), eq(conversation.getId()), anyString(), eq(5), eq(0)))
         .thenThrow(new RuntimeException("database unavailable"));
 
     var memory = provider.load(conversation.getOwnerId(), conversation.getId(), 13);
@@ -161,7 +268,7 @@ class ConversationMemoryProviderTest {
     winner.setId(conversation.getId());
     winner.setOwnerId(conversation.getOwnerId());
     winner.setSummaryJson(VALID_SUMMARY);
-    winner.setSummarizedThroughTurn(4);
+    winner.setSummarizedThroughTurn(5);
     winner.setSummaryRevision(1);
     when(conversations.find(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(conversation, winner);
@@ -169,7 +276,7 @@ class ConversationMemoryProviderTest {
         .thenReturn(turns(conversation.getId(), 12));
     when(chat.generate(anyString(), anyString())).thenReturn(generation(VALID_SUMMARY));
     when(conversations.updateSummary(
-            eq(conversation.getOwnerId()), eq(conversation.getId()), anyString(), eq(4), eq(0)))
+            eq(conversation.getOwnerId()), eq(conversation.getId()), anyString(), eq(5), eq(0)))
         .thenReturn(0);
 
     var memory = provider.load(conversation.getOwnerId(), conversation.getId(), 13);
@@ -177,6 +284,116 @@ class ConversationMemoryProviderTest {
     assertEquals(1, memory.summaryRevision());
     assertEquals(VALID_SUMMARY, memory.summary());
     assertTrue(memory.unsummarizedTurns().isEmpty());
+  }
+
+  @Test
+  void acceptsAStructuredSummaryLongerThanTheFormerLimit() {
+    Conversation conversation = conversation();
+    String largeSummary = VALID_SUMMARY.replace("制度", "制度".repeat(2500));
+    Conversation updated = conversation();
+    updated.setId(conversation.getId());
+    updated.setOwnerId(conversation.getOwnerId());
+    updated.setSummaryJson(largeSummary);
+    updated.setSummarizedThroughTurn(5);
+    updated.setSummaryRevision(1);
+    when(conversations.find(conversation.getOwnerId(), conversation.getId()))
+        .thenReturn(conversation, updated);
+    when(messages.list(conversation.getOwnerId(), conversation.getId()))
+        .thenReturn(turns(conversation.getId(), 9));
+    when(chat.generate(anyString(), anyString())).thenReturn(generation(largeSummary));
+    when(conversations.updateSummary(
+            eq(conversation.getOwnerId()), eq(conversation.getId()), anyString(), eq(5), eq(0)))
+        .thenReturn(1);
+
+    var memory = provider.load(conversation.getOwnerId(), conversation.getId(), 10);
+
+    assertTrue(largeSummary.length() > 4000);
+    assertEquals(largeSummary, memory.summary());
+    verify(conversations)
+        .updateSummary(
+            eq(conversation.getOwnerId()), eq(conversation.getId()), anyString(), eq(5), eq(0));
+  }
+
+  @Test
+  void keepsMemoryLongerThanTheFormerLimitForTheModel() {
+    Conversation conversation = conversation();
+    String longAnswer = "完整历史".repeat(13_000);
+    List<Message> history = turns(conversation.getId(), 8);
+    history.stream()
+        .filter(message -> "ASSISTANT".equals(message.getRole()) && message.getTurnIndex() == 8)
+        .findFirst()
+        .orElseThrow()
+        .setContent(longAnswer);
+    when(conversations.find(conversation.getOwnerId(), conversation.getId()))
+        .thenReturn(conversation);
+    when(messages.list(conversation.getOwnerId(), conversation.getId())).thenReturn(history);
+
+    var memory = provider.load(conversation.getOwnerId(), conversation.getId(), 9);
+
+    assertTrue(JsonMapper.builder().build().writeValueAsString(memory).length() > 48_000);
+    assertEquals(longAnswer, memory.recentTurns().getLast().assistantContent());
+    verify(chat, never()).generate(anyString(), anyString());
+  }
+
+  @Test
+  void usesValidTurnOrderAndPreservesDetailedHistoryInSummaryInput() {
+    Conversation conversation = conversation();
+    Conversation updated = conversation();
+    updated.setId(conversation.getId());
+    updated.setOwnerId(conversation.getOwnerId());
+    updated.setSummaryJson(
+        "{\"goalsAndTopics\":[\"用户称：准备制度修订\"],"
+            + "\"factsAndConstraints\":[\"用户称：截止日期2026-09-20，预算不超过3000元\"],"
+            + "\"decisionsAndPreferences\":[\"用户称：偏好中文说明\"],"
+            + "\"entitiesAndReferences\":[\"助手曾回答：HNU负责审批\"],"
+            + "\"openItems\":[\"用户称：尚未确定负责人\"]}");
+    updated.setSummarizedThroughTurn(7);
+    updated.setSummaryRevision(1);
+    List<Message> history = new ArrayList<>();
+    for (int index : List.of(1, 2, 4, 5, 7, 8, 9, 10, 11)) {
+      addTurn(history, conversation.getId(), index, true, "COMPLETED", true, "回答" + index);
+    }
+    addTurn(history, conversation.getId(), 3, true, "FAILED", true, "失败回答");
+    addTurn(history, conversation.getId(), 6, true, "CANCELLED", true, "已取消回答");
+    history.stream()
+        .filter(message -> "USER".equals(message.getRole()) && message.getTurnIndex() == 1)
+        .findFirst()
+        .orElseThrow()
+        .setContent("准备制度修订，截止2026-09-20，预算不超过3000元；偏好中文，负责人未定");
+    history.stream()
+        .filter(message -> "ASSISTANT".equals(message.getRole()) && message.getTurnIndex() == 1)
+        .findFirst()
+        .orElseThrow()
+        .setContent("HNU负责审批，仅是助手曾回答的历史陈述");
+    when(conversations.find(conversation.getOwnerId(), conversation.getId()))
+        .thenReturn(conversation, updated);
+    when(messages.list(conversation.getOwnerId(), conversation.getId())).thenReturn(history);
+    when(chat.generate(anyString(), anyString())).thenReturn(generation(updated.getSummaryJson()));
+    when(conversations.updateSummary(
+            eq(conversation.getOwnerId()), eq(conversation.getId()), anyString(), eq(7), eq(0)))
+        .thenReturn(1);
+
+    var memory = provider.load(conversation.getOwnerId(), conversation.getId(), 12);
+
+    assertEquals(List.of(2, 4, 5, 7, 8, 9, 10, 11), indexes(memory.recentTurns()));
+    assertTrue(memory.unsummarizedTurns().isEmpty());
+    assertTrue(memory.summary().contains("2026-09-20"));
+    assertTrue(memory.summary().contains("不超过3000元"));
+    assertTrue(memory.summary().contains("偏好中文"));
+    assertTrue(memory.summary().contains("助手曾回答：HNU"));
+    ArgumentCaptor<String> user = ArgumentCaptor.forClass(String.class);
+    verify(chat).generate(anyString(), user.capture());
+    var input = JsonMapper.builder().build().readTree(user.getValue());
+    assertEquals(
+        List.of(1, 2, 4, 5, 7),
+        java.util.stream.IntStream.range(0, input.path("completedTurns").size())
+            .map(index -> input.path("completedTurns").path(index).path("turnIndex").asInt())
+            .boxed()
+            .toList());
+    assertTrue(user.getValue().contains("2026-09-20"));
+    assertTrue(user.getValue().contains("不超过3000元"));
+    assertTrue(user.getValue().contains("负责人未定"));
+    assertTrue(user.getValue().contains("助手曾回答的历史陈述"));
   }
 
   @Test

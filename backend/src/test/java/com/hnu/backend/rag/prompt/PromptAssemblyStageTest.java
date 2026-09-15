@@ -90,6 +90,38 @@ class PromptAssemblyStageTest {
   }
 
   @Test
+  void keepsUnsummarizedHistoryAndOverlappingRecentRawTurnsInAnswerPrompt() {
+    String longAnswer = "历史回答三".repeat(10_000);
+    RagMemory memory =
+        new RagMemory(
+            "{\"goalsAndTopics\":[\"用户称：准备制度修订\"]}",
+            1,
+            List.of(new MemoryTurn(1, "窗口外未摘要目标", "历史回答一")),
+            List.of(
+                new MemoryTurn(2, "准备制度修订", "历史回答二"), new MemoryTurn(3, "最新偏好为中文说明", longAnswer)),
+            3);
+    QueryPlan plan = QueryPlan.fallback("按最新偏好说明制度修订");
+    RoutingPlan routing = new RoutingPlan(List.of(knowledge("Q1")));
+    ExecutionResult execution =
+        new ExecutionResult(List.of(), List.of(), RagBudgetSnapshot.from(config));
+
+    AssembledPrompt prompt =
+        stage.assemblePipeline(memory, "按最新偏好说明制度修订", plan, routing, execution, List.of());
+    var loaded = json.readTree(prompt.userPrompt()).path("conversationMemory");
+
+    assertEquals(1, loaded.path("unsummarizedTurns").size());
+    assertEquals(
+        "窗口外未摘要目标", loaded.path("unsummarizedTurns").path(0).path("userContent").asString());
+    assertEquals(2, loaded.path("recentTurns").size());
+    assertEquals("最新偏好为中文说明", loaded.path("recentTurns").path(1).path("userContent").asString());
+    assertEquals(
+        longAnswer, loaded.path("recentTurns").path(1).path("assistantContent").asString());
+    assertTrue(prompt.userPrompt().length() > 48_000);
+    assertTrue(loaded.path("summary").toString().contains("准备制度修订"));
+    assertTrue(prompt.systemPrompt().contains("以最近原文为准"));
+  }
+
+  @Test
   void assignsStableToolReferencesWithoutExposingArgumentsOrGatewayNames() {
     QueryPlan plan =
         new QueryPlan("外部问题", List.of(new SubQuestion("Q1", "查询一"), new SubQuestion("Q2", "查询二")));
