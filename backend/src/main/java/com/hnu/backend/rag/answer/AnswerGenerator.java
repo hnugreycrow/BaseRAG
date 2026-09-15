@@ -69,6 +69,13 @@ public interface AnswerGenerator {
     void started(ModelTarget target, AttemptReason reason);
 
     /**
+     * 当前生成尝试的业务记录已经准备完成，即将发送模型 HTTP 请求。
+     *
+     * @param target 当前模型候选
+     */
+    default void requesting(ModelTarget target) {}
+
+    /**
      * 接收一段新生成的正文。
      *
      * @param text 非空增量正文

@@ -1,6 +1,8 @@
 package com.hnu.backend.rag.routing;
 
 import com.hnu.backend.configuration.RagProperties;
+import com.hnu.backend.observability.RagStageName;
+import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.rag.mcp.McpToolRegistry;
 import com.hnu.backend.rag.planning.QueryPlan;
 import com.hnu.backend.shared.error.ApiException;
@@ -32,6 +34,13 @@ public class IntentRoutingStage {
   private final JsonMapper json = JsonMapper.builder().build();
   private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
+  /**
+   * 创建意图路由阶段。
+   *
+   * @param classifier 意图分类模型端口
+   * @param tools MCP 工具注册表
+   * @param config RAG 路由配置
+   */
   public IntentRoutingStage(
       IntentClassifier classifier, McpToolRegistry tools, RagProperties config) {
     this.classifier = classifier;
@@ -39,9 +48,27 @@ public class IntentRoutingStage {
     this.config = config;
   }
 
-  /** 对每个子问题生成唯一有效路由。任何分类或校验失败都整体降级到知识检索，保证旧链路仍可继续工作。 */
+  /**
+   * 对每个子问题生成唯一有效路由，异常时整体降级到知识检索。
+   *
+   * @param plan 查询计划
+   * @return 与子问题顺序对齐的路由计划
+   */
   public RoutingPlan execute(QueryPlan plan) {
+    return execute(plan, RagRunTrace.noop());
+  }
+
+  /**
+   * 生成安全路由并记录模型、耗时和服务端归一化降级。
+   *
+   * @param plan 查询计划
+   * @param trace 当前问答 Trace
+   * @return 与子问题对齐的路由计划
+   */
+  public RoutingPlan execute(QueryPlan plan, RagRunTrace trace) {
     long startedAt = System.nanoTime();
+    RagRunTrace.Span span =
+        trace.start(RagStageName.INTENT_ROUTING, null, plan.subQuestions().size());
     IntentClassifier.ClassificationOutput output = null;
     try {
       output = classifyWithinTimeout(plan);
@@ -53,23 +80,48 @@ public class IntentRoutingStage {
           output.provider(),
           output.model(),
           elapsedMillis(startedAt));
+      span.model(output.modelId(), output.provider(), output.model());
+      String degradedReason = normalizedFallbackReason(routing);
+      if (degradedReason == null) span.success(routing.routes().size());
+      else span.degraded(routing.routes().size(), degradedReason);
       return routing;
     } catch (RoutingValidationException e) {
+      if (output != null) span.model(output.modelId(), output.provider(), output.model());
+      span.degraded(plan.subQuestions().size(), e.reason.name());
       log.warn(
           "intent routing degraded reason={} modelId={} routingMs={}",
           e.reason,
           output == null ? null : output.modelId(),
           elapsedMillis(startedAt));
     } catch (RuntimeException e) {
+      DegradedReason reason = failureReason(e);
+      span.degraded(plan.subQuestions().size(), reason.name());
       log.warn(
           "intent routing degraded reason={} exceptionType={} routingMs={}",
-          failureReason(e),
+          reason,
           e.getClass().getSimpleName(),
           elapsedMillis(startedAt));
     }
     return fallback(plan, RoutingReasonCode.CLASSIFIER_DEGRADED);
   }
 
+  /** 返回模型成功后由服务端安全策略触发的首个降级原因。 */
+  private String normalizedFallbackReason(RoutingPlan routing) {
+    return routing.routes().stream()
+        .map(IntentRoute::reasonCode)
+        .filter(
+            reason ->
+                reason == RoutingReasonCode.LOW_CONFIDENCE_FALLBACK
+                    || reason == RoutingReasonCode.MCP_DISABLED_FALLBACK
+                    || reason == RoutingReasonCode.TOOL_NOT_ALLOWED_FALLBACK
+                    || reason == RoutingReasonCode.TOOL_NOT_READ_ONLY_FALLBACK
+                    || reason == RoutingReasonCode.INVALID_TOOL_ARGUMENTS_FALLBACK)
+        .map(Enum::name)
+        .findFirst()
+        .orElse(null);
+  }
+
+  /** 停止路由超时控制使用的虚拟线程执行器。 */
   @PreDestroy
   void close() {
     executor.shutdownNow();

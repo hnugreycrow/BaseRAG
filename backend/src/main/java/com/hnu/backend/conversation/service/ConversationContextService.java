@@ -1,6 +1,7 @@
 package com.hnu.backend.conversation.service;
 
 import com.hnu.backend.conversation.entity.Conversation;
+import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.rag.memory.MemoryStage;
 import com.hnu.backend.rag.memory.RagMemory;
 import com.hnu.backend.rag.planning.QueryPlan;
@@ -46,6 +47,24 @@ public class ConversationContextService {
         memoryStage.execute(conversation.getOwnerId(), conversation.getId(), currentTurn);
     QueryPlan queryPlan = queryPlanningStage.execute(memory, question);
     RoutingPlan routingPlan = intentRoutingStage.execute(queryPlan);
+    return new PreparedContext(memory, queryPlan, routingPlan);
+  }
+
+  /**
+   * 准备上下文并把同一个 Trace 显式传入记忆、规划和路由阶段。
+   *
+   * @param conversation 当前会话
+   * @param currentTurn 当前用户轮次
+   * @param question 用户原始问题
+   * @param trace 当前问答 Trace
+   * @return 原始记忆、规划和安全路由的不可变组合
+   */
+  public PreparedContext prepare(
+      Conversation conversation, int currentTurn, String question, RagRunTrace trace) {
+    RagMemory memory =
+        memoryStage.execute(conversation.getOwnerId(), conversation.getId(), currentTurn, trace);
+    QueryPlan queryPlan = queryPlanningStage.execute(memory, question, trace);
+    RoutingPlan routingPlan = intentRoutingStage.execute(queryPlan, trace);
     return new PreparedContext(memory, queryPlan, routingPlan);
   }
 

@@ -9,6 +9,11 @@ import com.hnu.backend.conversation.mapper.ConversationMapper;
 import com.hnu.backend.conversation.mapper.GenerationAttemptMapper;
 import com.hnu.backend.conversation.mapper.MessageMapper;
 import com.hnu.backend.conversation.vo.ConversationResponses;
+import com.hnu.backend.observability.RagExecutionMode;
+import com.hnu.backend.observability.RagRunStatus;
+import com.hnu.backend.observability.RagStageName;
+import com.hnu.backend.observability.service.RagTraceManager;
+import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.rag.answer.AnswerGenerator;
 import com.hnu.backend.rag.answer.AnswerResult;
 import com.hnu.backend.rag.answer.AnswerStage;
@@ -20,9 +25,12 @@ import com.hnu.backend.rag.rerank.RerankStage;
 import com.hnu.backend.rag.vo.ModelInfoResponse;
 import com.hnu.backend.rag.vo.SourceResponse;
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.web.RequestTiming;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.io.IOException;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -50,6 +58,7 @@ public class ConversationService {
   private final RagProperties rag;
   private final ConversationProperties config;
   private final TransactionTemplate tx;
+  private final RagTraceManager traces;
   private final JsonMapper json = JsonMapper.builder().build();
   private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
   private final ConcurrentMap<UUID, ActiveGeneration> activeByConversation =
@@ -73,6 +82,7 @@ public class ConversationService {
    * @param rag RAG 输入配置
    * @param config 会话检查点配置
    * @param tx 终态持久化事务模板
+   * @param traces 单次问答 Trace 管理器
    */
   public ConversationService(
       ConversationMapper conversations,
@@ -86,7 +96,8 @@ public class ConversationService {
       AnswerStage answers,
       RagProperties rag,
       ConversationProperties config,
-      TransactionTemplate tx) {
+      TransactionTemplate tx,
+      RagTraceManager traces) {
     this.conversations = conversations;
     this.messages = messages;
     this.attempts = attempts;
@@ -99,6 +110,7 @@ public class ConversationService {
     this.rag = rag;
     this.config = config;
     this.tx = tx;
+    this.traces = traces;
   }
 
   /** 将进程异常退出时遗留的运行中消息和尝试恢复为终态。 */
@@ -106,11 +118,13 @@ public class ConversationService {
   void recoverInterrupted() {
     int recoveredAttempts = attempts.recoverInterrupted();
     int recoveredMessages = messages.recoverInterrupted();
-    if (recoveredMessages > 0 || recoveredAttempts > 0) {
+    int recoveredRuns = traces.recoverInterrupted();
+    if (recoveredMessages > 0 || recoveredAttempts > 0 || recoveredRuns > 0) {
       log.warn(
-          "Recovered interrupted generation state messages={} attempts={}",
+          "Recovered interrupted generation state messages={} attempts={} runs={}",
           recoveredMessages,
-          recoveredAttempts);
+          recoveredAttempts,
+          recoveredRuns);
     }
   }
 
@@ -234,7 +248,7 @@ public class ConversationService {
    * @param conversationId 会话 ID
    * @param clientMessageId 客户端幂等消息 ID
    * @param rawQuestion 未归一化用户问题
-   * @param requestId HTTP 请求追踪 ID
+   * @param timing HTTP 请求起始信息
    * @return 当前生成或历史幂等结果的 SSE 通道
    */
   public SseEmitter ask(
@@ -243,6 +257,30 @@ public class ConversationService {
       UUID clientMessageId,
       String rawQuestion,
       String requestId) {
+    return ask(
+        ownerId,
+        conversationId,
+        clientMessageId,
+        rawQuestion,
+        new RequestTiming(requestId, OffsetDateTime.now(ZoneOffset.UTC), System.nanoTime()));
+  }
+
+  /**
+   * 新建用户消息、回答版本和问答 Trace，并立即返回 SSE 输出通道。
+   *
+   * @param ownerId 所属用户标识
+   * @param conversationId 会话标识
+   * @param clientMessageId 客户端幂等消息标识
+   * @param rawQuestion 未归一化问题
+   * @param timing HTTP 请求起始信息
+   * @return 当前生成或历史幂等结果的 SSE 通道
+   */
+  public SseEmitter ask(
+      UUID ownerId,
+      UUID conversationId,
+      UUID clientMessageId,
+      String rawQuestion,
+      RequestTiming timing) {
     String question = normalizeQuestion(rawQuestion);
     Object lock = conversationLocks.computeIfAbsent(conversationId, ignored -> new Object());
     synchronized (lock) {
@@ -253,7 +291,7 @@ public class ConversationService {
             "USER".equals(existing.getRole())
                 ? messages.latestReply(ownerId, existing.getId())
                 : existing;
-        return replayOrConflict(conversation, existing, assistant, requestId);
+        return replayOrConflict(conversation, existing, assistant, timing.requestId());
       }
       ensureIdle(ownerId, conversationId);
       PreparedMessages prepared =
@@ -264,10 +302,17 @@ public class ConversationService {
                 messages.insert(user);
                 Message assistant = assistantMessage(conversationId, null, turn, 1, user.getId());
                 messages.insert(assistant);
+                RagRunTrace trace =
+                    traces.start(ownerId, conversationId, user.getId(), assistant.getId(), timing);
                 conversations.touch(ownerId, conversationId);
-                return new PreparedMessages(user, assistant);
+                return new PreparedMessages(user, assistant, trace);
               });
-      return launch(conversation, prepared.user(), prepared.assistant(), requestId);
+      return launch(
+          conversation,
+          prepared.user(),
+          prepared.assistant(),
+          timing.requestId(),
+          prepared.trace());
     }
   }
 
@@ -286,7 +331,22 @@ public class ConversationService {
       UUID assistantMessageId,
       UUID clientRequestId,
       String requestId) {
-    return restart(ownerId, conversationId, assistantMessageId, clientRequestId, requestId, false);
+    return retry(
+        ownerId,
+        conversationId,
+        assistantMessageId,
+        clientRequestId,
+        new RequestTiming(requestId, OffsetDateTime.now(ZoneOffset.UTC), System.nanoTime()));
+  }
+
+  /** 使用完整 HTTP 起始信息重试失败或取消的回答。 */
+  public SseEmitter retry(
+      UUID ownerId,
+      UUID conversationId,
+      UUID assistantMessageId,
+      UUID clientRequestId,
+      RequestTiming timing) {
+    return restart(ownerId, conversationId, assistantMessageId, clientRequestId, timing, false);
   }
 
   /**
@@ -304,7 +364,22 @@ public class ConversationService {
       UUID assistantMessageId,
       UUID clientRequestId,
       String requestId) {
-    return restart(ownerId, conversationId, assistantMessageId, clientRequestId, requestId, true);
+    return regenerate(
+        ownerId,
+        conversationId,
+        assistantMessageId,
+        clientRequestId,
+        new RequestTiming(requestId, OffsetDateTime.now(ZoneOffset.UTC), System.nanoTime()));
+  }
+
+  /** 使用完整 HTTP 起始信息重新生成最后一轮成功回答。 */
+  public SseEmitter regenerate(
+      UUID ownerId,
+      UUID conversationId,
+      UUID assistantMessageId,
+      UUID clientRequestId,
+      RequestTiming timing) {
+    return restart(ownerId, conversationId, assistantMessageId, clientRequestId, timing, true);
   }
 
   /**
@@ -322,7 +397,7 @@ public class ConversationService {
       UUID conversationId,
       UUID assistantMessageId,
       UUID clientRequestId,
-      String requestId,
+      RequestTiming timing,
       boolean regenerate) {
     Object lock = conversationLocks.computeIfAbsent(conversationId, ignored -> new Object());
     synchronized (lock) {
@@ -330,7 +405,7 @@ public class ConversationService {
       Message duplicate = messages.findByClientRequest(ownerId, conversationId, clientRequestId);
       if (duplicate != null) {
         Message user = messages.find(ownerId, duplicate.getReplyToId());
-        return replayOrConflict(conversation, user, duplicate, requestId);
+        return replayOrConflict(conversation, user, duplicate, timing.requestId());
       }
       ensureIdle(ownerId, conversationId);
       Message previous = messages.find(ownerId, assistantMessageId);
@@ -351,7 +426,7 @@ public class ConversationService {
         throw ApiException.conflict("RETRY_NOT_ALLOWED", "只能重试失败或已停止的回答");
       }
       Message user = messages.find(ownerId, previous.getReplyToId());
-      Message next =
+      PreparedAnswer next =
           tx.execute(
               ignored -> {
                 messages.deactivateReplies(ownerId, user.getId());
@@ -363,10 +438,12 @@ public class ConversationService {
                         messages.nextVariant(ownerId, user.getId()),
                         user.getId());
                 messages.insert(value);
+                RagRunTrace trace =
+                    traces.start(ownerId, conversationId, user.getId(), value.getId(), timing);
                 conversations.touch(ownerId, conversationId);
-                return value;
+                return new PreparedAnswer(value, trace);
               });
-      return launch(conversation, user, next, requestId);
+      return launch(conversation, user, next.assistant(), timing.requestId(), next.trace());
     }
   }
 
@@ -400,6 +477,7 @@ public class ConversationService {
           int changed =
               messages.cancelRunning(ownerId, generationId, conversationId, stored.getContent());
           attempts.cancelRunning(ownerId, generationId);
+          traces.cancelStored(generationId);
           if (changed > 0) conversations.touch(ownerId, conversationId);
         });
   }
@@ -477,14 +555,19 @@ public class ConversationService {
    * @param user 用户消息
    * @param assistant 待生成回答
    * @param requestId HTTP 请求追踪 ID
+   * @param trace 与回答版本绑定并显式跨线程传递的 Trace
    * @return 实时 SSE 通道
    */
   private SseEmitter launch(
-      Conversation conversation, Message user, Message assistant, String requestId) {
+      Conversation conversation,
+      Message user,
+      Message assistant,
+      String requestId,
+      RagRunTrace trace) {
     SseEmitter emitter = new SseEmitter(0L);
     ActiveGeneration active =
         new ActiveGeneration(
-            conversation, user, assistant, requestId, emitter, answers.newControl());
+            conversation, user, assistant, requestId, emitter, answers.newControl(), trace);
     activeByConversation.put(conversation.getId(), active);
     activeByGeneration.put(assistant.getId(), active);
     emitter.onCompletion(() -> disconnect(active));
@@ -519,31 +602,65 @@ public class ConversationService {
           "started",
           startedPayload(active.conversation, active.user, active.assistant));
       var prepared =
-          conversationContext.prepare(
-              active.conversation, active.user.getTurnIndex(), active.user.getContent());
+          active.trace.enabled()
+              ? conversationContext.prepare(
+                  active.conversation,
+                  active.user.getTurnIndex(),
+                  active.user.getContent(),
+                  active.trace)
+              : conversationContext.prepare(
+                  active.conversation, active.user.getTurnIndex(), active.user.getContent());
       ensureNotCancelled(active);
       String standaloneQuestion = prepared.queryPlan().standaloneQuestion();
       if (prepared.routingPlan().systemChatOnly()) {
+        active.trace.executionMode(RagExecutionMode.SYSTEM_CHAT);
         answerSystemChat(active, prepared);
         return;
       }
+      active.trace.executionMode(RagExecutionMode.FULL_PIPELINE);
       var execution =
-          executionStage.execute(
-              active.ownerId,
-              prepared.queryPlan(),
-              prepared.routingPlan(),
-              null,
-              active.control::cancelled);
+          active.trace.enabled()
+              ? executionStage.execute(
+                  active.ownerId,
+                  prepared.queryPlan(),
+                  prepared.routingPlan(),
+                  null,
+                  active.control::cancelled,
+                  active.trace)
+              : executionStage.execute(
+                  active.ownerId,
+                  prepared.queryPlan(),
+                  prepared.routingPlan(),
+                  null,
+                  active.control::cancelled);
       ensureNotCancelled(active);
+      RagRunTrace.Span deduplicationSpan =
+          active.trace.start(RagStageName.DEDUPLICATION, null, execution.candidates().size());
       var deduplicated = deduplicationStage.execute(execution.candidates(), execution.budget());
+      deduplicationSpan.success(deduplicated.candidates().size());
       ensureNotCancelled(active);
       var reranked =
-          rerankStage.execute(
-              prepared.queryPlan(),
-              execution,
-              deduplicated.candidates(),
-              active.control::cancelled);
+          active.trace.enabled()
+              ? rerankStage.execute(
+                  prepared.queryPlan(),
+                  execution,
+                  deduplicated.candidates(),
+                  active.control::cancelled,
+                  active.trace)
+              : rerankStage.execute(
+                  prepared.queryPlan(),
+                  execution,
+                  deduplicated.candidates(),
+                  active.control::cancelled);
       ensureNotCancelled(active);
+      int promptInputCount =
+          reranked.selectedCandidates().size()
+              + (int)
+                  execution.subQuestions().stream()
+                      .filter(result -> result.toolObservation() != null)
+                      .count();
+      RagRunTrace.Span promptSpan =
+          active.trace.start(RagStageName.PROMPT_ASSEMBLY, null, promptInputCount);
       AssembledPrompt prompt =
           prompts.assemblePipeline(
               prepared.memory(),
@@ -552,6 +669,8 @@ public class ConversationService {
               prepared.routingPlan(),
               execution,
               reranked.selectedCandidates());
+      promptSpan.success(prompt.sources().size() + prompt.toolReferenceIds().size());
+      active.trace.evidenceCount(prompt.sources().size());
       messages.prepare(
           active.ownerId,
           active.assistant.getId(),
@@ -594,12 +713,25 @@ public class ConversationService {
     ensureNotCancelled(active);
     active.assistant.setRetrievalQuery(null);
     active.assistant.setSourcesJson("[]");
+    prepared
+        .queryPlan()
+        .subQuestions()
+        .forEach(
+            question ->
+                active.trace.skipped(
+                    RagStageName.SUBQUESTION_EXECUTION, question.id(), "SYSTEM_CHAT_ROUTED"));
+    active.trace.skipped(RagStageName.CANDIDATE_MERGE, null, "SYSTEM_CHAT");
+    active.trace.skipped(RagStageName.DEDUPLICATION, null, "SYSTEM_CHAT");
+    active.trace.skipped(RagStageName.RERANK, null, "SYSTEM_CHAT");
+    RagRunTrace.Span promptSpan = active.trace.start(RagStageName.PROMPT_ASSEMBLY, null, 0);
     AssembledPrompt prompt =
         prompts.assembleSystemChat(
             prepared.memory(),
             active.user.getContent(),
             prepared.queryPlan(),
             prepared.routingPlan());
+    promptSpan.success(0);
+    active.trace.evidenceCount(0);
     AnswerResult answer =
         answers.execute(prompt, new ConversationAnswerObserver(active), active.control);
     complete(active, answer.content(), answer.citations(), answer.generation());
@@ -631,6 +763,8 @@ public class ConversationService {
     @Override
     public void started(AnswerGenerator.ModelTarget target, AnswerGenerator.AttemptReason reason) {
       ensureNotCancelled(active);
+      active.currentAttemptReason = reason;
+      if (reason != AnswerGenerator.AttemptReason.PRIMARY) active.trace.markDegraded();
       int index = active.attemptCounter.incrementAndGet();
       // 消息状态只在首个候选开始时迁移一次；provider fallback 和引用修复沿用 STREAMING。
       if (index == 1 && messages.markStreaming(active.ownerId, active.assistant.getId()) == 0) {
@@ -657,10 +791,23 @@ public class ConversationService {
 
     /** {@inheritDoc} */
     @Override
+    public void requesting(AnswerGenerator.ModelTarget target) {
+      active.currentModelSpan =
+          active
+              .trace
+              .start(RagStageName.ANSWER_MODEL, null, 1)
+              .model(target.id(), target.provider(), target.model());
+    }
+
+    /** {@inheritDoc} */
+    @Override
     public void delta(String text) {
       ensureNotCancelled(active);
+      if (active.currentModelSpan != null) active.currentModelSpan.firstContent();
       active.buffer.append(text);
       send(active.emitter, "delta", event("text", text));
+      // 只有 SSE 发送成功才算用户真正看到首个 Delta；断连抛错时不会污染端到端 TTFT。
+      active.trace.endToEndDeltaSent();
       checkpoint(active);
     }
 
@@ -668,12 +815,20 @@ public class ConversationService {
     @Override
     public void completed(AnswerGenerator.ModelTarget target, String content, String finishReason) {
       attempts.complete(active.ownerId, active.currentAttemptId, content, finishReason);
+      if (active.currentModelSpan != null) {
+        active.currentModelSpan.success(
+            1, active.currentAttemptReason == null ? null : active.currentAttemptReason.name());
+      }
     }
 
     /** {@inheritDoc} */
     @Override
     public void failed(
         AnswerGenerator.ModelTarget target, String partialContent, ApiException error) {
+      if (active.currentModelSpan != null) {
+        if (active.control.cancelled()) active.currentModelSpan.cancelled(error.code());
+        else active.currentModelSpan.failed(error.code());
+      }
       if (active.currentAttemptId != null) {
         attempts.fail(
             active.ownerId,
@@ -687,7 +842,27 @@ public class ConversationService {
 
     /** {@inheritDoc} */
     @Override
+    public void generationSkipped(String reasonCode) {
+      active.trace.skipped(RagStageName.ANSWER_MODEL, null, reasonCode);
+      active.trace.skipped(RagStageName.CITATION_VALIDATION, null, reasonCode);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public void validationStarted() {
+      active.citationSpan = active.trace.start(RagStageName.CITATION_VALIDATION, null, 1);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public void validationCompleted(int citationCount) {
+      if (active.citationSpan != null) active.citationSpan.success(citationCount);
+    }
+
+    /** {@inheritDoc} */
+    @Override
     public void invalidReferences(String reasonCode, boolean repairScheduled) {
+      if (active.citationSpan != null) active.citationSpan.degraded(0, reasonCode);
       if (active.currentAttemptId != null) {
         // 模型流已经正常结束，引用校验发生在其后，因此需要显式作废 COMPLETED 尝试。
         attempts.invalidateCompleted(
@@ -753,6 +928,11 @@ public class ConversationService {
       return;
     }
     if (!active.terminal.compareAndSet(false, true)) return;
+    if (generation != null) {
+      active.trace.finalAnswer(
+          active.currentModelSpan, generation.modelId(), generation.provider(), generation.model());
+    }
+    RagRunTrace.Span persistenceSpan = active.trace.start(RagStageName.RESULT_PERSISTENCE, null, 1);
     try {
       String modelInfo =
           generation == null
@@ -770,9 +950,13 @@ public class ConversationService {
                     json.writeValueAsString(citations),
                     modelInfo);
             if (changed > 0) conversations.touch(active.ownerId, active.conversation.getId());
+            persistenceSpan.success(changed);
+            // Trace 阶段批量写入与回答终态共享事务，任一失败都不会留下互相矛盾的状态。
+            traces.finish(active.trace, RagRunStatus.COMPLETED, null);
           });
       finishPersisted(active, "complete", "INTERNAL_ERROR", "回答保存失败，请重试");
     } catch (RuntimeException e) {
+      persistenceSpan.failed("TRACE_OR_RESULT_PERSISTENCE_FAILED");
       terminalPersistenceFailed(active, "complete", e);
       finish(active, "error", terminalEvent("INTERNAL_ERROR", "回答保存失败，请重试", active.requestId));
     }
@@ -786,6 +970,7 @@ public class ConversationService {
   private void cancelTerminal(ActiveGeneration active) {
     if (!active.terminal.compareAndSet(false, true)) return;
     String content = active.buffer.toString();
+    RagRunTrace.Span persistenceSpan = active.trace.start(RagStageName.RESULT_PERSISTENCE, null, 1);
     try {
       tx.executeWithoutResult(
           ignored -> {
@@ -794,9 +979,12 @@ public class ConversationService {
                     active.ownerId, active.generationId, active.conversation.getId(), content);
             attempts.cancelRunning(active.ownerId, active.generationId);
             if (changed > 0) conversations.touch(active.ownerId, active.conversation.getId());
+            persistenceSpan.success(changed);
+            traces.finish(active.trace, RagRunStatus.CANCELLED, "GENERATION_CANCELLED");
           });
       finishPersisted(active, "cancelled", "GENERATION_CANCELLED", "生成已停止");
     } catch (RuntimeException e) {
+      persistenceSpan.failed("TRACE_OR_RESULT_PERSISTENCE_FAILED");
       terminalPersistenceFailed(active, "cancelled", e);
       finish(active, "cancelled", terminalEvent("GENERATION_CANCELLED", "生成已停止", active.requestId));
     }
@@ -812,6 +1000,7 @@ public class ConversationService {
   private void errorTerminal(ActiveGeneration active, String code, String message) {
     if (!active.terminal.compareAndSet(false, true)) return;
     String content = active.buffer.toString();
+    RagRunTrace.Span persistenceSpan = active.trace.start(RagStageName.RESULT_PERSISTENCE, null, 1);
     try {
       tx.executeWithoutResult(
           ignored -> {
@@ -822,9 +1011,12 @@ public class ConversationService {
               failCurrentAttempt(active, "FAILED", code, message);
               conversations.touch(active.ownerId, active.conversation.getId());
             }
+            persistenceSpan.success(changed);
+            traces.finish(active.trace, RagRunStatus.FAILED, code);
           });
       finishPersisted(active, "error", code, message);
     } catch (RuntimeException e) {
+      persistenceSpan.failed("TRACE_OR_RESULT_PERSISTENCE_FAILED");
       terminalPersistenceFailed(active, "error", e);
       finish(active, "error", terminalEvent(code, message, active.requestId));
     }
@@ -1124,8 +1316,17 @@ public class ConversationService {
    *
    * @param user 已持久化用户消息
    * @param assistant 已持久化待生成回答
+   * @param trace 与回答版本一一对应的内存 Trace
    */
-  private record PreparedMessages(Message user, Message assistant) {}
+  private record PreparedMessages(Message user, Message assistant, RagRunTrace trace) {}
+
+  /**
+   * 重试或重新生成事务创建的回答与 Trace。
+   *
+   * @param assistant 新回答版本
+   * @param trace 新回答版本的内存 Trace
+   */
+  private record PreparedAnswer(Message assistant, RagRunTrace trace) {}
 
   /** 跨异步回调维护一次流式生成的取消、缓冲、尝试和终态竞争状态。 */
   private static final class ActiveGeneration {
@@ -1137,11 +1338,15 @@ public class ConversationService {
     private final String requestId;
     private final SseEmitter emitter;
     private final AnswerGenerator.Control control;
+    private final RagRunTrace trace;
     private final AtomicBoolean terminal = new AtomicBoolean();
     private final AtomicBoolean running = new AtomicBoolean();
     private final AtomicInteger attemptCounter = new AtomicInteger();
     private final StringBuilder buffer = new StringBuilder();
     private volatile UUID currentAttemptId;
+    private volatile AnswerGenerator.AttemptReason currentAttemptReason;
+    private volatile RagRunTrace.Span currentModelSpan;
+    private volatile RagRunTrace.Span citationSpan;
     private volatile Future<?> future;
     private int lastCheckpointLength;
     private long lastCheckpointAt = System.currentTimeMillis();
@@ -1155,6 +1360,7 @@ public class ConversationService {
      * @param requestId HTTP 请求追踪 ID
      * @param emitter SSE 通道
      * @param control 回答模型流控制器
+     * @param trace 当前回答版本的显式 Trace
      */
     private ActiveGeneration(
         Conversation conversation,
@@ -1162,7 +1368,8 @@ public class ConversationService {
         Message assistant,
         String requestId,
         SseEmitter emitter,
-        AnswerGenerator.Control control) {
+        AnswerGenerator.Control control,
+        RagRunTrace trace) {
       this.conversation = conversation;
       // 异步线程不读取请求上下文；所有权在通过 Controller 校验后随任务显式捕获。
       this.ownerId = conversation.getOwnerId();
@@ -1172,6 +1379,7 @@ public class ConversationService {
       this.requestId = requestId;
       this.emitter = emitter;
       this.control = control;
+      this.trace = trace;
     }
 
     /**

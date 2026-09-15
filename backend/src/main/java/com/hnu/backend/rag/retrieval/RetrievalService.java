@@ -2,6 +2,8 @@ package com.hnu.backend.rag.retrieval;
 
 import com.hnu.backend.configuration.RagProperties;
 import com.hnu.backend.model.client.EmbeddingClient;
+import com.hnu.backend.observability.RagStageName;
+import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.rag.execution.CancellationToken;
 import com.hnu.backend.rag.execution.RagBudgetSnapshot;
 import com.hnu.backend.rag.execution.StageBudget;
@@ -19,6 +21,14 @@ public class RetrievalService {
   private final RagProperties config;
   private final CandidateMerge candidateMerge;
 
+  /**
+   * 创建多模型向量检索服务。
+   *
+   * @param embedding 查询向量客户端
+   * @param retrieval 用户隔离的检索映射器
+   * @param config RAG 检索配置
+   * @param candidateMerge 跨模型候选合并器
+   */
   public RetrievalService(
       EmbeddingClient embedding,
       RetrievalMapper retrieval,
@@ -84,37 +94,96 @@ public class RetrievalService {
       List<UUID> knowledgeBaseIds,
       StageBudget budget,
       CancellationToken cancellationToken) {
+    return retrieveCandidates(
+        ownerId,
+        subQuestionId,
+        question,
+        knowledgeBaseIds,
+        budget,
+        cancellationToken,
+        RagRunTrace.noop());
+  }
+
+  /**
+   * 为一个子问题召回候选，并分别记录每个模型绑定的向量化与数据库查询。
+   *
+   * @param ownerId 所属用户标识
+   * @param subQuestionId 子问题标识
+   * @param question 子问题正文，仅用于模型调用，不进入 Trace
+   * @param knowledgeBaseIds 可选知识库范围
+   * @param budget 当前检索预算
+   * @param cancellationToken 取消信号
+   * @param trace 当前问答 Trace
+   * @return 可供全局合并的证据候选
+   */
+  public List<EvidenceCandidate> retrieveCandidates(
+      UUID ownerId,
+      String subQuestionId,
+      String question,
+      List<UUID> knowledgeBaseIds,
+      StageBudget budget,
+      CancellationToken cancellationToken,
+      RagRunTrace trace) {
     List<UUID> scope =
         knowledgeBaseIds == null ? null : knowledgeBaseIds.stream().distinct().toList();
-    if (scope != null && scope.isEmpty()) return List.of();
-    if (!budget.vectorEnabled()) return List.of();
+    if (scope != null && scope.isEmpty()) {
+      skipVectorStages(trace, subQuestionId, "EMPTY_KNOWLEDGE_SCOPE");
+      return List.of();
+    }
+    if (!budget.vectorEnabled()) {
+      skipVectorStages(trace, subQuestionId, "VECTOR_DISABLED");
+      return List.of();
+    }
     List<EvidenceCandidate> candidates = new ArrayList<>();
     var bindings =
         scope == null
             ? retrieval.activeModelBindings(ownerId)
             : retrieval.activeModelBindingsIn(ownerId, scope);
+    if (bindings.isEmpty()) {
+      skipVectorStages(trace, subQuestionId, "NO_EMBEDDING_BINDINGS");
+      return List.of();
+    }
     for (var binding : bindings) {
       cancellationToken.throwIfCancelled();
-      float[] vector =
-          embedding.embed(binding.model(), binding.dimensions(), List.of(question)).getFirst();
+      RagRunTrace.Span embeddingSpan =
+          trace
+              .start(RagStageName.EMBEDDING, subQuestionId, 1)
+              .model(binding.model(), null, binding.model());
+      float[] vector;
+      try {
+        vector =
+            embedding.embed(binding.model(), binding.dimensions(), List.of(question)).getFirst();
+        embeddingSpan.success(1);
+      } catch (RuntimeException error) {
+        embeddingSpan.failed(errorCode(error, "EMBEDDING_FAILED"));
+        throw error;
+      }
+      RagRunTrace.Span retrievalSpan =
+          trace.start(RagStageName.DATABASE_RETRIEVAL, subQuestionId, 1);
       List<SearchHit> hits;
-      if (scope == null) {
-        hits =
-            retrieval.searchAll(
-                ownerId,
-                EmbeddingClient.literal(vector),
-                binding.model(),
-                binding.dimensions(),
-                budget.recallBudget());
-      } else {
-        hits =
-            retrieval.searchIn(
-                ownerId,
-                scope,
-                EmbeddingClient.literal(vector),
-                binding.model(),
-                binding.dimensions(),
-                budget.recallBudget());
+      try {
+        if (scope == null) {
+          hits =
+              retrieval.searchAll(
+                  ownerId,
+                  EmbeddingClient.literal(vector),
+                  binding.model(),
+                  binding.dimensions(),
+                  budget.recallBudget());
+        } else {
+          hits =
+              retrieval.searchIn(
+                  ownerId,
+                  scope,
+                  EmbeddingClient.literal(vector),
+                  binding.model(),
+                  binding.dimensions(),
+                  budget.recallBudget());
+        }
+        retrievalSpan.success(hits.size());
+      } catch (RuntimeException error) {
+        retrievalSpan.failed("DATABASE_RETRIEVAL_FAILED");
+        throw error;
       }
       cancellationToken.throwIfCancelled();
       List<SearchHit> ranked =
@@ -142,6 +211,17 @@ public class RetrievalService {
     }
     // 不同 Embedding 模型的原始相似度不可直接比较，只使用各自模型内名次产生的 RRF 分数合并。
     return candidateMerge.mergeAndSelect(candidates, List.of(subQuestionId), budget.recallBudget());
+  }
+
+  /** 记录向量通道未执行时的两个非降级阶段。 */
+  private void skipVectorStages(RagRunTrace trace, String subQuestionId, String reasonCode) {
+    trace.skipped(RagStageName.EMBEDDING, subQuestionId, reasonCode);
+    trace.skipped(RagStageName.DATABASE_RETRIEVAL, subQuestionId, reasonCode);
+  }
+
+  /** 将异常转换为不包含消息正文的稳定错误码。 */
+  private String errorCode(RuntimeException error, String fallback) {
+    return error instanceof com.hnu.backend.shared.error.ApiException api ? api.code() : fallback;
   }
 
   private EvidenceCandidate toCandidate(

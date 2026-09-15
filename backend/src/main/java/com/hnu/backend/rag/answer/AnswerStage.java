@@ -48,13 +48,16 @@ public class AnswerStage {
       AssembledPrompt prompt, Observer observer, AnswerGenerator.Control control) {
     control.throwIfCancelled();
     if (!prompt.shouldGenerate()) {
+      observer.generationSkipped("NO_EVIDENCE");
       return new AnswerResult(INSUFFICIENT_EVIDENCE, prompt.sources(), List.of(), List.of(), null);
     }
     AnswerGenerator.Generation generation =
         generate(prompt, AnswerGenerator.AttemptReason.PRIMARY, observer, control);
     Citations.Validation references;
     try {
+      observer.validationStarted();
       references = validate(generation, prompt);
+      observer.validationCompleted(references.citations().size());
     } catch (IllegalArgumentException invalid) {
       // 首次非法回答已经完成模型流，先作废尝试并清空客户端正文，再启动唯一一次修复。
       observer.invalidReferences(INVALID_CITATIONS, true);
@@ -63,7 +66,9 @@ public class AnswerStage {
       generation =
           generate(repair, AnswerGenerator.AttemptReason.CITATION_REPAIR, observer, control);
       try {
+        observer.validationStarted();
         references = validate(generation, repair);
+        observer.validationCompleted(references.citations().size());
       } catch (IllegalArgumentException again) {
         observer.invalidReferences(INVALID_CITATIONS, false);
         throw ApiException.upstream(INVALID_CITATIONS, "模型连续返回无效引用，请重试");
@@ -122,6 +127,19 @@ public class AnswerStage {
 
   /** 在模型流事件之外接收引用校验失败通知。 */
   public interface Observer extends AnswerGenerator.StreamObserver {
+    /** 通知调用方本轮没有证据且未调用最终回答模型。 */
+    default void generationSkipped(String reasonCode) {}
+
+    /** 通知调用方开始校验当前完整回答的引用。 */
+    default void validationStarted() {}
+
+    /**
+     * 通知调用方当前回答的引用校验成功。
+     *
+     * @param citationCount 合法知识引用数量
+     */
+    default void validationCompleted(int citationCount) {}
+
     /**
      * 通知调用方当前已完成尝试包含非法引用。
      *

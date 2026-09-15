@@ -51,6 +51,12 @@ public class ChatAnswerGenerator implements AnswerGenerator {
 
               /** {@inheritDoc} */
               @Override
+              public void requesting(AiProperties.ModelTarget target) {
+                observer.requesting(modelTarget(target));
+              }
+
+              /** {@inheritDoc} */
+              @Override
               public void delta(String text) {
                 observer.delta(text);
               }

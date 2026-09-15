@@ -66,13 +66,14 @@ public class ChatClient {
   public Generation stream(
       String system, String user, StreamObserver observer, ModelHttpClient.StreamControl control) {
     ApiException last = null;
-    boolean anyContent = false;
+    int attemptIndex = 0;
     for (AiProperties.ModelTarget target : config.chatModels()) {
       if (control.cancelled()) throw ApiException.cancelled();
-      observer.started(target, anyContent ? "PROVIDER_FALLBACK" : "PRIMARY");
+      observer.started(target, attemptIndex++ == 0 ? "PRIMARY" : "PROVIDER_FALLBACK");
       StringBuilder content = new StringBuilder();
       String[] finishReason = {null};
       try {
+        observer.requesting(target);
         http.stream(
             target,
             payload(target, system, user, true),
@@ -99,7 +100,6 @@ public class ChatClient {
         // 已向客户端发送过内容后切换模型会拼接两份回答，因此只能直接失败。
         if (!content.isEmpty() || control.cancelled()) throw e;
       }
-      anyContent = anyContent || !content.isEmpty();
     }
     throw last == null ? ApiException.upstream("MODEL_UNAVAILABLE", "没有可用的对话模型") : last;
   }
@@ -134,6 +134,13 @@ public class ChatClient {
      * @param reason 选择该目标的原因
      */
     void started(AiProperties.ModelTarget target, String reason);
+
+    /**
+     * 即将向当前模型发送 HTTP 请求。
+     *
+     * @param target 当前模型目标
+     */
+    default void requesting(AiProperties.ModelTarget target) {}
 
     /**
      * 收到一段增量文本。

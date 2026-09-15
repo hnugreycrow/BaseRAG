@@ -1,6 +1,8 @@
 package com.hnu.backend.rag.rerank;
 
 import com.hnu.backend.model.config.AiProperties;
+import com.hnu.backend.observability.RagStageName;
+import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.rag.execution.CancellationToken;
 import com.hnu.backend.rag.execution.ExecutionResult;
 import com.hnu.backend.rag.execution.RagBudgetSnapshot;
@@ -44,17 +46,52 @@ public class RerankStage {
   private final AiProperties ai;
   private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
+  /**
+   * 创建证据候选重排阶段。
+   *
+   * @param reranker 候选重排模型端口
+   * @param candidateMerge 候选截断和配额分配器
+   * @param ai 模型配置
+   */
   public RerankStage(CandidateReranker reranker, CandidateMerge candidateMerge, AiProperties ai) {
     this.reranker = reranker;
     this.candidateMerge = candidateMerge;
     this.ai = ai;
   }
 
+  /**
+   * 重排候选；兼容调用不采集 Trace。
+   *
+   * @param plan 查询计划
+   * @param execution 子问题执行结果
+   * @param deduplicatedCandidates 去重候选
+   * @param cancellationToken 取消信号
+   * @return 重排或确定性降级结果
+   */
   public RerankResult execute(
       QueryPlan plan,
       ExecutionResult execution,
       List<EvidenceCandidate> deduplicatedCandidates,
       CancellationToken cancellationToken) {
+    return execute(plan, execution, deduplicatedCandidates, cancellationToken, RagRunTrace.noop());
+  }
+
+  /**
+   * 重排证据候选并记录模型信息、候选数量和确定性降级。
+   *
+   * @param plan 查询计划
+   * @param execution 子问题执行结果
+   * @param deduplicatedCandidates 去重候选
+   * @param cancellationToken 取消信号
+   * @param trace 当前问答 Trace
+   * @return 重排结果
+   */
+  public RerankResult execute(
+      QueryPlan plan,
+      ExecutionResult execution,
+      List<EvidenceCandidate> deduplicatedCandidates,
+      CancellationToken cancellationToken,
+      RagRunTrace trace) {
     long startedAt = System.nanoTime();
     cancellationToken.throwIfCancelled();
     RagBudgetSnapshot budget = execution.budget();
@@ -62,19 +99,24 @@ public class RerankStage {
     List<EvidenceCandidate> input =
         candidateMerge.mergeAndSelect(
             deduplicatedCandidates, knowledgeQuestionIds, budget.rerankInputLimit());
+    RagRunTrace.Span span = trace.start(RagStageName.RERANK, null, input.size());
     if (input.isEmpty()) {
-      return result(
-          List.of(), List.of(), RerankResult.Status.EMPTY, "NO_RERANK_INPUT", null, startedAt);
+      return observed(
+          span,
+          result(
+              List.of(), List.of(), RerankResult.Status.EMPTY, "NO_RERANK_INPUT", null, startedAt));
     }
     if (!budget.rerankEnabled()) {
-      return fallback(
-          input,
-          knowledgeQuestionIds,
-          budget.selectedEvidenceLimit(),
-          RerankResult.Status.DISABLED,
-          "RERANK_DISABLED",
-          null,
-          startedAt);
+      return observed(
+          span,
+          fallback(
+              input,
+              knowledgeQuestionIds,
+              budget.selectedEvidenceLimit(),
+              RerankResult.Status.DISABLED,
+              "RERANK_DISABLED",
+              null,
+              startedAt));
     }
 
     CandidateReranker.Output output = null;
@@ -82,14 +124,16 @@ public class RerankStage {
       output = await(plan.standaloneQuestion(), input, cancellationToken);
       cancellationToken.throwIfCancelled();
       if (output.noop()) {
-        return fallback(
-            input,
-            knowledgeQuestionIds,
-            budget.selectedEvidenceLimit(),
-            RerankResult.Status.DEGRADED,
-            "RERANK_NOOP",
-            output,
-            startedAt);
+        return observed(
+            span,
+            fallback(
+                input,
+                knowledgeQuestionIds,
+                budget.selectedEvidenceLimit(),
+                RerankResult.Status.DEGRADED,
+                "RERANK_NOOP",
+                output,
+                startedAt));
       }
       List<RerankDecision> ranking = modelRanking(input, output.scores());
       Set<UUID> selectedIds =
@@ -100,31 +144,57 @@ public class RerankStage {
               .filter(RerankDecision::selected)
               .map(RerankDecision::candidate)
               .toList();
-      return result(
-          selected, decisions, RerankResult.Status.SUCCESS, "RERANK_COMPLETED", output, startedAt);
+      return observed(
+          span,
+          result(
+              selected,
+              decisions,
+              RerankResult.Status.SUCCESS,
+              "RERANK_COMPLETED",
+              output,
+              startedAt));
     } catch (ApiException error) {
       if (cancellationToken.cancelled() || "GENERATION_CANCELLED".equals(error.code())) throw error;
-      return fallback(
-          input,
-          knowledgeQuestionIds,
-          budget.selectedEvidenceLimit(),
-          RerankResult.Status.DEGRADED,
-          "RERANK_TIMEOUT".equals(error.code()) ? "RERANK_TIMEOUT" : "RERANK_FAILED",
-          output,
-          startedAt);
+      return observed(
+          span,
+          fallback(
+              input,
+              knowledgeQuestionIds,
+              budget.selectedEvidenceLimit(),
+              RerankResult.Status.DEGRADED,
+              "RERANK_TIMEOUT".equals(error.code()) ? "RERANK_TIMEOUT" : "RERANK_FAILED",
+              output,
+              startedAt));
     } catch (RuntimeException error) {
       if (cancellationToken.cancelled()) throw ApiException.cancelled();
-      return fallback(
-          input,
-          knowledgeQuestionIds,
-          budget.selectedEvidenceLimit(),
-          RerankResult.Status.DEGRADED,
-          "RERANK_INVALID_RESULT",
-          output,
-          startedAt);
+      return observed(
+          span,
+          fallback(
+              input,
+              knowledgeQuestionIds,
+              budget.selectedEvidenceLimit(),
+              RerankResult.Status.DEGRADED,
+              "RERANK_INVALID_RESULT",
+              output,
+              startedAt));
     }
   }
 
+  /** 根据重排结果结束观测阶段。 */
+  private RerankResult observed(RagRunTrace.Span span, RerankResult result) {
+    span.model(result.modelId(), result.provider(), result.model());
+    if (result.status() == RerankResult.Status.DEGRADED) {
+      span.degraded(result.selectedCandidates().size(), result.reasonCode());
+    } else if (result.status() == RerankResult.Status.DISABLED
+        || result.status() == RerankResult.Status.EMPTY) {
+      span.skipped(result.selectedCandidates().size(), result.reasonCode());
+    } else {
+      span.success(result.selectedCandidates().size());
+    }
+    return result;
+  }
+
+  /** 停止重排超时控制使用的虚拟线程执行器。 */
   @PreDestroy
   void close() {
     executor.shutdownNow();

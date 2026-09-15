@@ -6,6 +6,8 @@ import com.hnu.backend.conversation.entity.Message;
 import com.hnu.backend.conversation.mapper.ConversationMapper;
 import com.hnu.backend.conversation.mapper.MessageMapper;
 import com.hnu.backend.model.client.ChatClient;
+import com.hnu.backend.observability.RagStageName;
+import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.rag.memory.MemoryProvider;
 import com.hnu.backend.rag.memory.MemoryTurn;
 import com.hnu.backend.rag.memory.RagMemory;
@@ -70,10 +72,16 @@ public class ConversationMemoryProvider implements MemoryProvider {
    */
   @Override
   public RagMemory load(UUID ownerId, UUID conversationId, int beforeTurn) {
+    return load(ownerId, conversationId, beforeTurn, RagRunTrace.noop());
+  }
+
+  /** {@inheritDoc} */
+  @Override
+  public RagMemory load(UUID ownerId, UUID conversationId, int beforeTurn, RagRunTrace trace) {
     Conversation conversation = conversations.find(ownerId, conversationId);
     if (conversation == null) throw new IllegalArgumentException("conversation does not exist");
     List<MemoryTurn> turns = completeTurns(ownerId, conversationId, beforeTurn);
-    conversation = refreshSummaryIfNeeded(conversation, turns);
+    conversation = refreshSummaryIfNeeded(conversation, turns, trace);
     int covered = conversation.getSummarizedThroughTurn();
     List<MemoryTurn> uncovered = turns.stream().filter(turn -> turn.turnIndex() > covered).toList();
     int recentStart = Math.max(0, uncovered.size() - config.getRecentTurns());
@@ -102,9 +110,11 @@ public class ConversationMemoryProvider implements MemoryProvider {
    *
    * @param conversation 当前会话和摘要版本
    * @param turns 当前轮之前全部有效完整轮次
+   * @param trace 当前问答 Trace
    * @return 更新成功、并发胜出或降级后的会话快照
    */
-  private Conversation refreshSummaryIfNeeded(Conversation conversation, List<MemoryTurn> turns) {
+  private Conversation refreshSummaryIfNeeded(
+      Conversation conversation, List<MemoryTurn> turns, RagRunTrace trace) {
     int eligibleCount = Math.max(0, turns.size() - config.getRecentTurns());
     List<MemoryTurn> eligible = turns.subList(0, eligibleCount);
     List<MemoryTurn> pending =
@@ -112,15 +122,21 @@ public class ConversationMemoryProvider implements MemoryProvider {
             .filter(turn -> turn.turnIndex() > conversation.getSummarizedThroughTurn())
             .toList();
     int batches = pending.size() / config.getSummaryBatchTurns();
-    if (batches == 0) return conversation;
+    if (batches == 0) {
+      trace.skipped(RagStageName.MEMORY_SUMMARY, null, "SUMMARY_NOT_DUE");
+      return conversation;
+    }
     List<MemoryTurn> batch = pending.subList(0, batches * config.getSummaryBatchTurns());
     int through = batch.getLast().turnIndex();
+    RagRunTrace.Span span = trace.start(RagStageName.MEMORY_SUMMARY, null, batch.size());
     try {
       Map<String, Object> input = new LinkedHashMap<>();
       input.put("oldSummary", summaryValue(normalizedSummary(conversation.getSummaryJson())));
       input.put("completedTurns", batch);
       String prompt = json.writeValueAsString(input);
-      String candidate = chat.generate(MemorySummaryPrompts.system(), prompt).content().strip();
+      ChatClient.Generation generation = chat.generate(MemorySummaryPrompts.system(), prompt);
+      span.model(generation.id(), generation.provider(), generation.model());
+      String candidate = generation.content().strip();
       JsonNode parsed = json.readTree(stripFence(candidate));
       validateSummary(parsed);
       String encoded = json.writeValueAsString(parsed);
@@ -134,17 +150,27 @@ public class ConversationMemoryProvider implements MemoryProvider {
       if (updated == 1) {
         Conversation refreshed =
             conversations.find(conversation.getOwnerId(), conversation.getId());
+        span.success(1);
         return refreshed == null ? conversation : refreshed;
       }
       Conversation winner = conversations.find(conversation.getOwnerId(), conversation.getId());
+      span.success(1);
       return winner == null ? conversation : winner;
     } catch (RuntimeException e) {
+      span.degraded(0, summaryErrorCode(e));
       log.warn(
           "conversation={} summary degraded exceptionType={}",
           conversation.getId(),
           e.getClass().getSimpleName());
       return conversation;
     }
+  }
+
+  /** 将摘要异常归一化为不包含异常正文的稳定原因码。 */
+  private String summaryErrorCode(RuntimeException error) {
+    return error instanceof com.hnu.backend.shared.error.ApiException api
+        ? api.code()
+        : "SUMMARY_FAILED";
   }
 
   /**

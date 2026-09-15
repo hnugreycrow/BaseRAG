@@ -6,6 +6,8 @@ import com.hnu.backend.conversation.dto.MessageRequest;
 import com.hnu.backend.conversation.dto.TitleRequest;
 import com.hnu.backend.conversation.service.ConversationService;
 import com.hnu.backend.conversation.vo.ConversationResponses;
+import com.hnu.backend.shared.web.RequestIdFilter;
+import com.hnu.backend.shared.web.RequestTiming;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -78,7 +80,7 @@ public class ConversationController {
         id,
         request.clientMessageId(),
         request.content(),
-        requestId(http));
+        requestTiming(http));
   }
 
   /** 重试失败或已取消的回答。 */
@@ -95,7 +97,7 @@ public class ConversationController {
         id,
         assistantMessageId,
         request.clientRequestId(),
-        requestId(http));
+        requestTiming(http));
   }
 
   /** 为最后一轮已完成回答创建新的回答版本。 */
@@ -112,7 +114,7 @@ public class ConversationController {
         id,
         assistantMessageId,
         request.clientRequestId(),
-        requestId(http));
+        requestTiming(http));
   }
 
   /** 取消指定的生成任务；任务已结束时保持幂等。 */
@@ -123,12 +125,16 @@ public class ConversationController {
   }
 
   /**
-   * 读取请求 ID 过滤器写入的追踪标识。
+   * 读取请求过滤器写入的请求标识与时间起点。
    *
    * @param request HTTP 请求
-   * @return 请求追踪标识
+   * @return 单次请求的追踪标识、墙钟和单调时钟起点
    */
-  private String requestId(HttpServletRequest request) {
-    return String.valueOf(request.getAttribute("requestId"));
+  private RequestTiming requestTiming(HttpServletRequest request) {
+    return new RequestTiming(
+        String.valueOf(request.getAttribute(RequestIdFilter.REQUEST_ID_ATTRIBUTE)),
+        (java.time.OffsetDateTime)
+            request.getAttribute(RequestIdFilter.REQUEST_STARTED_AT_ATTRIBUTE),
+        (long) request.getAttribute(RequestIdFilter.REQUEST_STARTED_NANOS_ATTRIBUTE));
   }
 }

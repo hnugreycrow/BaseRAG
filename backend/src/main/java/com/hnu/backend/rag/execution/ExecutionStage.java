@@ -1,6 +1,8 @@
 package com.hnu.backend.rag.execution;
 
 import com.hnu.backend.configuration.RagProperties;
+import com.hnu.backend.observability.RagStageName;
+import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.rag.mcp.McpToolCall;
 import com.hnu.backend.rag.mcp.McpToolExecutor;
 import com.hnu.backend.rag.mcp.ToolObservation;
@@ -90,6 +92,27 @@ public class ExecutionStage {
       RoutingPlan routing,
       List<UUID> knowledgeBaseIds,
       CancellationToken cancellationToken) {
+    return execute(ownerId, plan, routing, knowledgeBaseIds, cancellationToken, RagRunTrace.noop());
+  }
+
+  /**
+   * 并发执行子问题并显式向子线程传播 Trace。
+   *
+   * @param ownerId 所属用户标识
+   * @param plan 查询计划
+   * @param routing 路由计划
+   * @param knowledgeBaseIds 可选知识库范围
+   * @param cancellationToken 取消信号
+   * @param trace 当前问答 Trace
+   * @return 聚合后的执行结果
+   */
+  public ExecutionResult execute(
+      UUID ownerId,
+      QueryPlan plan,
+      RoutingPlan routing,
+      List<UUID> knowledgeBaseIds,
+      CancellationToken cancellationToken,
+      RagRunTrace trace) {
     validateAlignment(plan, routing);
     cancellationToken.throwIfCancelled();
     RagBudgetSnapshot snapshot = RagBudgetSnapshot.from(config);
@@ -103,6 +126,7 @@ public class ExecutionStage {
       SubQuestion question = plan.subQuestions().get(index);
       IntentRoute route = routing.routes().get(index);
       if (route.intent() == IntentType.SYSTEM_CHAT) {
+        trace.skipped(RagStageName.SUBQUESTION_EXECUTION, question.id(), "SYSTEM_CHAT_ROUTED");
         results.add(
             new SubQuestionExecution(
                 question.id(),
@@ -115,16 +139,29 @@ public class ExecutionStage {
         continue;
       }
       long timeoutMs = timeoutFor(route, snapshot);
+      RagRunTrace.Span subQuestionSpan =
+          trace.start(RagStageName.SUBQUESTION_EXECUTION, question.id(), 1);
+      long submittedAt = System.nanoTime();
       Future<SubQuestionExecution> future =
           executor.submit(
               () ->
                   executeOne(
-                      ownerId, question, route, knowledgeBaseIds, snapshot, cancellationToken));
-      handles.add(new TaskHandle(question, route, future, System.nanoTime(), timeoutMs));
+                      ownerId,
+                      question,
+                      route,
+                      knowledgeBaseIds,
+                      snapshot,
+                      cancellationToken,
+                      trace,
+                      submittedAt));
+      handles.add(new TaskHandle(question, route, future, submittedAt, timeoutMs, subQuestionSpan));
     }
 
     try {
-      for (TaskHandle handle : handles) results.add(await(handle, cancellationToken));
+      for (TaskHandle handle : handles) {
+        SubQuestionExecution result = await(handle, cancellationToken);
+        results.add(observed(handle.span(), result));
+      }
     } catch (RuntimeException error) {
       handles.forEach(handle -> handle.future().cancel(true));
       throw error;
@@ -141,9 +178,13 @@ public class ExecutionStage {
             .toList();
     List<EvidenceCandidate> allCandidates =
         results.stream().flatMap(result -> result.candidates().stream()).toList();
+    RagRunTrace.Span mergeSpan =
+        trace.start(RagStageName.CANDIDATE_MERGE, null, allCandidates.size());
     List<EvidenceCandidate> merged =
         candidateMerge.mergeAndSelect(
             allCandidates, knowledgeQuestionIds, snapshot.rerankInputLimit());
+    mergeSpan.success(merged.size());
+    trace.candidateCount(merged.size());
     log.info(
         "execution completed subQuestions={} successful={} candidatesBeforeMerge={} candidatesAfterMerge={}",
         results.size(),
@@ -155,6 +196,7 @@ public class ExecutionStage {
     return new ExecutionResult(merged, results, snapshot);
   }
 
+  /** 停止并发子问题执行器。 */
   @PreDestroy
   void close() {
     executor.shutdownNow();
@@ -167,18 +209,47 @@ public class ExecutionStage {
       List<UUID> knowledgeBaseIds,
       RagBudgetSnapshot snapshot,
       CancellationToken cancellationToken) {
-    long startedAt = System.nanoTime();
+    return executeOne(
+        ownerId,
+        question,
+        route,
+        knowledgeBaseIds,
+        snapshot,
+        cancellationToken,
+        RagRunTrace.noop(),
+        System.nanoTime());
+  }
+
+  /** 执行并观测单个子问题。 */
+  private SubQuestionExecution executeOne(
+      UUID ownerId,
+      SubQuestion question,
+      IntentRoute route,
+      List<UUID> knowledgeBaseIds,
+      RagBudgetSnapshot snapshot,
+      CancellationToken cancellationToken,
+      RagRunTrace trace,
+      long startedAt) {
     cancellationToken.throwIfCancelled();
     try {
       if (route.intent() == IntentType.KNOWLEDGE_RETRIEVAL) {
         List<EvidenceCandidate> candidates =
-            retrieval.retrieveCandidates(
-                ownerId,
-                question.id(),
-                question.question(),
-                knowledgeBaseIds,
-                snapshot.forSubQuestion(question.id()),
-                cancellationToken);
+            trace.enabled()
+                ? retrieval.retrieveCandidates(
+                    ownerId,
+                    question.id(),
+                    question.question(),
+                    knowledgeBaseIds,
+                    snapshot.forSubQuestion(question.id()),
+                    cancellationToken,
+                    trace)
+                : retrieval.retrieveCandidates(
+                    ownerId,
+                    question.id(),
+                    question.question(),
+                    knowledgeBaseIds,
+                    snapshot.forSubQuestion(question.id()),
+                    cancellationToken);
         return result(
             question,
             route,
@@ -190,12 +261,15 @@ public class ExecutionStage {
             candidates.isEmpty() ? "NO_CANDIDATES" : "RETRIEVAL_COMPLETED",
             startedAt);
       }
+      RagRunTrace.Span toolSpan = trace.start(RagStageName.MCP_EXECUTION, question.id(), 1);
       ToolObservation observation =
           tools.execute(new McpToolCall(route.toolHint(), route.toolArguments()));
       SubQuestionExecution.Status status =
           observation.status() == ToolObservation.Status.SUCCESS
               ? SubQuestionExecution.Status.SUCCESS
               : SubQuestionExecution.Status.FAILED;
+      if (status == SubQuestionExecution.Status.SUCCESS) toolSpan.success(1);
+      else toolSpan.degraded(0, observation.reasonCode());
       return result(
           question, route, status, List.of(), observation, observation.reasonCode(), startedAt);
     } catch (ApiException error) {
@@ -218,6 +292,19 @@ public class ExecutionStage {
           "EXECUTION_FAILED",
           startedAt);
     }
+  }
+
+  /** 根据子问题终态结束其外层阶段。 */
+  private SubQuestionExecution observed(RagRunTrace.Span span, SubQuestionExecution execution) {
+    if (execution.status() == SubQuestionExecution.Status.FAILED
+        || execution.status() == SubQuestionExecution.Status.TIMEOUT) {
+      span.degraded(execution.candidates().size(), execution.reasonCode());
+    } else if (execution.status() == SubQuestionExecution.Status.SKIPPED) {
+      span.skipped(0, execution.reasonCode());
+    } else {
+      span.success(execution.candidates().size());
+    }
+    return execution;
   }
 
   private SubQuestionExecution await(TaskHandle handle, CancellationToken cancellationToken) {
@@ -324,11 +411,13 @@ public class ExecutionStage {
    * @param future 用于等待、超时中断和总取消传播的并发句柄
    * @param startedAt 提交任务时的单调时钟值，排队时间也计入预算
    * @param timeoutMs 此任务允许占用的最长时间
+   * @param span 子问题外层观测阶段
    */
   private record TaskHandle(
       SubQuestion question,
       IntentRoute route,
       Future<SubQuestionExecution> future,
       long startedAt,
-      long timeoutMs) {}
+      long timeoutMs,
+      RagRunTrace.Span span) {}
 }

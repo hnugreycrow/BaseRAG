@@ -1,6 +1,8 @@
 package com.hnu.backend.rag.planning;
 
 import com.hnu.backend.configuration.RagProperties;
+import com.hnu.backend.observability.RagStageName;
+import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.rag.memory.RagMemory;
 import com.hnu.backend.shared.error.ApiException;
 import java.util.ArrayList;
@@ -42,7 +44,20 @@ public class QueryPlanningStage {
    * @return 可安全执行的查询计划
    */
   public QueryPlan execute(RagMemory memory, String originalQuestion) {
+    return execute(memory, originalQuestion, RagRunTrace.noop());
+  }
+
+  /**
+   * 生成查询计划并把模型信息或降级原因写入当前 Trace。
+   *
+   * @param memory 当前会话记忆
+   * @param originalQuestion 原始用户问题
+   * @param trace 当前问答 Trace
+   * @return 可安全执行的查询计划
+   */
+  public QueryPlan execute(RagMemory memory, String originalQuestion, RagRunTrace trace) {
     long startedAt = System.nanoTime();
+    RagRunTrace.Span span = trace.start(RagStageName.QUERY_PLANNING, null, 1);
     QueryPlanner.PlanningOutput output = null;
     try {
       int maxSubQuestions = config.getPipeline().getMaxSubQuestions();
@@ -54,17 +69,23 @@ public class QueryPlanningStage {
           output.provider(),
           output.model(),
           elapsedMillis(startedAt));
+      span.model(output.modelId(), output.provider(), output.model());
+      span.success(plan.subQuestions().size());
       return plan;
     } catch (PlanValidationException e) {
+      if (output != null) span.model(output.modelId(), output.provider(), output.model());
+      span.degraded(1, e.reason.name());
       log.warn(
           "query planning degraded reason={} modelId={} planningMs={}",
           e.reason,
           output == null ? null : output.modelId(),
           elapsedMillis(startedAt));
     } catch (RuntimeException e) {
+      DegradedReason reason = failureReason(e);
+      span.degraded(1, reason.name());
       log.warn(
           "query planning degraded reason={} exceptionType={} planningMs={}",
-          failureReason(e),
+          reason,
           e.getClass().getSimpleName(),
           elapsedMillis(startedAt));
     }
