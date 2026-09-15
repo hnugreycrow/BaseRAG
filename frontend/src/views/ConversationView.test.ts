@@ -32,6 +32,13 @@ describe('ConversationView', () => {
 
     expect(wrapper.get('.welcome-state h1').text()).toBe('向知识库提问')
     expect(wrapper.get('.welcome-copy').text()).toBe('我会根据已入库资料回答，并标注可核对的来源。')
+    expect(wrapper.get('.chat-workspace').classes()).toContain('is-empty')
+    const composer = wrapper.get('.composer-shell')
+    expect(composer.element.firstElementChild?.tagName.toLowerCase()).toBe('el-input')
+    expect(composer.get('.composer-actions').get('.thinking-toggle').text()).toContain('深度思考')
+    expect(composer.get('.composer-actions').get('.send-button').attributes('aria-label')).toBe(
+      '发送问题',
+    )
     expect(wrapper.find('.welcome-eyebrow').exists()).toBe(false)
     expect(wrapper.find('.suggestion-grid').exists()).toBe(false)
   })
@@ -91,7 +98,9 @@ describe('ConversationView', () => {
       global: { plugins: [createPinia(), router] },
     })
     await flushPromises()
+    expect(wrapper.get('.chat-workspace').classes()).not.toContain('is-empty')
     expect(wrapper.get('.thinking-toggle').attributes('aria-pressed')).toBe('true')
+    expect(wrapper.find('.composer-shell .composer-actions .thinking-toggle').exists()).toBe(true)
     expect(wrapper.get('.reasoning-panel summary').text()).toBe('深度思考')
     expect(wrapper.get('.reasoning-body').text()).toBe('这里是历史思考内容')
   })

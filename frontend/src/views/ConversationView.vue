@@ -586,7 +586,7 @@ onBeforeUnmount(() => {
       />
     </AppSidebar>
 
-    <main class="chat-workspace">
+    <main class="chat-workspace" :class="{ 'is-empty': isEmpty }">
       <header class="chat-topbar">
         <button
           class="history-toggle"
@@ -859,20 +859,6 @@ onBeforeUnmount(() => {
       </div>
 
       <footer class="composer-area">
-        <div class="composer-options">
-          <button
-            type="button"
-            class="thinking-toggle"
-            :class="{ 'is-enabled': thinkingEnabled }"
-            :disabled="sending || thinkingSaving || detailLoading"
-            :aria-pressed="thinkingEnabled"
-            aria-label="深度思考"
-            @click="toggleThinking"
-          >
-            <span class="thinking-toggle-mark" aria-hidden="true">✦</span>
-            深度思考
-          </button>
-        </div>
         <div class="composer-shell" :class="{ 'is-busy': sending }">
           <el-input
             v-model="draft"
@@ -884,26 +870,40 @@ onBeforeUnmount(() => {
             aria-label="输入问题"
             @keydown="handleComposerKeydown"
           />
-          <button
-            v-if="sending"
-            type="button"
-            class="send-button stop-button"
-            :disabled="stopping || !activeGenerationId"
-            :aria-label="stopping ? '正在停止' : '停止生成'"
-            @click="stopAnswer"
-          >
-            <el-icon><VideoPause /></el-icon>
-          </button>
-          <button
-            v-else
-            type="button"
-            class="send-button"
-            :disabled="!draft.trim() || thinkingSaving"
-            aria-label="发送问题"
-            @click="submitQuestion"
-          >
-            <el-icon><Position /></el-icon>
-          </button>
+          <div class="composer-actions">
+            <button
+              type="button"
+              class="thinking-toggle"
+              :class="{ 'is-enabled': thinkingEnabled }"
+              :disabled="sending || thinkingSaving || detailLoading"
+              :aria-pressed="thinkingEnabled"
+              aria-label="深度思考"
+              @click="toggleThinking"
+            >
+              <span class="thinking-toggle-mark" aria-hidden="true">✦</span>
+              深度思考
+            </button>
+            <button
+              v-if="sending"
+              type="button"
+              class="send-button stop-button"
+              :disabled="stopping || !activeGenerationId"
+              :aria-label="stopping ? '正在停止' : '停止生成'"
+              @click="stopAnswer"
+            >
+              <el-icon><VideoPause /></el-icon>
+            </button>
+            <button
+              v-else
+              type="button"
+              class="send-button"
+              :disabled="!draft.trim() || thinkingSaving"
+              aria-label="发送问题"
+              @click="submitQuestion"
+            >
+              <el-icon><Position /></el-icon>
+            </button>
+          </div>
         </div>
         <p>Enter 发送 · Shift + Enter 换行</p>
       </footer>
