@@ -7,19 +7,29 @@ import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.rag.execution.CancellationToken;
 import com.hnu.backend.rag.execution.RagBudgetSnapshot;
 import com.hnu.backend.rag.execution.StageBudget;
+import com.hnu.backend.shared.error.ApiException;
+import jakarta.annotation.PreDestroy;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.springframework.stereotype.Service;
 
 /** 负责跨向量模型检索知识库分块，并按模型内名次统一归并、排序结果。 */
 @Service
 public class RetrievalService {
+  private static final long CANCELLATION_POLL_MS = 50;
   private final EmbeddingClient embedding;
   private final RetrievalMapper retrieval;
   private final RagProperties config;
   private final CandidateMerge candidateMerge;
+  private final ExecutorService searchExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
   /**
    * 创建多模型向量检索服务。
@@ -38,6 +48,11 @@ public class RetrievalService {
     this.retrieval = retrieval;
     this.config = config;
     this.candidateMerge = candidateMerge;
+  }
+
+  @PreDestroy
+  void close() {
+    searchExecutor.shutdownNow();
   }
 
   /**
@@ -143,8 +158,10 @@ public class RetrievalService {
       skipVectorStages(trace, subQuestionId, "NO_EMBEDDING_BINDINGS");
       return List.of();
     }
+    long remainingSearchNanos = TimeUnit.MILLISECONDS.toNanos(budget.timeoutMs());
     for (var binding : bindings) {
       cancellationToken.throwIfCancelled();
+      if (remainingSearchNanos <= 0) throw channelTimeout();
       RagRunTrace.Span embeddingSpan =
           trace
               .start(RagStageName.EMBEDDING, subQuestionId, 1)
@@ -169,31 +186,20 @@ public class RetrievalService {
           trace.start(RagStageName.DATABASE_RETRIEVAL, subQuestionId, 1);
       List<SearchHit> hits;
       try {
-        if (scope == null) {
-          hits =
-              retrieval.searchAll(
-                  ownerId,
-                  EmbeddingClient.literal(vector),
-                  binding.modelId(),
-                  binding.provider(),
-                  binding.model(),
-                  binding.dimensions(),
-                  budget.recallBudget());
-        } else {
-          hits =
-              retrieval.searchIn(
-                  ownerId,
-                  scope,
-                  EmbeddingClient.literal(vector),
-                  binding.modelId(),
-                  binding.provider(),
-                  binding.model(),
-                  binding.dimensions(),
-                  budget.recallBudget());
-        }
+        long searchStartedAt = System.nanoTime();
+        hits =
+            search(
+                ownerId,
+                scope,
+                vector,
+                binding,
+                budget.recallBudget(),
+                remainingSearchNanos,
+                cancellationToken);
+        remainingSearchNanos -= System.nanoTime() - searchStartedAt;
         retrievalSpan.success(hits.size());
       } catch (RuntimeException error) {
-        retrievalSpan.failed("DATABASE_RETRIEVAL_FAILED");
+        retrievalSpan.failed(errorCode(error, "DATABASE_RETRIEVAL_FAILED"));
         throw error;
       }
       cancellationToken.throwIfCancelled();
@@ -222,6 +228,68 @@ public class RetrievalService {
     }
     // 不同 Embedding 模型的原始相似度不可直接比较，只使用各自模型内名次产生的 RRF 分数合并。
     return candidateMerge.mergeAndSelect(candidates, List.of(subQuestionId), budget.recallBudget());
+  }
+
+  /** 通道预算只统计数据库召回，不统计生成查询向量的模型耗时。 */
+  private List<SearchHit> search(
+      UUID ownerId,
+      List<UUID> scope,
+      float[] vector,
+      EmbeddingBinding binding,
+      int recallBudget,
+      long remainingNanos,
+      CancellationToken cancellationToken) {
+    if (remainingNanos <= 0) throw channelTimeout();
+    String literal = EmbeddingClient.literal(vector);
+    Future<List<SearchHit>> future =
+        searchExecutor.submit(
+            () ->
+                scope == null
+                    ? retrieval.searchAll(
+                        ownerId,
+                        literal,
+                        binding.modelId(),
+                        binding.provider(),
+                        binding.model(),
+                        binding.dimensions(),
+                        recallBudget)
+                    : retrieval.searchIn(
+                        ownerId,
+                        scope,
+                        literal,
+                        binding.modelId(),
+                        binding.provider(),
+                        binding.model(),
+                        binding.dimensions(),
+                        recallBudget));
+    long deadline = System.nanoTime() + remainingNanos;
+    try {
+      while (true) {
+        cancellationToken.throwIfCancelled();
+        long waitNanos = deadline - System.nanoTime();
+        if (waitNanos <= 0) throw channelTimeout();
+        try {
+          return future.get(
+              Math.min(waitNanos, TimeUnit.MILLISECONDS.toNanos(CANCELLATION_POLL_MS)),
+              TimeUnit.NANOSECONDS);
+        } catch (TimeoutException ignored) {
+          // 短轮询使请求取消和检索预算都能及时中断数据库查询。
+        }
+      }
+    } catch (InterruptedException error) {
+      Thread.currentThread().interrupt();
+      throw ApiException.cancelled();
+    } catch (ExecutionException error) {
+      Throwable cause = error.getCause();
+      if (cause instanceof RuntimeException runtime) throw runtime;
+      throw new IllegalStateException(cause);
+    } finally {
+      if (!future.isDone()) future.cancel(true);
+    }
+  }
+
+  private ApiException channelTimeout() {
+    return ApiException.upstream("SUBQUESTION_TIMEOUT", "向量检索通道超时");
   }
 
   /** 记录向量通道未执行时的两个非降级阶段。 */

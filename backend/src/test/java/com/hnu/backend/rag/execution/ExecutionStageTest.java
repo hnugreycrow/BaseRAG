@@ -102,21 +102,16 @@ class ExecutionStageTest {
   }
 
   @Test
-  void isolatesFailureAndTimeoutFromOtherSubQuestions() {
+  void isolatesChannelTimeoutFromOtherSubQuestions() {
     RetrievalService retrieval = mock(RetrievalService.class);
     McpToolExecutor tools = mock(McpToolExecutor.class);
     RagProperties config = new RagProperties();
-    config.getSearch().getChannels().setTimeoutMs(20);
     ExecutionStage stage = stage(retrieval, tools, config);
     QueryPlan plan =
         new QueryPlan("两个问题", List.of(new SubQuestion("Q1", "慢问题"), new SubQuestion("Q2", "失败问题")));
     RoutingPlan routing = new RoutingPlan(List.of(knowledge("Q1"), knowledge("Q2")));
     when(retrieval.retrieveCandidates(eq(ownerId), eq("Q1"), anyString(), isNull(), any(), any()))
-        .thenAnswer(
-            ignored -> {
-              Thread.sleep(1000);
-              return List.of();
-            });
+        .thenThrow(ApiException.upstream("SUBQUESTION_TIMEOUT", "向量检索通道超时"));
     when(retrieval.retrieveCandidates(eq(ownerId), eq("Q2"), anyString(), isNull(), any(), any()))
         .thenThrow(new IllegalStateException("boom"));
 
@@ -156,11 +151,10 @@ class ExecutionStageTest {
   }
 
   @Test
-  void recordsTimeoutOnOuterSubQuestionSpan() {
+  void recordsChannelTimeoutOnOuterSubQuestionSpan() {
     RetrievalService retrieval = mock(RetrievalService.class);
     McpToolExecutor tools = mock(McpToolExecutor.class);
     RagProperties config = new RagProperties();
-    config.getSearch().getChannels().setTimeoutMs(20);
     ExecutionStage stage = stage(retrieval, tools, config);
     QueryPlan plan = new QueryPlan("问题", List.of(new SubQuestion("Q1", "慢问题")));
     RoutingPlan routing = new RoutingPlan(List.of(knowledge("Q1")));
@@ -168,11 +162,7 @@ class ExecutionStageTest {
         new RagRunTrace(UUID.randomUUID(), OffsetDateTime.now(ZoneOffset.UTC), System.nanoTime());
     when(retrieval.retrieveCandidates(
             eq(ownerId), eq("Q1"), anyString(), isNull(), any(), any(), same(trace)))
-        .thenAnswer(
-            ignored -> {
-              Thread.sleep(1000);
-              return List.of();
-            });
+        .thenThrow(ApiException.upstream("SUBQUESTION_TIMEOUT", "向量检索通道超时"));
 
     ExecutionResult result = stage.execute(ownerId, plan, routing, null, () -> false, trace);
     var snapshot = trace.finish(RagRunStatus.COMPLETED, null);

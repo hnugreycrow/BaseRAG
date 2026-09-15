@@ -138,7 +138,9 @@ public class ExecutionStage {
                 0));
         continue;
       }
-      long timeoutMs = timeoutFor(route, snapshot);
+      // 向量通道预算由检索服务仅在数据库召回时扣除，Embedding 不占用该预算。
+      long timeoutMs =
+          route.intent() == IntentType.MCP_TOOL ? config.getPipeline().getMcp().getTimeoutMs() : 0;
       RagRunTrace.Span subQuestionSpan =
           trace.start(RagStageName.SUBQUESTION_EXECUTION, question.id(), 1);
       long submittedAt = System.nanoTime();
@@ -277,7 +279,9 @@ public class ExecutionStage {
       return result(
           question,
           route,
-          SubQuestionExecution.Status.FAILED,
+          "SUBQUESTION_TIMEOUT".equals(error.code())
+              ? SubQuestionExecution.Status.TIMEOUT
+              : SubQuestionExecution.Status.FAILED,
           List.of(),
           null,
           error.code(),
@@ -308,7 +312,10 @@ public class ExecutionStage {
   }
 
   private SubQuestionExecution await(TaskHandle handle, CancellationToken cancellationToken) {
-    long deadline = handle.startedAt() + TimeUnit.MILLISECONDS.toNanos(handle.timeoutMs());
+    long deadline =
+        handle.timeoutMs() > 0
+            ? handle.startedAt() + TimeUnit.MILLISECONDS.toNanos(handle.timeoutMs())
+            : Long.MAX_VALUE;
     while (true) {
       cancellationToken.throwIfCancelled();
       try {
@@ -343,7 +350,7 @@ public class ExecutionStage {
   }
 
   private SubQuestionExecution enforceTimeout(TaskHandle handle, SubQuestionExecution completed) {
-    if (completed.elapsedMs() <= handle.timeoutMs()) return completed;
+    if (handle.timeoutMs() == 0 || completed.elapsedMs() <= handle.timeoutMs()) return completed;
     return result(
         handle.question(),
         handle.route(),
@@ -370,12 +377,6 @@ public class ExecutionStage {
         observation,
         reasonCode,
         elapsedMillis(startedAt));
-  }
-
-  private long timeoutFor(IntentRoute route, RagBudgetSnapshot snapshot) {
-    return route.intent() == IntentType.MCP_TOOL
-        ? config.getPipeline().getMcp().getTimeoutMs()
-        : snapshot.channelTimeoutMs();
   }
 
   private void validateAlignment(QueryPlan plan, RoutingPlan routing) {
@@ -409,8 +410,8 @@ public class ExecutionStage {
    * @param question 子任务对应的规划问题
    * @param route 决定任务执行检索还是工具调用的安全路由
    * @param future 用于等待、超时中断和总取消传播的并发句柄
-   * @param startedAt 提交任务时的单调时钟值，排队时间也计入预算
-   * @param timeoutMs 此任务允许占用的最长时间
+   * @param startedAt 提交任务时的单调时钟值，MCP 任务的排队时间也计入其预算
+   * @param timeoutMs MCP 任务允许占用的最长时间；知识检索由检索服务单独计时，值为 0
    * @param span 子问题外层观测阶段
    */
   private record TaskHandle(

@@ -8,7 +8,7 @@ import com.hnu.backend.configuration.RagProperties;
  * @param maxSubQuestions 本次允许调度的最大子问题数，同时也是并发任务上限
  * @param defaultTopK 当前没有重排器时最终进入回答上下文的候选数
  * @param recallBudget 每个子问题在整个向量通道中最多保留的召回数
- * @param channelTimeoutMs 单个向量检索子问题的超时时间
+ * @param channelTimeoutMs 单个子问题向量通道的数据库召回预算，不包含 Embedding 耗时
  * @param deduplicationOverlapThreshold 相邻分块被视为近似重复的字符三元组重叠率阈值
  * @param rerankEnabled 本次执行是否调用专用重排模型
  * @param rerankInputLimit 去重后最多提交给重排模型的候选数

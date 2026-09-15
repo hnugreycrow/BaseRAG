@@ -154,6 +154,7 @@ rag:
     recall-budget: 20
 
     channels:
+      # Database recall budget per knowledge sub-question; query embedding time is excluded.
       timeout-ms: 15000
       vector:
         enabled: true

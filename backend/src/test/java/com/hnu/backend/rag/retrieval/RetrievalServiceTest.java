@@ -8,6 +8,8 @@ import static org.mockito.Mockito.*;
 
 import com.hnu.backend.configuration.RagProperties;
 import com.hnu.backend.model.client.EmbeddingClient;
+import com.hnu.backend.rag.execution.CancellationToken;
+import com.hnu.backend.rag.execution.RagBudgetSnapshot;
 import com.hnu.backend.shared.error.ApiException;
 import java.util.List;
 import java.util.UUID;
@@ -68,19 +70,22 @@ class RetrievalServiceTest {
         .thenReturn(List.of(hit(id(1), .95)));
     when(mapper.searchAll(ownerId, "[0.0, 1.0]", "aliyun-id", "bailian", "same-model", 2, 2))
         .thenReturn(List.of(hit(id(2), .95)));
-
-    var result =
-        new RetrievalService(embedding, mapper, config, new CandidateMerge())
-            .retrieve(ownerId, "问题");
-
-    assertEquals(List.of(id(1), id(2)), result.stream().map(SearchHit::getChunkId).toList());
-    verify(mapper)
-        .searchAll(ownerId, "[1.0, 0.0]", "silicon-id", "siliconflow", "same-model", 2, 2);
-    verify(mapper).searchAll(ownerId, "[0.0, 1.0]", "aliyun-id", "bailian", "same-model", 2, 2);
+    RetrievalService service =
+        new RetrievalService(embedding, mapper, config, new CandidateMerge());
+    try {
+      assertEquals(
+          List.of(id(1), id(2)),
+          service.retrieve(ownerId, "问题").stream().map(SearchHit::getChunkId).toList());
+      verify(mapper)
+          .searchAll(ownerId, "[1.0, 0.0]", "silicon-id", "siliconflow", "same-model", 2, 2);
+      verify(mapper).searchAll(ownerId, "[0.0, 1.0]", "aliyun-id", "bailian", "same-model", 2, 2);
+    } finally {
+      service.close();
+    }
   }
 
   @Test
-  void failedFixedBindingDoesNotTryAnotherProvider() {
+  void failedFixedBindingNeverFallsBackToAnotherModel() {
     EmbeddingClient embedding = mock(EmbeddingClient.class);
     RetrievalMapper mapper = mock(RetrievalMapper.class);
     when(mapper.activeModelBindings(ownerId))
@@ -90,15 +95,17 @@ class RetrievalServiceTest {
                 new EmbeddingBinding("other-id", "bailian", "same-model", 2)));
     when(embedding.embed("fixed-id", "siliconflow", "same-model", 2, List.of("问题")))
         .thenThrow(ApiException.upstream("MODEL_UNAVAILABLE", "test"));
-
-    assertThrows(
-        ApiException.class,
-        () ->
-            new RetrievalService(embedding, mapper, new RagProperties(), new CandidateMerge())
-                .retrieve(ownerId, "问题"));
-    verify(embedding, never()).embed(eq("other-id"), anyString(), anyString(), anyInt(), anyList());
-    verify(mapper, never())
-        .searchAll(any(), anyString(), anyString(), anyString(), anyString(), anyInt(), anyInt());
+    RetrievalService service =
+        new RetrievalService(embedding, mapper, new RagProperties(), new CandidateMerge());
+    try {
+      assertThrows(ApiException.class, () -> service.retrieve(ownerId, "问题"));
+      verify(embedding, never())
+          .embed(eq("other-id"), anyString(), anyString(), anyInt(), anyList());
+      verify(mapper, never())
+          .searchAll(any(), anyString(), anyString(), anyString(), anyString(), anyInt(), anyInt());
+    } finally {
+      service.close();
+    }
   }
 
   @Test
@@ -156,6 +163,75 @@ class RetrievalServiceTest {
 
     assertTrue(result.isEmpty());
     verifyNoInteractions(embedding, mapper);
+  }
+
+  @Test
+  void slowEmbeddingDoesNotConsumeChannelSearchBudget() {
+    EmbeddingClient embedding = mock(EmbeddingClient.class);
+    RetrievalMapper mapper = mock(RetrievalMapper.class);
+    RagProperties config = new RagProperties();
+    config.getSearch().getChannels().setTimeoutMs(200);
+    when(mapper.activeModelBindings(ownerId))
+        .thenReturn(List.of(new EmbeddingBinding("id-a", "supplier-a", "model-a", 2)));
+    when(embedding.embed("id-a", "supplier-a", "model-a", 2, List.of("问题")))
+        .thenAnswer(
+            ignored -> {
+              Thread.sleep(300);
+              return List.of(new float[] {1, 0});
+            });
+    when(mapper.searchAll(ownerId, "[1.0, 0.0]", "id-a", "supplier-a", "model-a", 2, 20))
+        .thenReturn(List.of(hit(id(1), .91)));
+    RetrievalService service =
+        new RetrievalService(embedding, mapper, config, new CandidateMerge());
+    try {
+      var result =
+          service.retrieveCandidates(
+              ownerId,
+              "Q1",
+              "问题",
+              null,
+              RagBudgetSnapshot.from(config).forSubQuestion("Q1"),
+              CancellationToken.NONE);
+      assertEquals(1, result.size());
+    } finally {
+      service.close();
+    }
+  }
+
+  @Test
+  void slowDatabaseSearchExhaustsChannelBudget() {
+    EmbeddingClient embedding = mock(EmbeddingClient.class);
+    RetrievalMapper mapper = mock(RetrievalMapper.class);
+    RagProperties config = new RagProperties();
+    config.getSearch().getChannels().setTimeoutMs(50);
+    when(mapper.activeModelBindings(ownerId))
+        .thenReturn(List.of(new EmbeddingBinding("id-a", "supplier-a", "model-a", 2)));
+    when(embedding.embed("id-a", "supplier-a", "model-a", 2, List.of("问题")))
+        .thenReturn(List.of(new float[] {1, 0}));
+    when(mapper.searchAll(ownerId, "[1.0, 0.0]", "id-a", "supplier-a", "model-a", 2, 20))
+        .thenAnswer(
+            ignored -> {
+              Thread.sleep(1_000);
+              return List.of(hit(id(1), .91));
+            });
+    RetrievalService service =
+        new RetrievalService(embedding, mapper, config, new CandidateMerge());
+    try {
+      ApiException error =
+          assertThrows(
+              ApiException.class,
+              () ->
+                  service.retrieveCandidates(
+                      ownerId,
+                      "Q1",
+                      "问题",
+                      null,
+                      RagBudgetSnapshot.from(config).forSubQuestion("Q1"),
+                      CancellationToken.NONE));
+      assertEquals("SUBQUESTION_TIMEOUT", error.code());
+    } finally {
+      service.close();
+    }
   }
 
   private SearchHit hit(UUID chunkId, double similarity) {

@@ -7,7 +7,7 @@ import java.util.Objects;
  *
  * @param subQuestionId 预算所属的子问题 ID，用于日志和超时归因
  * @param recallBudget 该子问题在整个向量通道中最多保留的候选数
- * @param timeoutMs 该子问题完成向量召回的最长时间
+ * @param timeoutMs 该子问题向量通道的数据库召回预算，不包含 Embedding 耗时
  * @param rrfK 跨 Embedding 模型按名次归一化时使用的 RRF 常数
  * @param vectorWeight 向量检索归因对融合分的贡献权重
  * @param vectorEnabled 向量通道是否参与本次执行
