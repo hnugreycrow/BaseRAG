@@ -30,6 +30,20 @@ services:
     volumes:
       - rustfs_data:/data
       - rustfs_logs:/logs
+  redis:
+    image: redis:8.2.9-alpine
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD}
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?Set REDIS_PASSWORD}"]
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$$REDIS_PASSWORD redis-cli ping | grep PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
 volumes:
   postgres_data:
     name: baserag_postgres_data
@@ -37,3 +51,5 @@ volumes:
     name: baserag_rustfs_data
   rustfs_logs:
     name: baserag_rustfs_logs
+  redis_data:
+    name: baserag_redis_data

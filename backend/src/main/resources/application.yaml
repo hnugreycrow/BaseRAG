@@ -18,6 +18,29 @@ spring:
     multipart:
       max-file-size: 5MB
       max-request-size: 6MB
+  data:
+    redis:
+      host: "${REDIS_HOST:127.0.0.1}"
+      port: "${REDIS_PORT:6379}"
+      password: "${REDIS_PASSWORD:baserag-redis-local-change-me}"
+      connect-timeout: 1s
+      timeout: 1s
+
+sa-token:
+  token-name: baserag_session
+  timeout: 28800
+  active-timeout: 1800
+  is-concurrent: true
+  is-share: false
+  max-login-count: -1
+  is-lasting-cookie: false
+  is-read-header: false
+  is-read-body: false
+  cookie:
+    path: /
+    secure: false
+    http-only: true
+    same-site: Strict
 
 server:
   address: 127.0.0.1
@@ -152,3 +175,9 @@ conversation:
   summary-batch-turns: 4
   checkpoint-chars: 512
   checkpoint-interval-ms: 1000
+
+baserag:
+  bootstrap-admin:
+    username: "${BASERAG_ADMIN_USERNAME:admin}"
+    display-name: "${BASERAG_ADMIN_DISPLAY_NAME:BaseRAG 管理员}"
+    password: "${BASERAG_ADMIN_PASSWORD:}"
