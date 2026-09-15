@@ -131,6 +131,9 @@ rag:
   pipeline:
     max-sub-questions: 4
 
+    planning:
+      recent-turns: 4
+
     deduplication:
       overlap-threshold: 0.85
 

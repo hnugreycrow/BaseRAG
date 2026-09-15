@@ -31,6 +31,8 @@ public class RagProperties {
         || maxQuestionChars < 1
         || pipeline.maxSubQuestions < 1
         || pipeline.maxSubQuestions > 16
+        || pipeline.planning.recentTurns < 1
+        || pipeline.planning.recentTurns > 8
         || !Double.isFinite(pipeline.routing.confidenceThreshold)
         || pipeline.routing.confidenceThreshold < 0
         || pipeline.routing.confidenceThreshold > 1
@@ -62,10 +64,16 @@ public class RagProperties {
   @Data
   public static class Pipeline {
     private int maxSubQuestions = 4;
+    private Planning planning = new Planning();
     private Routing routing = new Routing();
     private Mcp mcp = new Mcp();
     private Deduplication deduplication = new Deduplication();
     private Rerank rerank = new Rerank();
+  }
+
+  @Data
+  public static class Planning {
+    private int recentTurns = 4;
   }
 
   @Data

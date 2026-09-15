@@ -7,6 +7,19 @@ import org.junit.jupiter.api.Test;
 
 class RagPropertiesTest {
   @Test
+  void acceptsOnlyOneThroughEightPlanningTurns() {
+    RagProperties properties = new RagProperties();
+    properties.getPipeline().getPlanning().setRecentTurns(1);
+    properties.validate();
+    properties.getPipeline().getPlanning().setRecentTurns(8);
+    properties.validate();
+    properties.getPipeline().getPlanning().setRecentTurns(0);
+    assertThrows(IllegalArgumentException.class, properties::validate);
+    properties.getPipeline().getPlanning().setRecentTurns(9);
+    assertThrows(IllegalArgumentException.class, properties::validate);
+  }
+
+  @Test
   void rejectsInvalidRoutingAndMcpConfiguration() {
     RagProperties properties = new RagProperties();
     properties.getPipeline().getRouting().setConfidenceThreshold(1.1);
