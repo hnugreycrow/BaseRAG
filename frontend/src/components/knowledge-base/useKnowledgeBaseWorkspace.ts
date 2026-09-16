@@ -14,7 +14,8 @@ import {
   listEmbeddingModels,
   renameDocument,
   renameKnowledgeBase,
-  uploadDocument,
+  uploadDocuments,
+  type DocumentBatchUploadResult,
   type DocumentChunk,
   type DocumentChunkDetail,
   type EmbeddingModel,
@@ -47,6 +48,7 @@ export function useKnowledgeBaseWorkspace() {
   const chunkDetail = ref<DocumentChunkDetail | null>(null)
   const saving = ref(false)
   const uploading = ref(false)
+  const uploadResult = ref<DocumentBatchUploadResult | null>(null)
   const detailLoading = ref(false)
   const processingIds = ref(new Set<string>())
   const selectedIds = ref(new Set<string>())
@@ -71,6 +73,9 @@ export function useKnowledgeBaseWorkspace() {
 
   const createDialogOpen = ref(false)
   const uploadDialogOpen = ref(false)
+  watch(uploadDialogOpen, (open) => {
+    if (open) uploadResult.value = null
+  })
   const renameDialogOpen = ref(false)
   const detailDrawerOpen = ref(false)
   const renameTarget = ref<RenameTarget | null>(null)
@@ -205,15 +210,27 @@ export function useKnowledgeBaseWorkspace() {
     }
   }
 
-  async function handleUpload(file: File) {
-    if (!selectedKnowledgeBase.value) return
+  async function handleUpload(files: File[]) {
+    if (!selectedKnowledgeBase.value || files.length === 0) return
     uploading.value = true
+    uploadResult.value = null
     try {
-      await uploadDocument(selectedKnowledgeBase.value.id, file)
-      uploadDialogOpen.value = false
-      resetTable()
-      await Promise.all([loadDocuments(false), refreshSelectedKnowledgeBase()])
-      ElMessage.success('文档已上传，等待分块')
+      const result = await uploadDocuments(selectedKnowledgeBase.value.id, files)
+      uploadResult.value = result
+      const succeeded = result.results.filter((item) => item.status === 'UPLOADED').length
+      const failed = result.results.length - succeeded
+      if (succeeded > 0) {
+        resetTable()
+        await Promise.all([loadDocuments(false), refreshSelectedKnowledgeBase()])
+      }
+      if (failed === 0) {
+        uploadDialogOpen.value = false
+        ElMessage.success(`已上传 ${succeeded} 篇文档，等待分块`)
+      } else if (succeeded > 0) {
+        ElMessage.warning(`已上传 ${succeeded} 篇，${failed} 篇失败，请查看原因后重试`)
+      } else {
+        ElMessage.warning(`${failed} 篇上传失败，请查看原因后重试`)
+      }
     } catch (error) {
       ElMessage.error(getErrorMessage(error))
     } finally {
@@ -370,6 +387,7 @@ export function useKnowledgeBaseWorkspace() {
     saving,
     selectedChunk,
     uploading,
+    uploadResult,
     uploadDialogOpen,
   }
 }

@@ -12,6 +12,7 @@ import com.hnu.backend.conversation.entity.Message;
 import com.hnu.backend.conversation.mapper.ConversationMapper;
 import com.hnu.backend.conversation.mapper.MessageMapper;
 import com.hnu.backend.document.entity.DocumentChunk;
+import com.hnu.backend.document.entity.DocumentVersion;
 import com.hnu.backend.document.mapper.DocumentChunkMapper;
 import com.hnu.backend.document.mapper.DocumentMapper;
 import com.hnu.backend.document.mapper.DocumentVersionMapper;
@@ -332,6 +333,41 @@ class InfrastructureIntegrationTest {
   private MockMultipartFile file(String name, String text) {
     return new MockMultipartFile(
         "file", name, "text/markdown", text.getBytes(StandardCharsets.UTF_8));
+  }
+
+  @Test
+  void batchUploadPersistsIndependentDocumentsAndVersions() {
+    UUID ownerId = ownerId();
+    UUID knowledgeBaseId = kb(ownerId);
+    var result =
+        documents.uploadBatch(
+            ownerId,
+            knowledgeBaseId,
+            List.of(
+                file("same.md", "# first"),
+                file("wrong.txt", "# invalid"),
+                file("same.md", "# second")));
+
+    assertEquals(
+        List.of("UPLOADED", "FAILED", "UPLOADED"),
+        result.results().stream().map(item -> item.status()).toList());
+    assertEquals("INVALID_FILE", result.results().get(1).errorCode());
+    UUID firstId = result.results().get(0).documentId();
+    UUID secondId = result.results().get(2).documentId();
+    assertNotEquals(firstId, secondId);
+    assertEquals("UPLOADED", documents.get(ownerId, knowledgeBaseId, firstId).status());
+    assertEquals("UPLOADED", documents.get(ownerId, knowledgeBaseId, secondId).status());
+    var savedVersions =
+        versionMapper.selectList(
+            new LambdaQueryWrapper<DocumentVersion>()
+                .in(DocumentVersion::getDocumentId, List.of(firstId, secondId)));
+    assertEquals(2, savedVersions.size());
+    assertEquals(
+        Set.of(firstId, secondId),
+        new HashSet<>(savedVersions.stream().map(DocumentVersion::getDocumentId).toList()));
+    assertEquals(
+        2,
+        new HashSet<>(savedVersions.stream().map(DocumentVersion::getStorageKey).toList()).size());
   }
 
   @Test

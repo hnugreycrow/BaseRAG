@@ -30,9 +30,18 @@ vi.mock('../../api', async () => ({
     embeddingDimensions: 1024,
     documentCount: 1,
   }),
-  uploadDocument: vi
-    .fn()
-    .mockResolvedValue({ documentId: 'doc', status: 'UPLOADED', chunkCount: 0 }),
+  uploadDocuments: vi.fn().mockResolvedValue({
+    results: [
+      {
+        index: 0,
+        fileName: 'guide.md',
+        status: 'UPLOADED',
+        documentId: 'doc',
+        errorCode: null,
+        message: null,
+      },
+    ],
+  }),
   createDocumentChunkBatch: vi
     .fn()
     .mockResolvedValue({ acceptedDocumentIds: ['a', 'b'], skippedDocumentIds: [] }),
@@ -74,8 +83,8 @@ describe('real knowledge base workflow', () => {
       createdAt: '2026-09-15T00:00:00Z',
     })
     const file = new File(['# 文档'], 'guide.md', { type: 'text/markdown' })
-    await workspace.handleUpload(file)
-    expect(api.uploadDocument).toHaveBeenCalledWith('kb', file)
+    await workspace.handleUpload([file])
+    expect(api.uploadDocuments).toHaveBeenCalledWith('kb', [file])
     expect(api.createDocumentChunks).not.toHaveBeenCalled()
     await workspace.handleChunk({
       id: 'doc',
@@ -88,6 +97,65 @@ describe('real knowledge base workflow', () => {
     expect(api.createDocumentChunks).toHaveBeenCalledExactlyOnceWith('kb', 'doc')
     expect(workspace.processingIds.value.size).toBe(0)
     wrapper.unmount()
+  })
+
+  it('keeps the dialog open on partial upload and refreshes successful documents', async () => {
+    vi.mocked(api.uploadDocuments).mockResolvedValue({
+      results: [
+        {
+          index: 0,
+          fileName: 'good.md',
+          status: 'UPLOADED',
+          documentId: 'good',
+          errorCode: null,
+          message: null,
+        },
+        {
+          index: 1,
+          fileName: 'bad.md',
+          status: 'FAILED',
+          documentId: null,
+          errorCode: 'IMPORT_FAILED',
+          message: '文档入库失败',
+        },
+      ],
+    })
+    const warning = vi.spyOn(ElMessage, 'warning')
+    let workspace!: ReturnType<typeof useKnowledgeBaseWorkspace>
+    const wrapper = mount(
+      defineComponent({
+        setup() {
+          workspace = useKnowledgeBaseWorkspace()
+          return () => null
+        },
+      }),
+    )
+    try {
+      await flushPromises()
+      await workspace.openKnowledgeBase({
+        id: 'kb',
+        name: '资料',
+        embeddingModelId: 'embed-id',
+        embeddingProvider: 'supplier',
+        embeddingModel: 'embed',
+        embeddingDimensions: 1024,
+        documentCount: 0,
+        createdAt: '2026-09-15T00:00:00Z',
+      })
+      workspace.uploadDialogOpen.value = true
+      const files = [new File(['# good'], 'good.md'), new File(['# bad'], 'bad.md')]
+      await workspace.handleUpload(files)
+      expect(api.uploadDocuments).toHaveBeenCalledWith('kb', files)
+      expect(workspace.uploadDialogOpen.value).toBe(true)
+      expect(workspace.uploadResult.value?.results[1].errorCode).toBe('IMPORT_FAILED')
+      expect(api.listDocuments).toHaveBeenCalledTimes(2)
+      expect(api.getKnowledgeBase).toHaveBeenCalledWith('kb')
+      expect(api.createDocumentChunks).not.toHaveBeenCalled()
+      expect(warning).toHaveBeenCalledWith(expect.stringContaining('1 篇失败'))
+    } finally {
+      wrapper.unmount()
+      warning.mockRestore()
+    }
   })
 
   it('selects every status, confirms READY once, and reports accepted and skipped rows', async () => {

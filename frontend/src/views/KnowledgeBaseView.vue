@@ -58,6 +58,7 @@ const {
   selectedKnowledgeBase,
   total,
   uploading,
+  uploadResult,
   uploadDialogOpen,
 } = useKnowledgeBaseWorkspace()
 </script>
@@ -213,7 +214,12 @@ const {
       :loading="saving"
       @submit="handleCreate"
     />
-    <UploadDocumentDialog v-model="uploadDialogOpen" :loading="uploading" @submit="handleUpload" />
+    <UploadDocumentDialog
+      v-model="uploadDialogOpen"
+      :loading="uploading"
+      :result="uploadResult"
+      @submit="handleUpload"
+    />
     <RenameDialog
       v-if="renameTarget"
       v-model="renameDialogOpen"

@@ -85,7 +85,8 @@ public class GlobalExceptionHandler {
 
   @ExceptionHandler(MaxUploadSizeExceededException.class)
   ResponseEntity<ApiResponse<Void>> size(HttpServletRequest request) {
-    return failure(HttpStatus.PAYLOAD_TOO_LARGE, "FILE_TOO_LARGE", "文件不能超过 5 MiB", request);
+    return failure(
+        HttpStatus.PAYLOAD_TOO_LARGE, "UPLOAD_REQUEST_TOO_LARGE", "上传请求不能超过 60 MB", request);
   }
 
   @ExceptionHandler(MethodArgumentNotValidException.class)

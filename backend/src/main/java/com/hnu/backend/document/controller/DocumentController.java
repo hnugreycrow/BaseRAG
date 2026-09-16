@@ -4,6 +4,7 @@ import com.hnu.backend.auth.service.CurrentUserService;
 import com.hnu.backend.document.dto.DocumentChunkBatchRequest;
 import com.hnu.backend.document.dto.DocumentRequest;
 import com.hnu.backend.document.service.DocumentService;
+import com.hnu.backend.document.vo.DocumentBatchUploadResponse;
 import com.hnu.backend.document.vo.DocumentChunkBatchResponse;
 import com.hnu.backend.document.vo.DocumentChunkDetailResponse;
 import com.hnu.backend.document.vo.DocumentChunkResponse;
@@ -14,6 +15,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
@@ -56,6 +58,13 @@ public class DocumentController {
   public DocumentImportResponse upload(
       @PathVariable UUID knowledgeBaseId, @RequestPart("file") MultipartFile file) {
     return documents.upload(currentUsers.require().getId(), knowledgeBaseId, file);
+  }
+
+  /** 批量上传 Markdown 原文件，每个文件独立返回处理结果。 */
+  @PostMapping("/batch")
+  public DocumentBatchUploadResponse uploadBatch(
+      @PathVariable UUID knowledgeBaseId, @RequestPart("files") List<MultipartFile> files) {
+    return documents.uploadBatch(currentUsers.require().getId(), knowledgeBaseId, files);
   }
 
   /** 分页查询知识库中的文档及其最新处理状态。 */

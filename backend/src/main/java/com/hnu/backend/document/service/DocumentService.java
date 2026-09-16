@@ -10,6 +10,7 @@ import com.hnu.backend.document.mapper.DocumentMapper;
 import com.hnu.backend.document.mapper.DocumentVersionMapper;
 import com.hnu.backend.document.parser.MarkdownChunker;
 import com.hnu.backend.document.storage.FileStorage;
+import com.hnu.backend.document.vo.DocumentBatchUploadResponse;
 import com.hnu.backend.document.vo.DocumentChunkBatchResponse;
 import com.hnu.backend.document.vo.DocumentChunkDetailResponse;
 import com.hnu.backend.document.vo.DocumentChunkResponse;
@@ -184,6 +185,32 @@ public class DocumentService {
       if (e instanceof ApiException api) throw api;
       throw ApiException.upstream("IMPORT_FAILED", "文档入库失败，请检查服务状态后重新上传");
     }
+  }
+
+  /** 校验批次后逐个上传，单个文件失败不影响其他文件。 */
+  public DocumentBatchUploadResponse uploadBatch(
+      UUID ownerId, UUID knowledgeBaseId, List<MultipartFile> files) {
+    if (files == null || files.isEmpty() || files.size() > 10)
+      throw ApiException.bad("INVALID_BATCH_SIZE", "每次请选择 1 至 10 个文件");
+    knowledgeBases.ensureModel(ownerId, knowledgeBaseId);
+    List<DocumentBatchUploadResponse.Item> results = new ArrayList<>(files.size());
+    for (int index = 0; index < files.size(); index++) {
+      MultipartFile file = files.get(index);
+      String fileName = Optional.ofNullable(file.getOriginalFilename()).orElse("");
+      fileName = fileName.replace('\\', '/');
+      fileName = fileName.substring(fileName.lastIndexOf('/') + 1);
+      try {
+        DocumentImportResponse uploaded = upload(ownerId, knowledgeBaseId, file);
+        results.add(
+            new DocumentBatchUploadResponse.Item(
+                index, fileName, uploaded.status(), uploaded.documentId(), null, null));
+      } catch (ApiException e) {
+        results.add(
+            new DocumentBatchUploadResponse.Item(
+                index, fileName, "FAILED", null, e.code(), e.getMessage()));
+      }
+    }
+    return new DocumentBatchUploadResponse(results);
   }
 
   /**

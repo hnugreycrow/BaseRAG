@@ -55,6 +55,19 @@ export interface DocumentImportResult {
   chunkCount: number
 }
 
+export interface DocumentBatchUploadItem {
+  index: number
+  fileName: string
+  status: 'UPLOADED' | 'FAILED'
+  documentId: string | null
+  errorCode: string | null
+  message: string | null
+}
+
+export interface DocumentBatchUploadResult {
+  results: DocumentBatchUploadItem[]
+}
+
 function pageParams(page: number, pageSize: number, query = '') {
   return { page, pageSize, ...(query.trim() ? { query: query.trim() } : {}) }
 }
@@ -115,6 +128,18 @@ export function uploadDocument(knowledgeBaseId: string, file: File) {
     url: `/knowledge-bases/${knowledgeBaseId}/documents`,
     method: 'post',
     data,
+  })
+}
+
+export function uploadDocuments(knowledgeBaseId: string, files: File[]) {
+  const data = new FormData()
+  files.forEach((file) => data.append('files', file))
+
+  return request<DocumentBatchUploadResult>({
+    url: `/knowledge-bases/${knowledgeBaseId}/documents/batch`,
+    method: 'post',
+    data,
+    timeout: 120_000,
   })
 }
 
