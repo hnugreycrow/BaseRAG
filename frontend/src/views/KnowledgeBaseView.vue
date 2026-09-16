@@ -12,6 +12,7 @@ import { useKnowledgeBaseWorkspace } from '../components/knowledge-base/useKnowl
 
 const {
   chunkDetail,
+  batchSubmitting,
   createDialogOpen,
   detailDrawerOpen,
   detailLoading,
@@ -20,6 +21,7 @@ const {
   goToDocuments,
   goToKnowledgeBases,
   handleChunk,
+  handleBatchChunk,
   handleCreate,
   handlePageChange,
   handlePageSizeChange,
@@ -39,6 +41,10 @@ const {
   pageSize,
   pageTitle,
   processingIds,
+  selectedIds,
+  selectedCount,
+  toggleSelection,
+  setSelection,
   query,
   refreshCurrent,
   renameDialogOpen,
@@ -120,6 +126,7 @@ const {
           v-else-if="selectedDocument"
           :icon="Refresh"
           :loading="processingIds.has(selectedDocument.id)"
+          :disabled="selectedDocument.status === 'PROCESSING'"
           @click="handleChunk(selectedDocument)"
         >
           重新分块
@@ -129,6 +136,17 @@ const {
 
     <section class="table-panel">
       <div class="table-toolbar">
+        <div v-if="level === 'documents'" class="batch-actions">
+          <span v-if="selectedCount > 0">已选 {{ selectedCount }} 篇</span>
+          <el-button
+            type="primary"
+            :loading="batchSubmitting"
+            :disabled="selectedCount === 0"
+            @click="handleBatchChunk"
+          >
+            批量分块
+          </el-button>
+        </div>
         <div class="toolbar-actions">
           <el-input
             v-model="query"
@@ -165,6 +183,9 @@ const {
         :rows="documents"
         :loading="loading"
         :processing-ids="processingIds"
+        :selected-ids="selectedIds"
+        @toggle-selection="toggleSelection"
+        @selection-change="setSelection"
         @open="openDocument"
         @rename="(row) => openRename({ kind: 'document', value: row })"
         @remove="handleRemoveDocument"

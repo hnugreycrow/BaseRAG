@@ -101,6 +101,12 @@ export function listDocuments(knowledgeBaseId: string, page: number, pageSize: n
   })
 }
 
+export function getDocument(knowledgeBaseId: string, documentId: string) {
+  return request<KnowledgeDocument>({
+    url: `/knowledge-bases/${knowledgeBaseId}/documents/${documentId}`,
+  })
+}
+
 export function uploadDocument(knowledgeBaseId: string, file: File) {
   const data = new FormData()
   data.append('file', file)
@@ -131,7 +137,14 @@ export function createDocumentChunks(knowledgeBaseId: string, documentId: string
   return request<DocumentImportResult>({
     url: `/knowledge-bases/${knowledgeBaseId}/documents/${documentId}/chunks`,
     method: 'post',
-    timeout: 0,
+  })
+}
+
+export function createDocumentChunkBatch(knowledgeBaseId: string, documentIds: string[]) {
+  return request<{ acceptedDocumentIds: string[]; skippedDocumentIds: string[] }>({
+    url: `/knowledge-bases/${knowledgeBaseId}/documents/chunk-jobs`,
+    method: 'post',
+    data: { documentIds },
   })
 }
 

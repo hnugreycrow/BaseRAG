@@ -10,6 +10,7 @@ import com.hnu.backend.document.mapper.DocumentMapper;
 import com.hnu.backend.document.mapper.DocumentVersionMapper;
 import com.hnu.backend.document.parser.MarkdownChunker;
 import com.hnu.backend.document.storage.FileStorage;
+import com.hnu.backend.document.vo.DocumentChunkBatchResponse;
 import com.hnu.backend.document.vo.DocumentChunkDetailResponse;
 import com.hnu.backend.document.vo.DocumentChunkResponse;
 import com.hnu.backend.document.vo.DocumentImportResponse;
@@ -18,20 +19,30 @@ import com.hnu.backend.knowledgebase.service.KnowledgeBaseService;
 import com.hnu.backend.model.client.EmbeddingClient;
 import com.hnu.backend.shared.error.ApiException;
 import com.hnu.backend.shared.web.PageResponse;
+import jakarta.annotation.PreDestroy;
 import java.nio.ByteBuffer;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -50,6 +61,16 @@ public class DocumentService {
   private final FileStorage storage;
   private final TransactionTemplate tx;
   private final Semaphore imports = new Semaphore(2);
+  private final Semaphore taskSlots = new Semaphore(52);
+  private final ThreadPoolExecutor taskExecutor =
+      new ThreadPoolExecutor(
+          2,
+          2,
+          0,
+          TimeUnit.MILLISECONDS,
+          new ArrayBlockingQueue<>(50),
+          Thread.ofVirtual().name("document-chunk-", 0).factory(),
+          new ThreadPoolExecutor.AbortPolicy());
 
   /**
    * 创建文档服务。
@@ -179,10 +200,146 @@ public class DocumentService {
     if (!imports.tryAcquire())
       throw new ApiException("IMPORT_BUSY", "正在处理其他文档，请稍后重试", HttpStatus.TOO_MANY_REQUESTS);
     try {
-      return processChunks(ownerId, knowledgeBaseId, documentId);
+      return processChunks(ownerId, knowledgeBaseId, documentId, false);
     } finally {
       imports.release();
     }
+  }
+
+  /** 提交单篇文档处理任务，并立即返回处理状态。 */
+  public DocumentImportResponse enqueueChunks(UUID ownerId, UUID knowledgeBaseId, UUID documentId) {
+    enqueueBatch(ownerId, knowledgeBaseId, List.of(documentId), false);
+    Document document = requireDocument(ownerId, knowledgeBaseId, documentId);
+    long count =
+        document.getActiveVersionId() == null
+            ? 0
+            : chunks.selectCount(
+                new LambdaQueryWrapper<DocumentChunk>()
+                    .eq(DocumentChunk::getVersionId, document.getActiveVersionId()));
+    return new DocumentImportResponse(documentId, "PROCESSING", (int) count);
+  }
+
+  /** 校验所有权，跳过已有任务，原子抢占其余文档后提交进程内队列。 */
+  public DocumentChunkBatchResponse enqueueBatch(
+      UUID ownerId, UUID knowledgeBaseId, List<UUID> documentIds, boolean skipProcessing) {
+    if (documentIds == null
+        || documentIds.isEmpty()
+        || documentIds.size() > 50
+        || new HashSet<>(documentIds).size() != documentIds.size()
+        || documentIds.stream().anyMatch(Objects::isNull))
+      throw ApiException.bad("INVALID_BATCH", "请选择 1 到 50 篇不同的文档");
+    AtomicInteger reserved = new AtomicInteger();
+    DocumentChunkBatchResponse result;
+    try {
+      result =
+          tx.execute(
+              status -> {
+                knowledgeBases.requireEntity(ownerId, knowledgeBaseId);
+                List<DocumentVersion> selectedVersions = new ArrayList<>(documentIds.size());
+                for (UUID documentId : documentIds) {
+                  requireDocument(ownerId, knowledgeBaseId, documentId);
+                  selectedVersions.add(latestVersion(documentId));
+                }
+                List<UUID> accepted = new ArrayList<>();
+                List<UUID> skipped = new ArrayList<>();
+                for (int i = 0; i < documentIds.size(); i++) {
+                  UUID documentId = documentIds.get(i);
+                  DocumentVersion version = selectedVersions.get(i);
+                  if ("PROCESSING".equals(version.getStatus())) {
+                    if (!skipProcessing)
+                      throw ApiException.conflict("DOCUMENT_PROCESSING", "文档正在分块，请稍后刷新");
+                    skipped.add(documentId);
+                    continue;
+                  }
+                  if (claimVersion(version, true) == 1) {
+                    accepted.add(documentId);
+                    continue;
+                  }
+                  DocumentVersion current = latestVersion(documentId);
+                  if (skipProcessing
+                      && current.getId().equals(version.getId())
+                      && "PROCESSING".equals(current.getStatus())) {
+                    skipped.add(documentId);
+                    continue;
+                  }
+                  throw ApiException.conflict("DOCUMENT_PROCESSING", "所选文档状态已变化，请刷新后重试");
+                }
+                if (!accepted.isEmpty()) {
+                  if (!taskSlots.tryAcquire(accepted.size()))
+                    throw new ApiException(
+                        "IMPORT_BUSY", "分块队列已满，请稍后重试", HttpStatus.TOO_MANY_REQUESTS);
+                  reserved.set(accepted.size());
+                }
+                return new DocumentChunkBatchResponse(List.copyOf(accepted), List.copyOf(skipped));
+              });
+    } catch (RuntimeException e) {
+      if (reserved.get() > 0) taskSlots.release(reserved.get());
+      throw e;
+    }
+    List<UUID> accepted = result.acceptedDocumentIds();
+    int submitted = 0;
+    try {
+      for (UUID documentId : accepted) {
+        taskExecutor.execute(
+            () -> {
+              try {
+                processChunks(ownerId, knowledgeBaseId, documentId, true);
+              } catch (RuntimeException e) {
+                log.error("Background chunking failed documentId={}", documentId, e);
+              } finally {
+                taskSlots.release();
+              }
+            });
+        submitted++;
+      }
+    } catch (RejectedExecutionException e) {
+      for (int i = submitted; i < accepted.size(); i++) {
+        markInterrupted(accepted.get(i));
+      }
+      taskSlots.release(accepted.size() - submitted);
+      throw new ApiException("IMPORT_BUSY", "分块队列已停止，请稍后重试", HttpStatus.TOO_MANY_REQUESTS);
+    }
+    return result;
+  }
+
+  private int claimVersion(DocumentVersion version, boolean allowReady) {
+    LambdaUpdateWrapper<DocumentVersion> update =
+        new LambdaUpdateWrapper<DocumentVersion>()
+            .eq(DocumentVersion::getId, version.getId())
+            .in(
+                DocumentVersion::getStatus,
+                allowReady ? List.of("UPLOADED", "FAILED", "READY") : List.of("UPLOADED", "FAILED"))
+            .set(DocumentVersion::getStatus, "PROCESSING")
+            .set(DocumentVersion::getErrorCode, null);
+    return versions.update(update);
+  }
+
+  /** 未完成任务不在重启后续跑；恢复旧索引或标记首次分块失败。 */
+  @EventListener(ApplicationReadyEvent.class)
+  public void markInterruptedTasks() {
+    List<DocumentVersion> interrupted =
+        versions.selectList(
+            new LambdaQueryWrapper<DocumentVersion>().eq(DocumentVersion::getStatus, "PROCESSING"));
+    interrupted.forEach(version -> markInterrupted(version.getDocumentId()));
+  }
+
+  private void markInterrupted(UUID documentId) {
+    Document document = documents.selectById(documentId);
+    if (document == null) return;
+    DocumentVersion version = latestVersion(documentId);
+    if (!"PROCESSING".equals(version.getStatus())) return;
+    boolean rebuilding = Objects.equals(document.getActiveVersionId(), version.getId());
+    versions.update(
+        new LambdaUpdateWrapper<DocumentVersion>()
+            .eq(DocumentVersion::getId, version.getId())
+            .eq(DocumentVersion::getStatus, "PROCESSING")
+            .set(DocumentVersion::getStatus, rebuilding ? "READY" : "FAILED")
+            .set(DocumentVersion::getErrorCode, "IMPORT_INTERRUPTED"));
+  }
+
+  @PreDestroy
+  public void stopTaskExecutor() {
+    taskExecutor.shutdownNow();
   }
 
   /**
@@ -194,23 +351,21 @@ public class DocumentService {
    * @return 处理结果
    */
   private DocumentImportResponse processChunks(
-      UUID ownerId, UUID knowledgeBaseId, UUID documentId) {
+      UUID ownerId, UUID knowledgeBaseId, UUID documentId, boolean alreadyClaimed) {
     Document document = requireDocument(ownerId, knowledgeBaseId, documentId);
     DocumentVersion version = latestVersion(documentId);
-    boolean rebuilding = "READY".equals(version.getStatus());
-    if ("PROCESSING".equals(version.getStatus())) {
+    boolean rebuilding = Objects.equals(document.getActiveVersionId(), version.getId());
+    if (!alreadyClaimed && "PROCESSING".equals(version.getStatus())) {
       throw new ApiException("DOCUMENT_PROCESSING", "文档正在分块，请稍后刷新", HttpStatus.CONFLICT);
     }
-    int claimed =
-        versions.update(
-            new LambdaUpdateWrapper<DocumentVersion>()
-                .eq(DocumentVersion::getId, version.getId())
-                .in(DocumentVersion::getStatus, "UPLOADED", "FAILED", "READY")
-                .set(DocumentVersion::getStatus, "PROCESSING")
-                .set(DocumentVersion::getErrorCode, null));
-    if (claimed != 1)
-      throw new ApiException("DOCUMENT_PROCESSING", "文档正在分块，请稍后刷新", HttpStatus.CONFLICT);
-    // 先通过条件更新抢占处理权，确保同一版本不会被两个请求重复向量化。
+    if (alreadyClaimed) {
+      if (!"PROCESSING".equals(version.getStatus()))
+        throw new ApiException("DOCUMENT_PROCESSING", "文档状态已变化，请稍后刷新", HttpStatus.CONFLICT);
+    } else {
+      int claimed = claimVersion(version, true);
+      if (claimed != 1)
+        throw new ApiException("DOCUMENT_PROCESSING", "文档正在分块，请稍后刷新", HttpStatus.CONFLICT);
+    }
     version.setStatus("PROCESSING");
     version.setErrorCode(null);
     try {
@@ -315,6 +470,11 @@ public class DocumentService {
     return PageResponse.of(items, total, page, pageSize);
   }
 
+  /** 查询单篇文档的最新处理状态。 */
+  public DocumentResponse get(UUID ownerId, UUID knowledgeBaseId, UUID documentId) {
+    return toDocumentResponse(requireDocument(ownerId, knowledgeBaseId, documentId));
+  }
+
   /**
    * 修改文档显示名称。
    *
@@ -342,6 +502,8 @@ public class DocumentService {
    */
   public void delete(UUID ownerId, UUID knowledgeBaseId, UUID documentId) {
     requireDocument(ownerId, knowledgeBaseId, documentId);
+    if ("PROCESSING".equals(latestVersion(documentId).getStatus()))
+      throw ApiException.conflict("DOCUMENT_PROCESSING", "文档正在分块，完成后才能删除");
     List<DocumentVersion> storedVersions =
         versions.selectList(
             new LambdaQueryWrapper<DocumentVersion>()

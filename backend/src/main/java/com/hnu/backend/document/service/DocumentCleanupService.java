@@ -8,6 +8,7 @@ import com.hnu.backend.document.mapper.DocumentChunkMapper;
 import com.hnu.backend.document.mapper.DocumentMapper;
 import com.hnu.backend.document.mapper.DocumentVersionMapper;
 import com.hnu.backend.document.storage.FileStorage;
+import com.hnu.backend.shared.error.ApiException;
 import java.util.List;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -51,6 +52,11 @@ public class DocumentCleanupService {
    * <p>调用方应在事务中执行该方法。
    */
   public void deleteRecords(UUID knowledgeBaseId) {
+    if (versions.selectCount(
+            new LambdaQueryWrapper<DocumentVersion>()
+                .eq(DocumentVersion::getKnowledgeBaseId, knowledgeBaseId)
+                .eq(DocumentVersion::getStatus, "PROCESSING"))
+        > 0) throw ApiException.conflict("DOCUMENT_PROCESSING", "知识库中有文档正在分块，完成后才能删除");
     documents.update(
         new LambdaUpdateWrapper<Document>()
             .eq(Document::getKnowledgeBaseId, knowledgeBaseId)

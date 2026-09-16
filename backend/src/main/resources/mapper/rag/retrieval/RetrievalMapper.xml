@@ -11,7 +11,7 @@
         FROM document_versions v
         JOIN documents d ON d.active_version_id = v.id
         JOIN knowledge_bases kb ON kb.id = d.knowledge_base_id
-        WHERE v.status = 'READY'
+        WHERE v.status IN ('READY', 'PROCESSING')
           AND kb.owner_id = #{ownerId}
         ORDER BY v.embedding_model_id, v.embedding_provider, v.embedding_model, v.embedding_dimensions
     </select>
@@ -24,7 +24,7 @@
         FROM document_versions v
         JOIN documents d ON d.active_version_id = v.id
         JOIN knowledge_bases kb ON kb.id = d.knowledge_base_id
-        WHERE v.status = 'READY'
+        WHERE v.status IN ('READY', 'PROCESSING')
           AND kb.owner_id = #{ownerId}
           AND d.knowledge_base_id IN
           <foreach collection="knowledgeBaseIds" item="knowledgeBaseId" open="(" separator="," close=")">
@@ -52,7 +52,7 @@
             AND d.active_version_id = c.version_id
         JOIN knowledge_bases kb ON kb.id = d.knowledge_base_id
         JOIN document_versions v ON v.id = c.version_id
-        WHERE v.status = 'READY'
+        WHERE v.status IN ('READY', 'PROCESSING')
           AND kb.owner_id = #{ownerId}
           AND v.embedding_model_id = #{modelId}
           AND v.embedding_provider = #{provider}
@@ -82,7 +82,7 @@
             AND d.active_version_id = c.version_id
         JOIN knowledge_bases kb ON kb.id = d.knowledge_base_id
         JOIN document_versions v ON v.id = c.version_id
-        WHERE v.status = 'READY'
+        WHERE v.status IN ('READY', 'PROCESSING')
           AND kb.owner_id = #{ownerId}
           AND v.embedding_model_id = #{modelId}
           AND v.embedding_provider = #{provider}
@@ -120,7 +120,7 @@
         JOIN document_versions v ON v.id = c.version_id
         WHERE d.knowledge_base_id = #{knowledgeBaseId}
           AND kb.owner_id = #{ownerId}
-          AND v.status = 'READY'
+          AND v.status IN ('READY', 'PROCESSING')
           AND v.embedding_model_id = #{modelId}
           AND v.embedding_provider = #{provider}
           AND v.embedding_model = #{model}

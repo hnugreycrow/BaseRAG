@@ -1,12 +1,14 @@
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 
 import {
   createDocumentChunks,
+  createDocumentChunkBatch,
   createKnowledgeBase,
   deleteDocument,
   deleteKnowledgeBase,
   getDocumentChunk,
+  getDocument,
   getErrorMessage,
   getKnowledgeBase,
   listEmbeddingModels,
@@ -47,6 +49,26 @@ export function useKnowledgeBaseWorkspace() {
   const uploading = ref(false)
   const detailLoading = ref(false)
   const processingIds = ref(new Set<string>())
+  const selectedIds = ref(new Set<string>())
+  const batchSubmitting = ref(false)
+  const selectedCount = computed(() => selectedIds.value.size)
+  watch([page, paging.pageSize, paging.query, selectedKnowledgeBase], () => {
+    selectedIds.value = new Set()
+  })
+
+  function toggleSelection(id: string) {
+    const row = documents.value.find((item) => item.id === id)
+    if (!row) return
+    const next = new Set(selectedIds.value)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    selectedIds.value = next
+  }
+
+  function setSelection(rows: KnowledgeDocument[]) {
+    selectedIds.value = new Set(rows.map((row) => row.id))
+  }
+
   const createDialogOpen = ref(false)
   const uploadDialogOpen = ref(false)
   const renameDialogOpen = ref(false)
@@ -212,7 +234,7 @@ export function useKnowledgeBaseWorkspace() {
     if (row.status === 'READY') {
       try {
         await ElMessageBox.confirm(
-          '重新分块会替换当前分块及其向量，完成前可能影响检索。',
+          '重新分块完成后会替换当前分块及其向量，处理期间旧分块仍可检索。',
           '重新分块',
           { confirmButtonText: '继续分块', cancelButtonText: '取消', type: 'warning' },
         )
@@ -222,19 +244,57 @@ export function useKnowledgeBaseWorkspace() {
     }
     markProcessing(row.id, true)
     try {
-      const result = await createDocumentChunks(selectedKnowledgeBase.value.id, row.id)
+      await createDocumentChunks(selectedKnowledgeBase.value.id, row.id)
+      selectedIds.value = new Set([...selectedIds.value].filter((id) => id !== row.id))
       if (managingChunks) {
-        selectedDocument.value = { ...row, status: 'READY', chunkCount: result.chunkCount }
-        await loadChunks(false)
+        selectedDocument.value = { ...row, status: 'PROCESSING' }
       } else {
-        await loadDocuments(false)
+        documents.value = documents.value.map((item) =>
+          item.id === row.id ? { ...item, status: 'PROCESSING', errorCode: null } : item,
+        )
       }
-      ElMessage.success(`分块完成，共生成 ${result.chunkCount} 个分块`)
+      ElMessage.success('分块任务已提交，请刷新查看结果')
     } catch (error) {
       ElMessage.error(getErrorMessage(error))
       if (!managingChunks) await loadDocuments(false)
     } finally {
       markProcessing(row.id, false)
+    }
+  }
+
+  async function handleBatchChunk() {
+    if (!selectedKnowledgeBase.value || selectedIds.value.size === 0) return
+    const selected = documents.value.filter((row) => selectedIds.value.has(row.id))
+    const ids = selected.map((row) => row.id)
+    if (ids.length === 0) return
+    if (selected.some((row) => row.status === 'READY')) {
+      try {
+        await ElMessageBox.confirm(
+          '已完成文档会在后台重新分块；新分块生成后将替换旧分块，处理期间旧分块仍可检索。',
+          '批量重新分块',
+          { confirmButtonText: '提交任务', cancelButtonText: '取消', type: 'warning' },
+        )
+      } catch {
+        return
+      }
+    }
+    batchSubmitting.value = true
+    try {
+      const result = await createDocumentChunkBatch(selectedKnowledgeBase.value.id, ids)
+      const accepted = new Set(result.acceptedDocumentIds)
+      documents.value = documents.value.map((row) =>
+        accepted.has(row.id) ? { ...row, status: 'PROCESSING', errorCode: null } : row,
+      )
+      selectedIds.value = new Set()
+      if (result.acceptedDocumentIds.length > 0)
+        ElMessage.success(`已提交 ${result.acceptedDocumentIds.length} 篇文档，请刷新查看结果`)
+      if (result.skippedDocumentIds.length > 0)
+        ElMessage.warning(`跳过 ${result.skippedDocumentIds.length} 篇正在处理的文档`)
+    } catch (error) {
+      ElMessage.error(getErrorMessage(error))
+      await loadDocuments(false)
+    } finally {
+      batchSubmitting.value = false
     }
   }
 
@@ -266,12 +326,14 @@ export function useKnowledgeBaseWorkspace() {
   return {
     ...paging,
     chunkDetail,
+    batchSubmitting,
     createDialogOpen,
     detailDrawerOpen,
     detailLoading,
     goToDocuments,
     goToKnowledgeBases,
     handleChunk,
+    handleBatchChunk,
     handleCreate,
     handleRemoveDocument,
     handleRemoveKnowledgeBase,
@@ -283,7 +345,24 @@ export function useKnowledgeBaseWorkspace() {
     openKnowledgeBase,
     openRename,
     processingIds,
-    refreshCurrent: () => loadCurrent(),
+    selectedIds,
+    selectedCount,
+    toggleSelection,
+    setSelection,
+    refreshCurrent: async () => {
+      selectedIds.value = new Set()
+      if (selectedKnowledgeBase.value && selectedDocument.value) {
+        try {
+          selectedDocument.value = await getDocument(
+            selectedKnowledgeBase.value.id,
+            selectedDocument.value.id,
+          )
+        } catch (error) {
+          ElMessage.error(getErrorMessage(error))
+        }
+      }
+      await loadCurrent()
+    },
     renameDialogOpen,
     renameMaxLength,
     renameTarget,

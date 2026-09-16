@@ -1,8 +1,10 @@
 package com.hnu.backend.document.controller;
 
 import com.hnu.backend.auth.service.CurrentUserService;
+import com.hnu.backend.document.dto.DocumentChunkBatchRequest;
 import com.hnu.backend.document.dto.DocumentRequest;
 import com.hnu.backend.document.service.DocumentService;
+import com.hnu.backend.document.vo.DocumentChunkBatchResponse;
 import com.hnu.backend.document.vo.DocumentChunkDetailResponse;
 import com.hnu.backend.document.vo.DocumentChunkResponse;
 import com.hnu.backend.document.vo.DocumentImportResponse;
@@ -66,6 +68,12 @@ public class DocumentController {
     return documents.list(currentUsers.require().getId(), knowledgeBaseId, page, pageSize, query);
   }
 
+  /** 查询单篇文档的最新处理状态。 */
+  @GetMapping("/{documentId}")
+  public DocumentResponse get(@PathVariable UUID knowledgeBaseId, @PathVariable UUID documentId) {
+    return documents.get(currentUsers.require().getId(), knowledgeBaseId, documentId);
+  }
+
   /** 修改文档显示名称，不改变存储文件与已有版本。 */
   @PatchMapping("/{documentId}")
   public DocumentResponse rename(
@@ -97,9 +105,19 @@ public class DocumentController {
 
   /** 对文档最新版本执行分块和向量化，已就绪版本可通过该接口重建。 */
   @PostMapping("/{documentId}/chunks")
+  @ResponseStatus(HttpStatus.ACCEPTED)
   public DocumentImportResponse createChunks(
       @PathVariable UUID knowledgeBaseId, @PathVariable UUID documentId) {
-    return documents.createChunks(currentUsers.require().getId(), knowledgeBaseId, documentId);
+    return documents.enqueueChunks(currentUsers.require().getId(), knowledgeBaseId, documentId);
+  }
+
+  /** 一次提交当前页多篇文档，处理中项跳过。 */
+  @PostMapping("/chunk-jobs")
+  @ResponseStatus(HttpStatus.ACCEPTED)
+  public DocumentChunkBatchResponse createChunkBatch(
+      @PathVariable UUID knowledgeBaseId, @Valid @RequestBody DocumentChunkBatchRequest request) {
+    return documents.enqueueBatch(
+        currentUsers.require().getId(), knowledgeBaseId, request.documentIds(), true);
   }
 
   /** 获取当前生效版本中的指定分块全文。 */

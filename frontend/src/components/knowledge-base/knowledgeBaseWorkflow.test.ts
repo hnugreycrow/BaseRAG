@@ -1,7 +1,17 @@
 import { defineComponent } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ElButton, ElDialog, ElForm, ElFormItem, ElInput, ElOption, ElSelect } from 'element-plus'
+import {
+  ElButton,
+  ElDialog,
+  ElForm,
+  ElFormItem,
+  ElInput,
+  ElOption,
+  ElSelect,
+  ElMessage,
+  ElMessageBox,
+} from 'element-plus'
 import CreateKnowledgeBaseDialog from './CreateKnowledgeBaseDialog.vue'
 import { useKnowledgeBaseWorkspace } from './useKnowledgeBaseWorkspace'
 import * as api from '../../api'
@@ -23,6 +33,18 @@ vi.mock('../../api', async () => ({
   uploadDocument: vi
     .fn()
     .mockResolvedValue({ documentId: 'doc', status: 'UPLOADED', chunkCount: 0 }),
+  createDocumentChunkBatch: vi
+    .fn()
+    .mockResolvedValue({ acceptedDocumentIds: ['a', 'b'], skippedDocumentIds: [] }),
+  getDocument: vi.fn().mockResolvedValue({
+    id: 'c',
+    name: 'c.md',
+    status: 'READY',
+    errorCode: null,
+    chunkCount: 2,
+    createdAt: '2026-09-15T00:00:00Z',
+  }),
+  listDocumentChunks: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 10 }),
   createDocumentChunks: vi
     .fn()
     .mockResolvedValue({ documentId: 'doc', status: 'READY', chunkCount: 3 }),
@@ -65,6 +87,198 @@ describe('real knowledge base workflow', () => {
     })
     expect(api.createDocumentChunks).toHaveBeenCalledExactlyOnceWith('kb', 'doc')
     expect(workspace.processingIds.value.size).toBe(0)
+    wrapper.unmount()
+  })
+
+  it('selects every status, confirms READY once, and reports accepted and skipped rows', async () => {
+    const rows = [
+      {
+        id: 'a',
+        name: 'a.md',
+        status: 'UPLOADED',
+        errorCode: null,
+        chunkCount: 0,
+        createdAt: '2026-09-15T00:00:00Z',
+      },
+      {
+        id: 'b',
+        name: 'b.md',
+        status: 'FAILED',
+        errorCode: 'MODEL_TIMEOUT',
+        chunkCount: 0,
+        createdAt: '2026-09-15T00:00:00Z',
+      },
+      {
+        id: 'c',
+        name: 'c.md',
+        status: 'READY',
+        errorCode: null,
+        chunkCount: 2,
+        createdAt: '2026-09-15T00:00:00Z',
+      },
+      {
+        id: 'd',
+        name: 'd.md',
+        status: 'PROCESSING',
+        errorCode: 'KEEP',
+        chunkCount: 0,
+        createdAt: '2026-09-15T00:00:00Z',
+      },
+    ] as const
+    vi.mocked(api.listDocuments).mockResolvedValue({
+      items: rows.map((row) => ({ ...row })),
+      total: 4,
+      totalPages: 1,
+      page: 1,
+      pageSize: 10,
+    })
+    vi.mocked(api.createDocumentChunkBatch).mockResolvedValue({
+      acceptedDocumentIds: ['a', 'b', 'c'],
+      skippedDocumentIds: ['d'],
+    })
+    const confirm = vi
+      .spyOn(ElMessageBox, 'confirm')
+      .mockResolvedValue('confirm' as unknown as Awaited<ReturnType<typeof ElMessageBox.confirm>>)
+    const success = vi.spyOn(ElMessage, 'success')
+    const warning = vi.spyOn(ElMessage, 'warning')
+    let workspace!: ReturnType<typeof useKnowledgeBaseWorkspace>
+    const wrapper = mount(
+      defineComponent({
+        setup() {
+          workspace = useKnowledgeBaseWorkspace()
+          return () => null
+        },
+      }),
+    )
+    try {
+      await flushPromises()
+      await workspace.openKnowledgeBase({
+        id: 'kb',
+        name: '资料',
+        embeddingModelId: 'embed-id',
+        embeddingProvider: 'supplier',
+        embeddingModel: 'embed',
+        embeddingDimensions: 1024,
+        documentCount: 4,
+        createdAt: '2026-09-15T00:00:00Z',
+      })
+      workspace.setSelection(workspace.documents.value)
+      expect([...workspace.selectedIds.value]).toEqual(['a', 'b', 'c', 'd'])
+      workspace.page.value = 2
+      await flushPromises()
+      expect(workspace.selectedCount.value).toBe(0)
+      workspace.page.value = 1
+      await flushPromises()
+      workspace.setSelection(workspace.documents.value)
+      await workspace.handleBatchChunk()
+      expect(confirm).toHaveBeenCalledTimes(1)
+      expect(api.createDocumentChunkBatch).toHaveBeenCalledExactlyOnceWith('kb', [
+        'a',
+        'b',
+        'c',
+        'd',
+      ])
+      expect(workspace.selectedCount.value).toBe(0)
+      expect(
+        workspace.documents.value.filter((row) => row.status === 'PROCESSING').map((row) => row.id),
+      ).toEqual(['a', 'b', 'c', 'd'])
+      expect(workspace.documents.value.find((row) => row.id === 'd')?.errorCode).toBe('KEEP')
+      expect(success).toHaveBeenCalledWith(expect.stringContaining('3 篇'))
+      expect(warning).toHaveBeenCalledWith(expect.stringContaining('1 篇'))
+    } finally {
+      wrapper.unmount()
+      confirm.mockRestore()
+      success.mockRestore()
+      warning.mockRestore()
+    }
+  })
+
+  it('reports an all-processing batch without submitting new tasks', async () => {
+    vi.mocked(api.listDocuments).mockResolvedValue({
+      items: [
+        {
+          id: 'd',
+          name: 'd.md',
+          status: 'PROCESSING',
+          errorCode: null,
+          chunkCount: 0,
+          createdAt: '2026-09-15T00:00:00Z',
+        },
+      ],
+      total: 1,
+      totalPages: 1,
+      page: 1,
+      pageSize: 10,
+    })
+    vi.mocked(api.createDocumentChunkBatch).mockResolvedValue({
+      acceptedDocumentIds: [],
+      skippedDocumentIds: ['d'],
+    })
+    const warning = vi.spyOn(ElMessage, 'warning')
+    let workspace!: ReturnType<typeof useKnowledgeBaseWorkspace>
+    const wrapper = mount(
+      defineComponent({
+        setup() {
+          workspace = useKnowledgeBaseWorkspace()
+          return () => null
+        },
+      }),
+    )
+    try {
+      await flushPromises()
+      await workspace.openKnowledgeBase({
+        id: 'kb',
+        name: '资料',
+        embeddingModelId: 'embed-id',
+        embeddingProvider: 'supplier',
+        embeddingModel: 'embed',
+        embeddingDimensions: 1024,
+        documentCount: 1,
+        createdAt: '2026-09-15T00:00:00Z',
+      })
+      workspace.toggleSelection('d')
+      await workspace.handleBatchChunk()
+      expect(api.createDocumentChunkBatch).toHaveBeenCalledWith('kb', ['d'])
+      expect(workspace.selectedCount.value).toBe(0)
+      expect(warning).toHaveBeenCalledWith(expect.stringContaining('1 篇'))
+    } finally {
+      wrapper.unmount()
+      warning.mockRestore()
+    }
+  })
+
+  it('refreshes selected document status on the chunk page', async () => {
+    let workspace!: ReturnType<typeof useKnowledgeBaseWorkspace>
+    const wrapper = mount(
+      defineComponent({
+        setup() {
+          workspace = useKnowledgeBaseWorkspace()
+          return () => null
+        },
+      }),
+    )
+    await flushPromises()
+    workspace.selectedKnowledgeBase.value = {
+      id: 'kb',
+      name: '资料',
+      embeddingModelId: 'embed-id',
+      embeddingProvider: 'supplier',
+      embeddingModel: 'embed',
+      embeddingDimensions: 1024,
+      documentCount: 1,
+      createdAt: '2026-09-15T00:00:00Z',
+    }
+    workspace.selectedDocument.value = {
+      id: 'c',
+      name: 'c.md',
+      status: 'PROCESSING',
+      errorCode: null,
+      chunkCount: 2,
+      createdAt: '2026-09-15T00:00:00Z',
+    }
+    await workspace.refreshCurrent()
+    expect(api.getDocument).toHaveBeenCalledWith('kb', 'c')
+    expect(workspace.selectedDocument.value?.status).toBe('READY')
     wrapper.unmount()
   })
 

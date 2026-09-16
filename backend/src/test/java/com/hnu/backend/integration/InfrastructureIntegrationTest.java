@@ -393,7 +393,7 @@ class InfrastructureIntegrationTest {
     assertTrue(
         retrievalMapper
             .searchAll(
-                ownerId, "[1,0]", "qwen-emb-8b", "siliconflow", "Qwen/Qwen3-Embedding-8B", 2, 50)
+                ownerId, "[1,0]", "qwen-emb-8b", "siliconflow", "Qwen/Qwen3-Embedding-8B", 2, 5000)
             .stream()
             .anyMatch(hit -> hit.getDocumentId().equals(importedDocumentId)));
     var storage = config.getStorage();
@@ -578,6 +578,327 @@ class InfrastructureIntegrationTest {
         chunkMapper.selectCount(
             new LambdaQueryWrapper<DocumentChunk>()
                 .eq(DocumentChunk::getDocumentId, uploaded.documentId())));
+  }
+
+  @Test
+  void asyncChunkingReturnsBeforeEmbeddingAndRejectsDuplicateSubmission() throws Exception {
+    UUID ownerId = ownerId();
+    UUID knowledgeBaseId = kb();
+    var uploaded = documents.upload(ownerId, knowledgeBaseId, file("异步.md", "# 资料\n等待向量化。"));
+    var started = new java.util.concurrent.CountDownLatch(1);
+    var release = new java.util.concurrent.CountDownLatch(1);
+    when(embedding.embed(anyString(), anyString(), anyString(), anyInt(), anyList()))
+        .thenAnswer(
+            invocation -> {
+              started.countDown();
+              if (!release.await(5, java.util.concurrent.TimeUnit.SECONDS))
+                throw new IllegalStateException("embedding test timed out");
+              List<String> inputs = invocation.getArgument(4);
+              return inputs.stream().map(ignored -> new float[] {1, 0}).toList();
+            });
+    try {
+      var accepted = documents.enqueueChunks(ownerId, knowledgeBaseId, uploaded.documentId());
+      assertEquals("PROCESSING", accepted.status());
+      assertTrue(started.await(3, java.util.concurrent.TimeUnit.SECONDS));
+      assertEquals(
+          "PROCESSING", documents.get(ownerId, knowledgeBaseId, uploaded.documentId()).status());
+      ApiException duplicate =
+          assertThrows(
+              ApiException.class,
+              () -> documents.enqueueChunks(ownerId, knowledgeBaseId, uploaded.documentId()));
+      assertEquals("DOCUMENT_PROCESSING", duplicate.code());
+    } finally {
+      release.countDown();
+    }
+    awaitDocumentStatus(ownerId, knowledgeBaseId, uploaded.documentId(), "READY");
+  }
+
+  @Test
+  void boundedQueueRunsAtMostTwoTasksAndRejectsOverflow() throws Exception {
+    UUID ownerId = ownerId();
+    UUID knowledgeBaseId = kb();
+    List<UUID> documentIds = new ArrayList<>();
+    for (int i = 0; i < 53; i++) {
+      documentIds.add(
+          documents
+              .upload(ownerId, knowledgeBaseId, file("queue-" + i + ".md", "# 资料\n任务 " + i))
+              .documentId());
+    }
+    var started = new java.util.concurrent.CountDownLatch(2);
+    var release = new java.util.concurrent.CountDownLatch(1);
+    var active = new java.util.concurrent.atomic.AtomicInteger();
+    var maximum = new java.util.concurrent.atomic.AtomicInteger();
+    when(embedding.embed(anyString(), anyString(), anyString(), anyInt(), anyList()))
+        .thenAnswer(
+            invocation -> {
+              int count = active.incrementAndGet();
+              maximum.accumulateAndGet(count, Math::max);
+              started.countDown();
+              try {
+                if (!release.await(10, java.util.concurrent.TimeUnit.SECONDS))
+                  throw new IllegalStateException("embedding test timed out");
+                List<String> inputs = invocation.getArgument(4);
+                return inputs.stream().map(ignored -> new float[] {1, 0}).toList();
+              } finally {
+                active.decrementAndGet();
+              }
+            });
+    try {
+      documents.enqueueChunks(ownerId, knowledgeBaseId, documentIds.get(0));
+      documents.enqueueChunks(ownerId, knowledgeBaseId, documentIds.get(1));
+      assertTrue(started.await(3, java.util.concurrent.TimeUnit.SECONDS));
+      List<UUID> mixedSelection = new ArrayList<>();
+      mixedSelection.add(documentIds.get(0));
+      mixedSelection.addAll(documentIds.subList(2, 51));
+      var batch = documents.enqueueBatch(ownerId, knowledgeBaseId, mixedSelection, true);
+      assertEquals(49, batch.acceptedDocumentIds().size());
+      assertEquals(List.of(documentIds.get(0)), batch.skippedDocumentIds());
+      documents.enqueueChunks(ownerId, knowledgeBaseId, documentIds.get(51));
+      var onlyProcessing =
+          documents.enqueueBatch(ownerId, knowledgeBaseId, List.of(documentIds.get(1)), true);
+      assertTrue(onlyProcessing.acceptedDocumentIds().isEmpty());
+      assertEquals(List.of(documentIds.get(1)), onlyProcessing.skippedDocumentIds());
+      ApiException overflow =
+          assertThrows(
+              ApiException.class,
+              () -> documents.enqueueChunks(ownerId, knowledgeBaseId, documentIds.get(52)));
+      assertEquals(org.springframework.http.HttpStatus.TOO_MANY_REQUESTS, overflow.status());
+      assertEquals(
+          "UPLOADED", documents.get(ownerId, knowledgeBaseId, documentIds.get(52)).status());
+      assertEquals(2, maximum.get());
+    } finally {
+      release.countDown();
+    }
+    awaitDocumentStatus(ownerId, knowledgeBaseId, documentIds.get(51), "READY");
+    assertEquals(2, maximum.get());
+  }
+
+  @Test
+  void batchAcceptsPendingFailedAndReadyButSkipsProcessing() throws Exception {
+    UUID ownerId = ownerId();
+    UUID knowledgeBaseId = kb();
+    var pending = documents.upload(ownerId, knowledgeBaseId, file("待办.md", "# 待办\n尚未处理。"));
+    var failed = documents.upload(ownerId, knowledgeBaseId, file("失败重试.md", "# 重试\n需要处理。"));
+    var ready = documents.upload(ownerId, knowledgeBaseId, file("就绪.md", "# 就绪\n已有索引。"));
+    var processing = documents.upload(ownerId, knowledgeBaseId, file("处理中.md", "# 处理中\n当前任务。"));
+    documents.createChunks(ownerId, knowledgeBaseId, ready.documentId());
+    UUID oldChunk =
+        chunkMapper
+            .selectList(
+                new LambdaQueryWrapper<DocumentChunk>()
+                    .eq(DocumentChunk::getDocumentId, ready.documentId()))
+            .getFirst()
+            .getId();
+    versionMapper.update(
+        new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<
+                com.hnu.backend.document.entity.DocumentVersion>()
+            .eq(com.hnu.backend.document.entity.DocumentVersion::getDocumentId, failed.documentId())
+            .set(com.hnu.backend.document.entity.DocumentVersion::getStatus, "FAILED"));
+    versionMapper.update(
+        new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<
+                com.hnu.backend.document.entity.DocumentVersion>()
+            .eq(
+                com.hnu.backend.document.entity.DocumentVersion::getDocumentId,
+                processing.documentId())
+            .set(com.hnu.backend.document.entity.DocumentVersion::getStatus, "PROCESSING"));
+
+    var result =
+        documents.enqueueBatch(
+            ownerId,
+            knowledgeBaseId,
+            List.of(
+                pending.documentId(),
+                failed.documentId(),
+                ready.documentId(),
+                processing.documentId()),
+            true);
+    assertEquals(
+        List.of(pending.documentId(), failed.documentId(), ready.documentId()),
+        result.acceptedDocumentIds());
+    assertEquals(List.of(processing.documentId()), result.skippedDocumentIds());
+    awaitDocumentStatus(ownerId, knowledgeBaseId, pending.documentId(), "READY");
+    awaitDocumentStatus(ownerId, knowledgeBaseId, failed.documentId(), "READY");
+    awaitDocumentStatus(ownerId, knowledgeBaseId, ready.documentId(), "READY");
+    assertNotEquals(
+        oldChunk,
+        chunkMapper
+            .selectList(
+                new LambdaQueryWrapper<DocumentChunk>()
+                    .eq(DocumentChunk::getDocumentId, ready.documentId()))
+            .getFirst()
+            .getId());
+    assertEquals(
+        "PROCESSING", documents.get(ownerId, knowledgeBaseId, processing.documentId()).status());
+    documents.markInterruptedTasks();
+  }
+
+  @Test
+  void batchChecksOwnershipBeforeClaimingAnyDocument() {
+    UUID ownerId = ownerId();
+    UUID knowledgeBaseId = kb();
+    UUID otherKnowledgeBaseId = kb();
+    var pending = documents.upload(ownerId, knowledgeBaseId, file("本库.md", "# 本库\n未处理。"));
+    var foreign = documents.upload(ownerId, otherKnowledgeBaseId, file("其他库.md", "# 其他库\n未处理。"));
+    ApiException rejected =
+        assertThrows(
+            ApiException.class,
+            () ->
+                documents.enqueueBatch(
+                    ownerId,
+                    knowledgeBaseId,
+                    List.of(pending.documentId(), foreign.documentId()),
+                    true));
+    assertEquals("DOCUMENT_NOT_FOUND", rejected.code());
+    assertEquals(
+        "UPLOADED", documents.get(ownerId, knowledgeBaseId, pending.documentId()).status());
+  }
+
+  @Test
+  void concurrentBatchSubmissionsClaimDocumentOnlyOnce() throws Exception {
+    UUID ownerId = ownerId();
+    UUID knowledgeBaseId = kb();
+    var uploaded = documents.upload(ownerId, knowledgeBaseId, file("竞态.md", "# 竞态\n只处理一次。"));
+    var release = new java.util.concurrent.CountDownLatch(1);
+    when(embedding.embed(anyString(), anyString(), anyString(), anyInt(), anyList()))
+        .thenAnswer(
+            invocation -> {
+              if (!release.await(5, java.util.concurrent.TimeUnit.SECONDS))
+                throw new IllegalStateException("embedding test timed out");
+              List<String> inputs = invocation.getArgument(4);
+              return inputs.stream().map(ignored -> new float[] {1, 0}).toList();
+            });
+    try (var executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+      var start = new java.util.concurrent.CountDownLatch(1);
+      var first =
+          executor.submit(
+              () -> {
+                start.await();
+                return documents.enqueueBatch(
+                    ownerId, knowledgeBaseId, List.of(uploaded.documentId()), true);
+              });
+      var second =
+          executor.submit(
+              () -> {
+                start.await();
+                return documents.enqueueBatch(
+                    ownerId, knowledgeBaseId, List.of(uploaded.documentId()), true);
+              });
+      try {
+        start.countDown();
+        var firstResult = first.get(5, java.util.concurrent.TimeUnit.SECONDS);
+        var secondResult = second.get(5, java.util.concurrent.TimeUnit.SECONDS);
+        assertEquals(
+            1,
+            firstResult.acceptedDocumentIds().size() + secondResult.acceptedDocumentIds().size());
+        assertEquals(
+            1, firstResult.skippedDocumentIds().size() + secondResult.skippedDocumentIds().size());
+      } finally {
+        release.countDown();
+      }
+    }
+    awaitDocumentStatus(ownerId, knowledgeBaseId, uploaded.documentId(), "READY");
+  }
+
+  @Test
+  void rechunkingKeepsOldEvidenceSearchableUntilAtomicSwap() throws Exception {
+    UUID ownerId = ownerId();
+    UUID knowledgeBaseId = kb();
+    var uploaded = documents.upload(ownerId, knowledgeBaseId, file("重建异步.md", "# 资料\n旧索引可检索。"));
+    documents.createChunks(ownerId, knowledgeBaseId, uploaded.documentId());
+    UUID oldChunk =
+        chunkMapper
+            .selectList(
+                new LambdaQueryWrapper<DocumentChunk>()
+                    .eq(DocumentChunk::getDocumentId, uploaded.documentId()))
+            .getFirst()
+            .getId();
+    var started = new java.util.concurrent.CountDownLatch(1);
+    var release = new java.util.concurrent.CountDownLatch(1);
+    when(embedding.embed(anyString(), anyString(), anyString(), anyInt(), anyList()))
+        .thenAnswer(
+            invocation -> {
+              started.countDown();
+              if (!release.await(5, java.util.concurrent.TimeUnit.SECONDS))
+                throw new IllegalStateException("embedding test timed out");
+              List<String> inputs = invocation.getArgument(4);
+              return inputs.stream().map(ignored -> new float[] {1, 0}).toList();
+            });
+    try {
+      documents.enqueueChunks(ownerId, knowledgeBaseId, uploaded.documentId());
+      assertTrue(started.await(3, java.util.concurrent.TimeUnit.SECONDS));
+      assertEquals(
+          "PROCESSING", documents.get(ownerId, knowledgeBaseId, uploaded.documentId()).status());
+      assertEquals(
+          oldChunk,
+          retrievalMapper
+              .search(
+                  ownerId,
+                  knowledgeBaseId,
+                  "[1,0]",
+                  "qwen-emb-8b",
+                  "siliconflow",
+                  "Qwen/Qwen3-Embedding-8B",
+                  2,
+                  10)
+              .getFirst()
+              .getChunkId());
+    } finally {
+      release.countDown();
+    }
+    awaitDocumentStatus(ownerId, knowledgeBaseId, uploaded.documentId(), "READY");
+    UUID replacement =
+        chunkMapper
+            .selectList(
+                new LambdaQueryWrapper<DocumentChunk>()
+                    .eq(DocumentChunk::getDocumentId, uploaded.documentId()))
+            .getFirst()
+            .getId();
+    assertNotEquals(oldChunk, replacement);
+  }
+
+  @Test
+  void interruptedTasksBecomeRetryableWithoutAutomaticReplay() {
+    UUID ownerId = ownerId();
+    UUID knowledgeBaseId = kb();
+    var fresh = documents.upload(ownerId, knowledgeBaseId, file("中断首次.md", "# 首次\n重试。"));
+    var rebuilt = documents.upload(ownerId, knowledgeBaseId, file("中断重建.md", "# 重建\n旧索引。"));
+    documents.createChunks(ownerId, knowledgeBaseId, rebuilt.documentId());
+    versionMapper.update(
+        new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<
+                com.hnu.backend.document.entity.DocumentVersion>()
+            .eq(com.hnu.backend.document.entity.DocumentVersion::getDocumentId, fresh.documentId())
+            .set(com.hnu.backend.document.entity.DocumentVersion::getStatus, "PROCESSING"));
+    versionMapper.update(
+        new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<
+                com.hnu.backend.document.entity.DocumentVersion>()
+            .eq(
+                com.hnu.backend.document.entity.DocumentVersion::getDocumentId,
+                rebuilt.documentId())
+            .set(com.hnu.backend.document.entity.DocumentVersion::getStatus, "PROCESSING"));
+
+    documents.markInterruptedTasks();
+
+    assertEquals("FAILED", documents.get(ownerId, knowledgeBaseId, fresh.documentId()).status());
+    assertEquals("READY", documents.get(ownerId, knowledgeBaseId, rebuilt.documentId()).status());
+    assertEquals(
+        "IMPORT_INTERRUPTED",
+        documents.get(ownerId, knowledgeBaseId, fresh.documentId()).errorCode());
+    assertEquals(
+        "IMPORT_INTERRUPTED",
+        documents.get(ownerId, knowledgeBaseId, rebuilt.documentId()).errorCode());
+    documents.createChunks(ownerId, knowledgeBaseId, fresh.documentId());
+    assertEquals("READY", documents.get(ownerId, knowledgeBaseId, fresh.documentId()).status());
+  }
+
+  private void awaitDocumentStatus(
+      UUID ownerId, UUID knowledgeBaseId, UUID documentId, String expected)
+      throws InterruptedException {
+    long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
+    while (System.nanoTime() < deadline) {
+      if (expected.equals(documents.get(ownerId, knowledgeBaseId, documentId).status())) return;
+      Thread.sleep(25);
+    }
+    fail("Document did not reach status " + expected);
   }
 
   @Test

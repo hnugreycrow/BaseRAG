@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { Files, MoreFilled, RefreshRight, Scissor } from '@element-plus/icons-vue'
 
+import { ref, watch } from 'vue'
+import type { TableInstance } from 'element-plus'
 import type { KnowledgeDocument } from '../../api'
 
-defineProps<{
+const props = defineProps<{
   rows: KnowledgeDocument[]
   loading: boolean
   processingIds: Set<string>
+  selectedIds: Set<string>
 }>()
 
 const emit = defineEmits<{
@@ -14,6 +17,8 @@ const emit = defineEmits<{
   rename: [row: KnowledgeDocument]
   remove: [row: KnowledgeDocument]
   chunk: [row: KnowledgeDocument]
+  toggleSelection: [id: string]
+  selectionChange: [rows: KnowledgeDocument[]]
 }>()
 
 const statusMeta = {
@@ -36,7 +41,40 @@ function formatDate(value: string) {
 }
 
 function canOpen(row: KnowledgeDocument) {
-  return row.status === 'READY'
+  return row.chunkCount > 0
+}
+
+const tableRef = ref<TableInstance>()
+let syncingSelection = false
+
+watch(
+  [() => props.selectedIds, () => props.rows],
+  () => {
+    const table = tableRef.value
+    if (!table) return
+    const currentIds = new Set(
+      (table.getSelectionRows() as KnowledgeDocument[]).map((row) => row.id),
+    )
+    if (
+      currentIds.size === props.selectedIds.size &&
+      [...currentIds].every((id) => props.selectedIds.has(id))
+    )
+      return
+    syncingSelection = true
+    try {
+      table.clearSelection()
+      props.rows
+        .filter((row) => props.selectedIds.has(row.id))
+        .forEach((row) => table.toggleRowSelection(row, true))
+    } finally {
+      syncingSelection = false
+    }
+  },
+  { flush: 'post' },
+)
+
+function handleSelectionChange(rows: KnowledgeDocument[]) {
+  if (!syncingSelection) emit('selectionChange', rows)
 }
 
 function rowClassName({ row }: { row: KnowledgeDocument }) {
@@ -59,12 +97,15 @@ function statusLabel(row: KnowledgeDocument) {
 <template>
   <div class="desktop-resource-table">
     <el-table
+      ref="tableRef"
       :data="rows"
       row-key="id"
       class="data-table"
       :row-class-name="rowClassName"
       @row-click="handleRowClick"
+      @selection-change="handleSelectionChange"
     >
+      <el-table-column type="selection" width="48" align="center" />
       <el-table-column label="文档" min-width="200">
         <template #default="{ row }">
           <div class="document-cell">
@@ -103,7 +144,7 @@ function statusLabel(row: KnowledgeDocument) {
               class="chunk-button"
               :icon="row.status === 'READY' ? RefreshRight : Scissor"
               :loading="processingIds.has(row.id)"
-              :disabled="row.status === 'PROCESSING'"
+              :disabled="row.status === 'PROCESSING' || processingIds.has(row.id)"
               @click="emit('chunk', row)"
             >
               {{ row.status === 'READY' ? '重新分块' : '开始分块' }}
@@ -137,6 +178,11 @@ function statusLabel(row: KnowledgeDocument) {
   <div class="mobile-resource-list">
     <article v-for="row in rows" :key="row.id" class="resource-mobile-card">
       <h3>
+        <el-checkbox
+          :model-value="selectedIds.has(row.id)"
+          :aria-label="'选择 ' + row.name"
+          @change="emit('toggleSelection', row.id)"
+        />
         <button :disabled="!canOpen(row)" @click="handleRowClick(row)">{{ row.name }}</button>
       </h3>
       <el-tag :type="statusType(row)">{{
@@ -147,7 +193,7 @@ function statusLabel(row: KnowledgeDocument) {
       <div class="card-actions">
         <el-button
           :loading="processingIds.has(row.id)"
-          :disabled="row.status === 'PROCESSING'"
+          :disabled="row.status === 'PROCESSING' || processingIds.has(row.id)"
           @click="emit('chunk', row)"
           >{{
             row.status === 'READY' ? '重新分块' : row.status === 'FAILED' ? '重试分块' : '开始分块'

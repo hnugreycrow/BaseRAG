@@ -117,6 +117,14 @@
   border-bottom: 1px solid var(--color-line);
 }
 
+.batch-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-muted);
+  font-size: 13px;
+}
+
 .table-label {
   gap: 8px;
   color: #758198;
