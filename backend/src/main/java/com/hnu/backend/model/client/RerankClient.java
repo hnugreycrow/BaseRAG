@@ -95,9 +95,9 @@ public class RerankClient {
       ranks.add(new Rank(index, score));
     }
     if (seen.size() != documentCount) throw invalid();
-    String requestId = response.path("id").isTextual() ? response.path("id").asString() : null;
+    String requestId = response.path("id").isString() ? response.path("id").asString() : null;
     String model =
-        response.path("model").isTextual() ? response.path("model").asString() : target.model();
+        response.path("model").isString() ? response.path("model").asString() : target.model();
     long totalTokens =
         response.path("usage").path("total_tokens").isIntegralNumber()
             ? response.path("usage").path("total_tokens").asLong()

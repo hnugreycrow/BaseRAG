@@ -169,7 +169,7 @@ public class QueryPlanningStage {
     if (root == null
         || !root.isObject()
         || root.size() != 2
-        || !root.path("standaloneQuestion").isTextual()
+        || !root.path("standaloneQuestion").isString()
         || !root.path("subQuestions").isArray()) {
       throw invalid(DegradedReason.INVALID_SCHEMA);
     }
@@ -187,8 +187,8 @@ public class QueryPlanningStage {
     for (JsonNode node : subQuestionsNode) {
       if (!node.isObject()
           || node.size() != 2
-          || !node.path("id").isTextual()
-          || !node.path("question").isTextual()) {
+          || !node.path("id").isString()
+          || !node.path("question").isString()) {
         throw invalid(DegradedReason.INVALID_SCHEMA);
       }
       // 强制使用连续 Q1、Q2……，使后续执行结果可以稳定关联到子问题。

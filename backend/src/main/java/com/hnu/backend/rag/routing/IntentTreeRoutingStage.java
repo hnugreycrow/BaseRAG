@@ -222,10 +222,7 @@ public class IntentTreeRoutingStage {
       if (!expectedId.equals(item.path("subQuestionId").asString())) {
         throw new IllegalArgumentException("Invalid sub-question ID");
       }
-      String reason = item.path("reasonCode").asString();
-      if (!reason.equals("MATCHED") && !reason.equals("AMBIGUOUS")) {
-        throw new IllegalArgumentException("Invalid reason code");
-      }
+      ModelReasonCode reason = ModelReasonCode.parse(item.path("reasonCode").asString());
       JsonNode candidates = item.path("candidates");
       if (!candidates.isArray() || candidates.isEmpty() || candidates.size() > 2) {
         throw new IllegalArgumentException("Invalid intent candidates");
@@ -252,7 +249,7 @@ public class IntentTreeRoutingStage {
       IntentNode node = best.node();
       ScoredNode second = ranked.size() == 2 ? ranked.get(1) : null;
       RoutingReasonCode code =
-          reason.equals("AMBIGUOUS")
+          reason == ModelReasonCode.AMBIGUOUS
               ? RoutingReasonCode.AMBIGUOUS
               : switch (node.kind()) {
                 case KB -> RoutingReasonCode.KNOWLEDGE_SOURCE_REQUIRED;
@@ -328,6 +325,20 @@ public class IntentTreeRoutingStage {
   }
 
   private static final class LowConfidenceException extends RuntimeException {}
+
+  /** 分类模型输出的原因码，与最终路由决策的 {@link RoutingReasonCode} 区分。 */
+  private enum ModelReasonCode {
+    MATCHED,
+    AMBIGUOUS;
+
+    static ModelReasonCode parse(String value) {
+      try {
+        return valueOf(value);
+      } catch (IllegalArgumentException error) {
+        throw new IllegalArgumentException("Invalid reason code", error);
+      }
+    }
+  }
 
   private record ScoredNode(IntentNode node, double score) {}
 }

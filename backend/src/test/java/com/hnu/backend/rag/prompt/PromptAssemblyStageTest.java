@@ -117,7 +117,7 @@ class PromptAssemblyStageTest {
     assertEquals(
         longAnswer, loaded.path("recentTurns").path(1).path("assistantContent").asString());
     assertTrue(prompt.userPrompt().length() > 48_000);
-    assertTrue(loaded.path("summary").isTextual());
+    assertTrue(loaded.path("summary").isString());
     assertEquals("用户准备制度修订（已讨论）", loaded.path("summary").asString());
     assertTrue(prompt.systemPrompt().contains("以最近原文为准"));
   }

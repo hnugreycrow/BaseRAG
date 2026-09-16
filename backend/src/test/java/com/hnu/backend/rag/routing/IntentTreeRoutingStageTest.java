@@ -213,6 +213,16 @@ class IntentTreeRoutingStageTest {
   }
 
   @Test
+  void unknownModelReasonFallsBack() {
+    IntentNode kb = node("制度", IntentNode.Kind.KB, List.of(UUID.randomUUID()));
+    active(kb);
+    String invalidResponse = response(kb.id(), 0.9, "{}").replace("MATCHED", "UNKNOWN");
+    when(chat.generate(any(), any())).thenReturn(generation(invalidResponse));
+
+    assertFallback(QueryPlan.fallback("制度"), "INTENT_TREE_INVALID_OUTPUT");
+  }
+
+  @Test
   void rejectedToolArgumentsFallBackWithoutExecutingTool() {
     IntentNode mcp = mcpNode();
     active(mcp);

@@ -39,7 +39,7 @@ npm run format:check            # verify Prettier formatting
 
 ## Coding Style & Architecture
 
-Use two-space indentation in Java, TypeScript, and Vue files. Java is formatted with Google Java Format through Spotless; frontend files use Prettier. Use `PascalCase` for Java classes and Vue components, `camelCase` for methods and variables, and descriptive REST resource names.
+Use two-space indentation in Java, TypeScript, and Vue files. Java is formatted with Google Java Format through Spotless; frontend files use Prettier. Use `PascalCase` for Java classes and Vue components, `camelCase` for methods and variables, and descriptive REST resource names. Always use braces for if statements.
 
 Backend modules follow Controller / Service / Mapper layering. Controllers handle HTTP concerns only; business rules belong in services and persistence belongs in mappers or infrastructure adapters. Keep DTOs, response/VO types, and entities separate. Use RESTful endpoints. Do not alter existing database columns directly; add forward-only Flyway migrations. Explain any new dependency and avoid unrelated large-scale refactors.
 
