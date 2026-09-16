@@ -47,6 +47,12 @@ export const router = createRouter({
           meta: { title: '知识库', section: '' },
         },
         {
+          path: 'intent-tree',
+          name: 'intent-tree',
+          component: () => import('../views/IntentTreeView.vue'),
+          meta: { title: '全局意图树', section: '知识管理' },
+        },
+        {
           path: 'models',
           name: 'models',
           component: () => import('../views/ModelView.vue'),

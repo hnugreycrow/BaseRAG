@@ -1,5 +1,6 @@
 import { createApp } from 'vue'
 import {
+  ElAlert,
   ElButton,
   ElConfigProvider,
   ElDialog,
@@ -12,15 +13,20 @@ import {
   ElFormItem,
   ElIcon,
   ElInput,
+  ElInputNumber,
   ElMenu,
   ElMenuItem,
   ElOption,
   ElPagination,
+  ElRadio,
+  ElRadioGroup,
   ElSelect,
+  ElSwitch,
   ElTable,
   ElTableColumn,
   ElTag,
   ElTooltip,
+  ElTree,
   ElUpload,
 } from 'element-plus'
 import 'element-plus/dist/index.css'
@@ -45,6 +51,7 @@ window.addEventListener('baserag:unauthorized', () => {
 })
 
 const elementComponents = [
+  ElAlert,
   ElButton,
   ElConfigProvider,
   ElDialog,
@@ -57,15 +64,20 @@ const elementComponents = [
   ElFormItem,
   ElIcon,
   ElInput,
+  ElInputNumber,
   ElMenu,
   ElMenuItem,
   ElOption,
   ElPagination,
+  ElRadio,
+  ElRadioGroup,
   ElSelect,
+  ElSwitch,
   ElTable,
   ElTableColumn,
   ElTag,
   ElTooltip,
+  ElTree,
   ElUpload,
 ]
 

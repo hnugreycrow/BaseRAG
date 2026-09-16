@@ -6,7 +6,7 @@ import com.hnu.backend.rag.memory.MemoryStage;
 import com.hnu.backend.rag.memory.RagMemory;
 import com.hnu.backend.rag.planning.QueryPlan;
 import com.hnu.backend.rag.planning.QueryPlanningStage;
-import com.hnu.backend.rag.routing.IntentRoutingStage;
+import com.hnu.backend.rag.routing.IntentTreeRoutingStage;
 import com.hnu.backend.rag.routing.RoutingPlan;
 import org.springframework.stereotype.Service;
 
@@ -15,22 +15,22 @@ import org.springframework.stereotype.Service;
 public class ConversationContextService {
   private final MemoryStage memoryStage;
   private final QueryPlanningStage queryPlanningStage;
-  private final IntentRoutingStage intentRoutingStage;
+  private final IntentTreeRoutingStage treeRoutingStage;
 
   /**
    * 创建会话上下文准备服务。
    *
    * @param memoryStage 会话记忆阶段
    * @param queryPlanningStage 问题规划阶段
-   * @param intentRoutingStage 意图路由阶段
+   * @param treeRoutingStage 意图树路由阶段
    */
   public ConversationContextService(
       MemoryStage memoryStage,
       QueryPlanningStage queryPlanningStage,
-      IntentRoutingStage intentRoutingStage) {
+      IntentTreeRoutingStage treeRoutingStage) {
     this.memoryStage = memoryStage;
     this.queryPlanningStage = queryPlanningStage;
-    this.intentRoutingStage = intentRoutingStage;
+    this.treeRoutingStage = treeRoutingStage;
   }
 
   /**
@@ -46,7 +46,7 @@ public class ConversationContextService {
     RagMemory memory =
         memoryStage.execute(conversation.getOwnerId(), conversation.getId(), currentTurn);
     QueryPlan queryPlan = queryPlanningStage.execute(memory, question);
-    RoutingPlan routingPlan = intentRoutingStage.execute(queryPlan);
+    RoutingPlan routingPlan = treeRoutingStage.execute(queryPlan, RagRunTrace.noop());
     return new PreparedContext(memory, queryPlan, routingPlan);
   }
 
@@ -64,7 +64,7 @@ public class ConversationContextService {
     RagMemory memory =
         memoryStage.execute(conversation.getOwnerId(), conversation.getId(), currentTurn, trace);
     QueryPlan queryPlan = queryPlanningStage.execute(memory, question, trace);
-    RoutingPlan routingPlan = intentRoutingStage.execute(queryPlan, trace);
+    RoutingPlan routingPlan = treeRoutingStage.execute(queryPlan, trace);
     return new PreparedContext(memory, queryPlan, routingPlan);
   }
 

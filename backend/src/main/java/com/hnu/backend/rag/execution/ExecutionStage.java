@@ -236,22 +236,31 @@ public class ExecutionStage {
     try {
       if (route.intent() == IntentType.KNOWLEDGE_RETRIEVAL) {
         List<EvidenceCandidate> candidates =
-            trace.enabled()
-                ? retrieval.retrieveCandidates(
+            route.knowledgeBaseIds() != null
+                ? retrieval.retrieveDirectedCandidates(
                     ownerId,
                     question.id(),
                     question.question(),
-                    knowledgeBaseIds,
+                    route.knowledgeBaseIds(),
                     snapshot.forSubQuestion(question.id()),
                     cancellationToken,
                     trace)
-                : retrieval.retrieveCandidates(
-                    ownerId,
-                    question.id(),
-                    question.question(),
-                    knowledgeBaseIds,
-                    snapshot.forSubQuestion(question.id()),
-                    cancellationToken);
+                : trace.enabled()
+                    ? retrieval.retrieveCandidates(
+                        ownerId,
+                        question.id(),
+                        question.question(),
+                        knowledgeBaseIds,
+                        snapshot.forSubQuestion(question.id()),
+                        cancellationToken,
+                        trace)
+                    : retrieval.retrieveCandidates(
+                        ownerId,
+                        question.id(),
+                        question.question(),
+                        knowledgeBaseIds,
+                        snapshot.forSubQuestion(question.id()),
+                        cancellationToken);
         return result(
             question,
             route,

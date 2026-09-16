@@ -207,7 +207,6 @@ class PromptAssemblyStageTest {
   void loadsEverySystemPromptFromUtf8MarkdownResources() {
     assertTrue(MemorySummaryPrompts.system(400).startsWith("# 角色与任务"));
     assertTrue(QueryPlanningPrompts.system().contains("# 输出格式"));
-    assertTrue(IntentRoutingPrompts.system().contains("KNOWLEDGE_RETRIEVAL"));
     assertTrue(AnswerPrompts.knowledge().contains("knowledgeEvidence"));
     assertTrue(AnswerPrompts.knowledge().contains("同一份文档支持"));
     assertTrue(AnswerPrompts.knowledge().contains("每个知识库事实都必须能明确归属"));

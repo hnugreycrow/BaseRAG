@@ -6,6 +6,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.hnu.backend.conversation.entity.Conversation;
+import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.rag.memory.MemoryProvider;
 import com.hnu.backend.rag.memory.MemoryStage;
 import com.hnu.backend.rag.memory.MemoryTurn;
@@ -13,7 +14,7 @@ import com.hnu.backend.rag.memory.RagMemory;
 import com.hnu.backend.rag.planning.QueryPlan;
 import com.hnu.backend.rag.planning.QueryPlanningStage;
 import com.hnu.backend.rag.routing.IntentRoute;
-import com.hnu.backend.rag.routing.IntentRoutingStage;
+import com.hnu.backend.rag.routing.IntentTreeRoutingStage;
 import com.hnu.backend.rag.routing.RoutingPlan;
 import com.hnu.backend.rag.routing.RoutingReasonCode;
 import java.util.List;
@@ -23,7 +24,7 @@ import org.junit.jupiter.api.Test;
 class ConversationContextServiceTest {
   private final MemoryProvider memories = mock(MemoryProvider.class);
   private final QueryPlanningStage planning = mock(QueryPlanningStage.class);
-  private final IntentRoutingStage routing = mock(IntentRoutingStage.class);
+  private final IntentTreeRoutingStage routing = mock(IntentTreeRoutingStage.class);
   private final ConversationContextService service =
       new ConversationContextService(new MemoryStage(memories), planning, routing);
 
@@ -41,7 +42,7 @@ class ConversationContextServiceTest {
     RoutingPlan routes = knowledgeRoutes(plan);
     when(memories.load(conversation.getOwnerId(), conversation.getId(), 6)).thenReturn(memory);
     when(planning.execute(memory, "它有什么要求？")).thenReturn(plan);
-    when(routing.execute(plan)).thenReturn(routes);
+    when(routing.execute(plan, RagRunTrace.noop())).thenReturn(routes);
 
     var prepared = service.prepare(conversation, 6, "它有什么要求？");
 
@@ -50,7 +51,7 @@ class ConversationContextServiceTest {
     assertEquals(memory, prepared.memory());
     verify(memories).load(conversation.getOwnerId(), conversation.getId(), 6);
     verify(planning).execute(memory, "它有什么要求？");
-    verify(routing).execute(plan);
+    verify(routing).execute(plan, RagRunTrace.noop());
   }
 
   @Test
@@ -61,7 +62,7 @@ class ConversationContextServiceTest {
     RoutingPlan routes = knowledgeRoutes(plan);
     when(memories.load(conversation.getOwnerId(), conversation.getId(), 1)).thenReturn(memory);
     when(planning.execute(memory, "原问题")).thenReturn(plan);
-    when(routing.execute(plan)).thenReturn(routes);
+    when(routing.execute(plan, RagRunTrace.noop())).thenReturn(routes);
 
     var prepared = service.prepare(conversation, 1, "原问题");
 
@@ -69,7 +70,7 @@ class ConversationContextServiceTest {
     assertEquals(routes, prepared.routingPlan());
     assertEquals(memory, prepared.memory());
     verify(planning).execute(memory, "原问题");
-    verify(routing).execute(plan);
+    verify(routing).execute(plan, RagRunTrace.noop());
   }
 
   private RoutingPlan knowledgeRoutes(QueryPlan plan) {

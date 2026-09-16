@@ -11,11 +11,14 @@ import com.hnu.backend.auth.service.CurrentUserService;
 import com.hnu.backend.configuration.RagProperties;
 import com.hnu.backend.document.controller.DocumentController;
 import com.hnu.backend.document.service.DocumentService;
+import com.hnu.backend.intent.IntentTreeController;
+import com.hnu.backend.intent.IntentTreeService;
 import com.hnu.backend.knowledgebase.controller.KnowledgeBaseController;
 import com.hnu.backend.knowledgebase.service.KnowledgeBaseService;
 import com.hnu.backend.observability.controller.RagRunController;
 import com.hnu.backend.observability.service.RagRunQueryService;
 import com.hnu.backend.rag.controller.RagEvaluationController;
+import com.hnu.backend.rag.mcp.McpToolRegistry;
 import com.hnu.backend.shared.error.ApiException;
 import com.hnu.backend.shared.error.GlobalExceptionHandler;
 import java.util.UUID;
@@ -35,13 +38,17 @@ class ManagementAuthorizationTest {
     DocumentService documents = mock(DocumentService.class);
     RagRunQueryService runs = mock(RagRunQueryService.class);
     AdminUserService adminUsers = mock(AdminUserService.class);
+    IntentTreeService intentTree =
+        mock(IntentTreeService.class, withSettings().mockMaker("mock-maker-subclass"));
+    McpToolRegistry tools = mock(McpToolRegistry.class);
     var mvc =
         MockMvcBuilders.standaloneSetup(
                 new KnowledgeBaseController(knowledgeBases, users),
                 new DocumentController(documents, users, knowledgeBases),
                 new RagRunController(users, runs),
                 new RagEvaluationController(new RagProperties(), users),
-                new AdminUserController(users, adminUsers))
+                new AdminUserController(users, adminUsers),
+                new IntentTreeController(intentTree, users, tools))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
     UUID kb = UUID.randomUUID();
@@ -66,6 +73,10 @@ class ManagementAuthorizationTest {
     mvc.perform(get("/api/observability/rag-runs")).andExpect(status().isForbidden());
     mvc.perform(get("/api/evaluation/config")).andExpect(status().isForbidden());
     mvc.perform(get("/api/admin/users")).andExpect(status().isForbidden());
-    verifyNoInteractions(knowledgeBases, documents, runs, adminUsers);
+    mvc.perform(get("/api/admin/intent-nodes")).andExpect(status().isForbidden());
+    mvc.perform(get("/api/admin/intent-nodes/tools")).andExpect(status().isForbidden());
+    mvc.perform(delete("/api/admin/intent-nodes/{id}", UUID.randomUUID()))
+        .andExpect(status().isForbidden());
+    verifyNoInteractions(knowledgeBases, documents, runs, adminUsers, intentTree, tools);
   }
 }

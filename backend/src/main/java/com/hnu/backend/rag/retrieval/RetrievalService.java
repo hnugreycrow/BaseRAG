@@ -1,6 +1,8 @@
 package com.hnu.backend.rag.retrieval;
 
 import com.hnu.backend.configuration.RagProperties;
+import com.hnu.backend.knowledgebase.entity.KnowledgeBase;
+import com.hnu.backend.knowledgebase.mapper.KnowledgeBaseMapper;
 import com.hnu.backend.model.client.EmbeddingClient;
 import com.hnu.backend.observability.RagStageName;
 import com.hnu.backend.observability.trace.RagRunTrace;
@@ -19,6 +21,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 /** 负责跨向量模型检索知识库分块，并按模型内名次统一归并、排序结果。 */
@@ -27,6 +30,7 @@ public class RetrievalService {
   private static final long CANCELLATION_POLL_MS = 50;
   private final EmbeddingClient embedding;
   private final RetrievalMapper retrieval;
+  private final KnowledgeBaseMapper knowledgeBases;
   private final RagProperties config;
   private final CandidateMerge candidateMerge;
   private final ExecutorService searchExecutor = Executors.newVirtualThreadPerTaskExecutor();
@@ -39,15 +43,27 @@ public class RetrievalService {
    * @param config RAG 检索配置
    * @param candidateMerge 跨模型候选合并器
    */
+  @Autowired
+  public RetrievalService(
+      EmbeddingClient embedding,
+      RetrievalMapper retrieval,
+      KnowledgeBaseMapper knowledgeBases,
+      RagProperties config,
+      CandidateMerge candidateMerge) {
+    this.embedding = embedding;
+    this.retrieval = retrieval;
+    this.knowledgeBases = knowledgeBases;
+    this.config = config;
+    this.candidateMerge = candidateMerge;
+  }
+
+  /** 保留不启动 Spring 容器的检索单元测试构造方式。 */
   public RetrievalService(
       EmbeddingClient embedding,
       RetrievalMapper retrieval,
       RagProperties config,
       CandidateMerge candidateMerge) {
-    this.embedding = embedding;
-    this.retrieval = retrieval;
-    this.config = config;
-    this.candidateMerge = candidateMerge;
+    this(embedding, retrieval, null, config, candidateMerge);
   }
 
   @PreDestroy
@@ -228,6 +244,130 @@ public class RetrievalService {
     }
     // 不同 Embedding 模型的原始相似度不可直接比较，只使用各自模型内名次产生的 RRF 分数合并。
     return candidateMerge.mergeAndSelect(candidates, List.of(subQuestionId), budget.recallBudget());
+  }
+
+  /** 绑定库与其余公共库分配 75%/25% 召回预算，每个模型只生成一次查询向量。 */
+  public List<EvidenceCandidate> retrieveDirectedCandidates(
+      UUID ownerId,
+      String subQuestionId,
+      String question,
+      List<UUID> primaryKnowledgeBaseIds,
+      StageBudget budget,
+      CancellationToken cancellationToken,
+      RagRunTrace trace) {
+    if (primaryKnowledgeBaseIds == null || primaryKnowledgeBaseIds.isEmpty()) {
+      return retrieveCandidates(
+          ownerId, subQuestionId, question, null, budget, cancellationToken, trace);
+    }
+    if (!budget.vectorEnabled()) {
+      skipVectorStages(trace, subQuestionId, "VECTOR_DISABLED");
+      return List.of();
+    }
+    List<UUID> primary = primaryKnowledgeBaseIds.stream().distinct().toList();
+    List<UUID> supplementalScope =
+        knowledgeBases.selectWithDocumentCount(null, Integer.MAX_VALUE, 0).stream()
+            .map(KnowledgeBase::getId)
+            .filter(id -> !primary.contains(id))
+            .toList();
+    int supplementLimit =
+        !supplementalScope.isEmpty() && budget.recallBudget() > 1
+            ? Math.max(1, (int) Math.round(budget.recallBudget() * 0.25))
+            : 0;
+    int primaryLimit = budget.recallBudget() - supplementLimit;
+    List<EvidenceCandidate> candidates = new ArrayList<>();
+    var modelBindings = retrieval.activeModelBindings(ownerId);
+    if (modelBindings.isEmpty()) {
+      skipVectorStages(trace, subQuestionId, "NO_EMBEDDING_BINDINGS");
+      return List.of();
+    }
+    long remainingSearchNanos = TimeUnit.MILLISECONDS.toNanos(budget.timeoutMs());
+    for (var binding : modelBindings) {
+      cancellationToken.throwIfCancelled();
+      RagRunTrace.Span embeddingSpan =
+          trace
+              .start(RagStageName.EMBEDDING, subQuestionId, 1)
+              .model(binding.model(), null, binding.model());
+      float[] vector;
+      try {
+        vector =
+            embedding
+                .embed(
+                    binding.modelId(),
+                    binding.provider(),
+                    binding.model(),
+                    binding.dimensions(),
+                    List.of(question))
+                .getFirst();
+        embeddingSpan.success(1);
+      } catch (RuntimeException error) {
+        embeddingSpan.failed(errorCode(error, "EMBEDDING_FAILED"));
+        throw error;
+      }
+      RagRunTrace.Span retrievalSpan =
+          trace.start(RagStageName.DATABASE_RETRIEVAL, subQuestionId, 2);
+      try {
+        long started = System.nanoTime();
+        List<SearchHit> focused =
+            search(
+                ownerId,
+                primary,
+                vector,
+                binding,
+                primaryLimit,
+                remainingSearchNanos,
+                cancellationToken);
+        remainingSearchNanos -= System.nanoTime() - started;
+        addRanked(candidates, focused, subQuestionId, binding, budget);
+        if (supplementLimit > 0) {
+          started = System.nanoTime();
+          List<SearchHit> supplementary =
+              search(
+                  ownerId,
+                  supplementalScope,
+                  vector,
+                  binding,
+                  supplementLimit,
+                  remainingSearchNanos,
+                  cancellationToken);
+          remainingSearchNanos -= System.nanoTime() - started;
+          addRanked(candidates, supplementary, subQuestionId, binding, budget);
+        }
+        retrievalSpan.success(candidates.size());
+      } catch (RuntimeException error) {
+        retrievalSpan.failed(errorCode(error, "DATABASE_RETRIEVAL_FAILED"));
+        throw error;
+      }
+    }
+    return candidateMerge.mergeAndSelect(candidates, List.of(subQuestionId), budget.recallBudget());
+  }
+
+  private void addRanked(
+      List<EvidenceCandidate> candidates,
+      List<SearchHit> hits,
+      String subQuestionId,
+      EmbeddingBinding binding,
+      StageBudget budget) {
+    List<SearchHit> ranked =
+        hits.stream()
+            .sorted(
+                Comparator.comparingDouble(SearchHit::getSimilarity)
+                    .reversed()
+                    .thenComparing(hit -> hit.getChunkId().toString()))
+            .toList();
+    for (int index = 0; index < ranked.size(); index++) {
+      SearchHit hit = ranked.get(index);
+      int rank = index + 1;
+      RetrievalAttribution attribution =
+          new RetrievalAttribution(
+              hit.getChunkId(),
+              subQuestionId,
+              binding.model(),
+              hit.getSimilarity(),
+              rank,
+              RetrievalChannel.VECTOR,
+              budget.vectorWeight() / (budget.rrfK() + rank));
+      candidates.add(toCandidate(hit, subQuestionId, attribution));
+    }
   }
 
   /** 通道预算只统计数据库召回，不统计生成查询向量的模型耗时。 */
