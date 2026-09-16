@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createAdminUser, resetAdminUserPassword, setAdminUserEnabled } from './auth'
-import { request } from './http'
-vi.mock('./http', () => ({ request: vi.fn().mockResolvedValue(undefined) }))
+import { createAdminUser, resetAdminUserPassword, setAdminUserEnabled } from '../../api/auth'
+import { request } from '../../api/http'
+vi.mock('../../api/http', () => ({ request: vi.fn().mockResolvedValue(undefined) }))
 describe('admin user API contracts', () => {
   it('uses the existing server endpoints and field names', async () => {
     const input = {

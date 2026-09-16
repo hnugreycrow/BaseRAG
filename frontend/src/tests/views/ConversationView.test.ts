@@ -4,13 +4,18 @@ import { flushPromises, shallowMount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { vi } from 'vitest'
 
-import { deleteConversation, getConversation, listConversations, renameConversation } from '../api'
-import ConversationHistory from '../components/conversation/ConversationHistory.vue'
+import {
+  deleteConversation,
+  getConversation,
+  listConversations,
+  renameConversation,
+} from '../../api'
+import ConversationHistory from '../../components/conversation/ConversationHistory.vue'
 
-import ConversationView from './ConversationView.vue'
+import ConversationView from '../../views/ConversationView.vue'
 
-vi.mock('../api', async () => {
-  const actual = await vi.importActual<typeof import('../api')>('../api')
+vi.mock('../../api', async () => {
+  const actual = await vi.importActual<typeof import('../../api')>('../../api')
   return {
     ...actual,
     listConversations: vi.fn().mockResolvedValue([]),

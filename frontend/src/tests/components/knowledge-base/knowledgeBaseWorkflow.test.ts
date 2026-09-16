@@ -12,12 +12,12 @@ import {
   ElMessage,
   ElMessageBox,
 } from 'element-plus'
-import CreateKnowledgeBaseDialog from './CreateKnowledgeBaseDialog.vue'
-import { useKnowledgeBaseWorkspace } from './useKnowledgeBaseWorkspace'
-import * as api from '../../api'
+import CreateKnowledgeBaseDialog from '../../../components/knowledge-base/CreateKnowledgeBaseDialog.vue'
+import { useKnowledgeBaseWorkspace } from '../../../components/knowledge-base/useKnowledgeBaseWorkspace'
+import * as api from '../../../api'
 
-vi.mock('../../api', async () => ({
-  ...(await vi.importActual<typeof import('../../api')>('../../api')),
+vi.mock('../../../api', async () => ({
+  ...(await vi.importActual<typeof import('../../../api')>('../../../api')),
   listKnowledgeBases: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 10 }),
   listEmbeddingModels: vi.fn().mockResolvedValue([]),
   listDocuments: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 10 }),

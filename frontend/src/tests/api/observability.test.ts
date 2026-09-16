@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { request } from './http'
-import { getRagRun, listRagRuns, summarizeRagRuns } from './observability'
+import { request } from '../../api/http'
+import { getRagRun, listRagRuns, summarizeRagRuns } from '../../api/observability'
 
-vi.mock('./http', () => ({ request: vi.fn() }))
+vi.mock('../../api/http', () => ({ request: vi.fn() }))
 
 describe('observability api', () => {
   beforeEach(() => {

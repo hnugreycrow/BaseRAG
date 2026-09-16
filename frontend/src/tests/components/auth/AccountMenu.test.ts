@@ -4,8 +4,8 @@ import type { FormRules } from 'element-plus'
 import { vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
-import { useAuthStore } from '../../store'
-import AccountMenu from './AccountMenu.vue'
+import { useAuthStore } from '../../../store'
+import AccountMenu from '../../../components/auth/AccountMenu.vue'
 
 const user = {
   id: '00000000-0000-0000-0000-000000000010',

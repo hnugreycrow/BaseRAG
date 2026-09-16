@@ -4,12 +4,12 @@ import { defineComponent, h } from 'vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import * as api from '../../api'
-import { useAuthStore } from '../../store/auth'
-import { useRagRunObservability } from './useRagRunObservability'
+import * as api from '../../../api'
+import { useAuthStore } from '../../../store/auth'
+import { useRagRunObservability } from '../../../components/observability/useRagRunObservability'
 
-vi.mock('../../api', async () => {
-  const actual = await vi.importActual<typeof import('../../api')>('../../api')
+vi.mock('../../../api', async () => {
+  const actual = await vi.importActual<typeof import('../../../api')>('../../../api')
   return {
     ...actual,
     listRagRuns: vi.fn(),

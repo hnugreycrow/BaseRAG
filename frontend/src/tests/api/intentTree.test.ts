@@ -1,8 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createIntentNode, deleteIntentNode, listIntentNodes, updateIntentNode } from './intentTree'
-import { request } from './http'
+import {
+  createIntentNode,
+  deleteIntentNode,
+  listIntentNodes,
+  updateIntentNode,
+} from '../../api/intentTree'
+import { request } from '../../api/http'
 
-vi.mock('./http', () => ({ request: vi.fn().mockResolvedValue(undefined) }))
+vi.mock('../../api/http', () => ({ request: vi.fn().mockResolvedValue(undefined) }))
 
 describe('intent tree admin API', () => {
   it('uses the shared admin endpoints for tree edits', async () => {

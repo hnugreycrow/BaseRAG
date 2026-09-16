@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import { router } from '.'
-import { pinia } from '../store'
-import { useAuthStore } from '../store/auth'
+import { router } from '../../route'
+import { pinia } from '../../store'
+import { useAuthStore } from '../../store/auth'
 
 describe('authentication route guard', () => {
   beforeEach(() => {

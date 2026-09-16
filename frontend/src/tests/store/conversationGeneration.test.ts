@@ -1,11 +1,11 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { vi } from 'vitest'
 
-import { askConversation, type AssistantMessage, type UserMessage } from '../api'
-import { useConversationGenerationStore } from './conversationGeneration'
+import { askConversation, type AssistantMessage, type UserMessage } from '../../api'
+import { useConversationGenerationStore } from '../../store/conversationGeneration'
 
-vi.mock('../api', async () => {
-  const actual = await vi.importActual<typeof import('../api')>('../api')
+vi.mock('../../api', async () => {
+  const actual = await vi.importActual<typeof import('../../api')>('../../api')
   return { ...actual, askConversation: vi.fn() }
 })
 

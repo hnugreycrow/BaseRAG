@@ -1,8 +1,8 @@
 import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { vi } from 'vitest'
-import type { AssistantMessage, AnswerSource } from '../../api'
-import SourcePanel from './SourcePanel.vue'
+import type { AssistantMessage, AnswerSource } from '../../../api'
+import SourcePanel from '../../../components/conversation/SourcePanel.vue'
 
 const location = (chunkId: string, start: number) => ({
   chunkId,

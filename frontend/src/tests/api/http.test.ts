@@ -1,8 +1,8 @@
 import type { InternalAxiosRequestConfig } from 'axios'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { askConversation } from './conversation'
-import { http, request, setCsrfToken } from './http'
+import { askConversation } from '../../api/conversation'
+import { http, request, setCsrfToken } from '../../api/http'
 
 describe('authenticated transports', () => {
   afterEach(() => {

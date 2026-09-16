@@ -1,7 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import { describe, expect, it } from 'vitest'
-import UploadDocumentDialog from './UploadDocumentDialog.vue'
+import UploadDocumentDialog from '../../../components/knowledge-base/UploadDocumentDialog.vue'
 
 function uploadFile(name: string, uid: number, bytes = '# content') {
   const raw = Object.assign(new File([bytes], name, { type: 'text/markdown' }), { uid })

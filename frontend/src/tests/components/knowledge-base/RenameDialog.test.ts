@@ -2,7 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import { ElButton, ElDialog, ElForm, ElFormItem, ElInput } from 'element-plus'
 
-import RenameDialog from './RenameDialog.vue'
+import RenameDialog from '../../../components/knowledge-base/RenameDialog.vue'
 
 async function mountDialog() {
   const wrapper = mount(RenameDialog, {

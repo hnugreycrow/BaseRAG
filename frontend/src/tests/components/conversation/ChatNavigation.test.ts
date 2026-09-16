@@ -2,9 +2,9 @@ import { createPinia } from 'pinia'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
-import AppSidebar from '../../layout/AppSidebar.vue'
-import { useAuthStore } from '../../store/auth'
-import ConversationHistory from './ConversationHistory.vue'
+import AppSidebar from '../../../layout/AppSidebar.vue'
+import { useAuthStore } from '../../../store/auth'
+import ConversationHistory from '../../../components/conversation/ConversationHistory.vue'
 
 async function testRouter() {
   const router = createRouter({

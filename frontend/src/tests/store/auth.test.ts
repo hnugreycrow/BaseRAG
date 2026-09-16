@@ -1,11 +1,11 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import * as api from '../api'
-import { useAuthStore } from './auth'
+import * as api from '../../api'
+import { useAuthStore } from '../../store/auth'
 
-vi.mock('../api', async () => {
-  const actual = await vi.importActual<typeof import('../api')>('../api')
+vi.mock('../../api', async () => {
+  const actual = await vi.importActual<typeof import('../../api')>('../../api')
   return {
     ...actual,
     login: vi.fn(),

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import type { RagStageRun } from '../../api'
-import { buildWaterfall, formatDuration } from './tracePresentation'
+import type { RagStageRun } from '../../../api'
+import { buildWaterfall, formatDuration } from '../../../components/observability/tracePresentation'
 
 function stage(overrides: Partial<RagStageRun>): RagStageRun {
   return {

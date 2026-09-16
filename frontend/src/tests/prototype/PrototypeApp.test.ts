@@ -1,7 +1,7 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import PrototypeApp from './PrototypeApp.vue'
+import PrototypeApp from '../../prototype/PrototypeApp.vue'
 
 let wrapper: VueWrapper
 beforeEach(() => {

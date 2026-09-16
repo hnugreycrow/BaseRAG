@@ -1,8 +1,8 @@
 import { mount, flushPromises } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import { describe, expect, it } from 'vitest'
-import type { KnowledgeDocument } from '../../api'
-import DocumentTable from './DocumentTable.vue'
+import type { KnowledgeDocument } from '../../../api'
+import DocumentTable from '../../../components/knowledge-base/DocumentTable.vue'
 
 const rows: KnowledgeDocument[] = (['UPLOADED', 'FAILED', 'READY', 'PROCESSING'] as const).map(
   (status, index) => ({

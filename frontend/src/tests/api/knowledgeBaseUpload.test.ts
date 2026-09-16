@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { request } from './http'
-import { uploadDocuments } from './knowledgeBase'
+import { request } from '../../api/http'
+import { uploadDocuments } from '../../api/knowledgeBase'
 
-vi.mock('./http', () => ({ request: vi.fn() }))
+vi.mock('../../api/http', () => ({ request: vi.fn() }))
 
 describe('batch document upload request', () => {
   beforeEach(() => vi.clearAllMocks())

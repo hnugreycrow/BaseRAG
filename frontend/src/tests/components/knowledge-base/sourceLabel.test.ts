@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest'
-import type { DocumentChunk } from '../../api'
-import { sourceLabel } from './sourceLabel'
+import type { DocumentChunk } from '../../../api'
+import { sourceLabel } from '../../../components/knowledge-base/sourceLabel'
 
 const base: DocumentChunk = {
   id: 'chunk',

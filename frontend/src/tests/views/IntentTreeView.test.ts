@@ -1,10 +1,10 @@
 import { flushPromises, shallowMount } from '@vue/test-utils'
 import { beforeEach, vi } from 'vitest'
 
-import { createIntentNode, listIntentNodes, type IntentNode } from '../api/intentTree'
-import IntentTreeView from './IntentTreeView.vue'
+import { createIntentNode, listIntentNodes, type IntentNode } from '../../api/intentTree'
+import IntentTreeView from '../../views/IntentTreeView.vue'
 
-vi.mock('../api/intentTree', () => ({
+vi.mock('../../api/intentTree', () => ({
   listIntentNodes: vi.fn().mockResolvedValue([]),
   listIntentTools: vi.fn().mockResolvedValue([]),
   createIntentNode: vi.fn(),
@@ -12,7 +12,7 @@ vi.mock('../api/intentTree', () => ({
   deleteIntentNode: vi.fn(),
 }))
 
-vi.mock('../api/knowledgeBase', () => ({
+vi.mock('../../api/knowledgeBase', () => ({
   listKnowledgeBases: vi.fn().mockResolvedValue({ items: [], total: 0 }),
 }))
 
