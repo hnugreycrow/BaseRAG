@@ -140,6 +140,7 @@ function taskStatusLabel(conversationId: string) {
   background: #eef1f6;
 }
 .conversation-link {
+  width: 100%;
   min-width: 0;
   flex: 1;
   display: flex;
@@ -161,21 +162,43 @@ function taskStatusLabel(conversationId: string) {
   color: var(--color-primary);
 }
 .conversation-actions {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  z-index: 1;
   display: flex;
   justify-content: flex-end;
   flex-shrink: 0;
   gap: 0;
-  padding: 0 4px 0 0;
   opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition: opacity 120ms ease;
 }
 .conversation-item:hover .conversation-actions,
-.conversation-item:focus-within .conversation-actions,
-.conversation-item.is-active .conversation-actions {
+.conversation-item:focus-within .conversation-actions {
   opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+.conversation-item:not(.has-active-task):hover .conversation-link,
+.conversation-item:not(.has-active-task):focus-within .conversation-link {
+  padding-right: 68px;
 }
 @media (hover: none) {
   .conversation-actions {
     opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+  .conversation-item:not(.has-active-task) .conversation-link {
+    padding-right: 68px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .conversation-actions {
+    transition: none;
   }
 }
 .conversation-actions button {
