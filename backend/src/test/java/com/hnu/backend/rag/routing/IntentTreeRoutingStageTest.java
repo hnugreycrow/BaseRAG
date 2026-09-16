@@ -1,12 +1,15 @@
 package com.hnu.backend.rag.routing;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -23,6 +26,7 @@ import com.hnu.backend.rag.mcp.McpToolDefinition;
 import com.hnu.backend.rag.mcp.McpToolRegistry;
 import com.hnu.backend.rag.planning.QueryPlan;
 import com.hnu.backend.rag.planning.SubQuestion;
+import com.hnu.backend.rag.prompt.IntentTreeRoutingPrompts;
 import com.hnu.backend.shared.error.ApiException;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -31,8 +35,12 @@ import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 
+@ExtendWith(OutputCaptureExtension.class)
 class IntentTreeRoutingStageTest {
   private final IntentTreeService tree =
       mock(IntentTreeService.class, withSettings().mockMaker("mock-maker-subclass"));
@@ -48,7 +56,7 @@ class IntentTreeRoutingStageTest {
   }
 
   @Test
-  void classifiesAllThreeLeafTypesInOneCallAndRetainsSecondCandidate() {
+  void classifiesAllThreeLeafTypesInOneCallAndRetainsSecondCandidate(CapturedOutput output) {
     UUID kbId = UUID.randomUUID();
     IntentNode kb = node("制度", IntentNode.Kind.KB, List.of(kbId));
     IntentNode chatNode = node("闲聊", IntentNode.Kind.SYSTEM, List.of());
@@ -84,8 +92,13 @@ class IntentTreeRoutingStageTest {
     when(chat.generate(any(), any()))
         .thenReturn(new ChatClient.Generation(response, "model-id", "provider", "model"));
 
-    RoutingPlan result = stage.execute(plan, RagRunTrace.noop());
+    RagRunTrace trace = trace();
+    RoutingPlan result = stage.execute(plan, trace);
 
+    assertTrue(output.getOut().contains("intent routing completed runId=" + trace.runId()));
+    assertTrue(output.getOut().contains("\"subQuestionId\":\"Q1\""));
+    assertTrue(output.getOut().contains("\"intentPath\":\"制度\""));
+    assertTrue(output.getOut().contains("\"intent\":\"MCP_TOOL\""));
     assertEquals(
         List.of(IntentType.KNOWLEDGE_RETRIEVAL, IntentType.SYSTEM_CHAT, IntentType.MCP_TOOL),
         result.routes().stream().map(IntentRoute::intent).toList());
@@ -94,8 +107,11 @@ class IntentTreeRoutingStageTest {
     assertEquals(RoutingReasonCode.AMBIGUOUS, result.routes().getFirst().reasonCode());
     assertEquals(0.45, result.routes().getFirst().secondCandidateScore());
     verify(tools).check("calendar.read", Map.of());
+    ArgumentCaptor<String> systemPrompt = ArgumentCaptor.forClass(String.class);
     ArgumentCaptor<String> input = ArgumentCaptor.forClass(String.class);
-    verify(chat, times(1)).generate(any(), input.capture());
+    verify(chat, times(1)).generate(systemPrompt.capture(), input.capture());
+    assertEquals(IntentTreeRoutingPrompts.system(), systemPrompt.getValue());
+    assertTrue(systemPrompt.getValue().contains("reasonCode 只允许 MATCHED 或 AMBIGUOUS"));
     assertTrue(input.getValue().contains("休假制度"));
     assertTrue(input.getValue().contains("你好"));
     assertTrue(input.getValue().contains("查询日程"));
@@ -124,6 +140,37 @@ class IntentTreeRoutingStageTest {
     assertEquals("calendar.read", result.toolHint());
     assertEquals("2026-09-16", result.toolArguments().get("date"));
     verify(tools).check("calendar.read", Map.of("date", "2026-09-16"));
+  }
+
+  @Test
+  void loggingFailureDoesNotChangeClassifiedRoute() {
+    IntentNode chatNode = node("general-chat", IntentNode.Kind.SYSTEM, List.of());
+    active(chatNode);
+    when(chat.generate(any(), any())).thenReturn(generation(response(chatNode.id(), 0.95, "{}")));
+    RagRunTrace trace = spy(trace());
+    doThrow(new IllegalStateException("log failed")).when(trace).runId();
+
+    RoutingPlan result = stage.execute(QueryPlan.fallback("hello"), trace);
+
+    assertEquals(IntentType.SYSTEM_CHAT, result.routes().getFirst().intent());
+    assertEquals(
+        RagStageStatus.SUCCESS,
+        trace.finish(RagRunStatus.COMPLETED, null).stages().getFirst().status());
+  }
+
+  @Test
+  void fallbackLogContainsRunIdAndReason(CapturedOutput output) {
+    when(tree.activeLeaves()).thenReturn(List.of());
+    when(tree.list()).thenReturn(List.of());
+    RagRunTrace trace = trace();
+
+    RoutingPlan result = stage.execute(QueryPlan.fallback("secret-question"), trace);
+
+    assertEquals(IntentType.KNOWLEDGE_RETRIEVAL, result.routes().getFirst().intent());
+    assertTrue(output.getOut().contains("intent routing fallback runId=" + trace.runId()));
+    assertTrue(output.getOut().contains("reason=INTENT_TREE_EMPTY"));
+    assertTrue(output.getOut().contains("\"reasonCode\":\"INTENT_TREE_FALLBACK\""));
+    assertFalse(output.getOut().contains("secret-question"));
   }
 
   @Test

@@ -13,6 +13,9 @@ public class ObservabilityProperties {
   /** Trace 默认保留天数。 */
   private int retentionDays = 30;
 
+  /** 是否在问题规划日志中输出用户问题原文。 */
+  private boolean logQuestionContent = false;
+
   /** 每日清理任务的 Spring cron 表达式。 */
   private String cleanupCron = "0 15 3 * * *";
 

@@ -1,6 +1,8 @@
 package com.hnu.backend.rag.planning;
 
+import com.hnu.backend.configuration.ObservabilityProperties;
 import com.hnu.backend.configuration.RagProperties;
+import com.hnu.backend.observability.RagDecisionLog;
 import com.hnu.backend.observability.RagStageName;
 import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.rag.memory.RagMemory;
@@ -23,6 +25,7 @@ public class QueryPlanningStage {
 
   private final QueryPlanner planner;
   private final RagProperties config;
+  private final ObservabilityProperties observability;
   private final JsonMapper json = JsonMapper.builder().build();
 
   /**
@@ -30,10 +33,13 @@ public class QueryPlanningStage {
    *
    * @param planner 查询规划器
    * @param config RAG 配置
+   * @param observability 日志内容配置
    */
-  public QueryPlanningStage(QueryPlanner planner, RagProperties config) {
+  public QueryPlanningStage(
+      QueryPlanner planner, RagProperties config, ObservabilityProperties observability) {
     this.planner = planner;
     this.config = config;
+    this.observability = observability;
   }
 
   /**
@@ -59,38 +65,88 @@ public class QueryPlanningStage {
     long startedAt = System.nanoTime();
     RagRunTrace.Span span = trace.start(RagStageName.QUERY_PLANNING, null, 1);
     QueryPlanner.PlanningOutput output = null;
+    String degradedReason = null;
+    String exceptionType = null;
     try {
       int maxSubQuestions = config.getPipeline().getMaxSubQuestions();
       output = planner.plan(memory, originalQuestion, maxSubQuestions);
       QueryPlan plan = parse(output.content(), maxSubQuestions);
-      log.info(
-          "query planning completed subQuestions={} provider={} model={} planningMs={}",
-          plan.subQuestions().size(),
-          output.provider(),
-          output.model(),
-          elapsedMillis(startedAt));
       span.model(output.modelId(), output.provider(), output.model());
       span.success(plan.subQuestions().size());
+      logPlan(trace, originalQuestion, plan, "SUCCESS", null, null, output, startedAt);
       return plan;
     } catch (PlanValidationException e) {
       if (output != null) span.model(output.modelId(), output.provider(), output.model());
       span.degraded(1, e.reason.name());
-      log.warn(
-          "query planning degraded reason={} modelId={} planningMs={}",
-          e.reason,
-          output == null ? null : output.modelId(),
-          elapsedMillis(startedAt));
+      degradedReason = e.reason.name();
     } catch (RuntimeException e) {
       DegradedReason reason = failureReason(e);
       span.degraded(1, reason.name());
-      log.warn(
-          "query planning degraded reason={} exceptionType={} planningMs={}",
-          reason,
-          e.getClass().getSimpleName(),
-          elapsedMillis(startedAt));
+      degradedReason = reason.name();
+      exceptionType = e.getClass().getSimpleName();
     }
     // 规划是增强能力而非问答前置条件，失败时保留原始问题继续执行。
-    return QueryPlan.fallback(originalQuestion);
+    QueryPlan fallback = QueryPlan.fallback(originalQuestion);
+    logPlan(
+        trace,
+        originalQuestion,
+        fallback,
+        "FALLBACK",
+        degradedReason,
+        exceptionType,
+        output,
+        startedAt);
+    return fallback;
+  }
+
+  private void logPlan(
+      RagRunTrace trace,
+      String originalQuestion,
+      QueryPlan plan,
+      String status,
+      String reason,
+      String exceptionType,
+      QueryPlanner.PlanningOutput output,
+      long startedAt) {
+    RagDecisionLog.emit(
+        () -> {
+          boolean fallback = "FALLBACK".equals(status);
+          if (fallback ? !log.isWarnEnabled() : !log.isInfoEnabled()) return;
+          String message =
+              "query planning result runId="
+                  + trace.runId()
+                  + " status="
+                  + status
+                  + " reason="
+                  + reason
+                  + " exceptionType="
+                  + exceptionType
+                  + " originalLength="
+                  + originalQuestion.length()
+                  + " standaloneLength="
+                  + plan.standaloneQuestion().length()
+                  + " rewritten="
+                  + !originalQuestion.strip().equals(plan.standaloneQuestion())
+                  + " subQuestions="
+                  + plan.subQuestions().size()
+                  + " provider="
+                  + (output == null ? null : output.provider())
+                  + " model="
+                  + (output == null ? null : output.model())
+                  + " planningMs="
+                  + elapsedMillis(startedAt);
+          if (observability.isLogQuestionContent()) {
+            message +=
+                " originalQuestion="
+                    + json.writeValueAsString(originalQuestion)
+                    + " standaloneQuestion="
+                    + json.writeValueAsString(plan.standaloneQuestion())
+                    + " subQuestionsDetail="
+                    + json.writeValueAsString(plan.subQuestions());
+          }
+          if (fallback) log.warn(message);
+          else log.info(message);
+        });
   }
 
   /**

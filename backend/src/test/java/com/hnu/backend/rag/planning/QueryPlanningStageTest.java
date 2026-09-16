@@ -1,6 +1,8 @@
 package com.hnu.backend.rag.planning;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -8,23 +10,96 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.hnu.backend.configuration.ObservabilityProperties;
 import com.hnu.backend.configuration.RagProperties;
+import com.hnu.backend.observability.RagRunStatus;
+import com.hnu.backend.observability.RagStageStatus;
+import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.rag.memory.RagMemory;
 import com.hnu.backend.shared.error.ApiException;
+import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import tools.jackson.databind.json.JsonMapper;
 
+@ExtendWith(OutputCaptureExtension.class)
 class QueryPlanningStageTest {
   private static final String ORIGINAL = "原问题";
 
   private final QueryPlanner planner = mock(QueryPlanner.class);
   private final RagProperties config = new RagProperties();
-  private final QueryPlanningStage stage = new QueryPlanningStage(planner, config);
+  private final ObservabilityProperties observability = new ObservabilityProperties();
+  private final QueryPlanningStage stage = new QueryPlanningStage(planner, config, observability);
   private final RagMemory emptyMemory = new RagMemory("{}", 0, List.of(), List.of(), 0);
   private final JsonMapper json = JsonMapper.builder().build();
+
+  @Test
+  void logsMetadataAndRunIdWithoutQuestionContentByDefault(CapturedOutput output) {
+    stub(plan("rewritten-secret", sub("Q1", "sub-secret")));
+    UUID runId = UUID.randomUUID();
+    RagRunTrace trace = new RagRunTrace(runId, OffsetDateTime.now(), System.nanoTime());
+
+    stage.execute(emptyMemory, "original-secret", trace);
+
+    assertTrue(output.getOut().contains("runId=" + runId + " status=SUCCESS"));
+    assertTrue(output.getOut().contains("originalLength=15"));
+    assertTrue(output.getOut().contains("rewritten=true subQuestions=1"));
+    assertFalse(output.getOut().contains("original-secret"));
+    assertFalse(output.getOut().contains("rewritten-secret"));
+    assertFalse(output.getOut().contains("sub-secret"));
+  }
+
+  @Test
+  void logsEscapedQuestionContentOnlyWhenEnabled(CapturedOutput output) {
+    observability.setLogQuestionContent(true);
+    stub(plan("rewritten-question", sub("Q1", "sub-question")));
+    UUID runId = UUID.randomUUID();
+    RagRunTrace trace = new RagRunTrace(runId, OffsetDateTime.now(), System.nanoTime());
+
+    stage.execute(emptyMemory, "first-line\nsecret-marker", trace);
+
+    assertTrue(output.getOut().contains("runId=" + runId + " status=SUCCESS"));
+    assertTrue(output.getOut().contains("originalQuestion=\"first-line\\nsecret-marker\""));
+    assertTrue(output.getOut().contains("standaloneQuestion=\"rewritten-question\""));
+    assertTrue(
+        output
+            .getOut()
+            .contains("subQuestionsDetail=[{\"id\":\"Q1\",\"question\":\"sub-question\"}]"));
+  }
+
+  @Test
+  void logsFallbackReasonAndRunIdWithoutQuestionContent(CapturedOutput output) {
+    stub("not-json");
+    UUID runId = UUID.randomUUID();
+    RagRunTrace trace = new RagRunTrace(runId, OffsetDateTime.now(), System.nanoTime());
+
+    stage.execute(emptyMemory, "fallback-secret", trace);
+
+    assertTrue(output.getOut().contains("runId=" + runId + " status=FALLBACK reason=INVALID_JSON"));
+    assertFalse(output.getOut().contains("fallback-secret"));
+  }
+
+  @Test
+  void loggingFailureDoesNotDegradeValidPlan() {
+    stub(plan("independent-question", sub("Q1", "independent-question")));
+    ObservabilityProperties brokenLogging = mock(ObservabilityProperties.class);
+    when(brokenLogging.isLogQuestionContent()).thenThrow(new IllegalStateException("log failed"));
+    QueryPlanningStage isolatedStage = new QueryPlanningStage(planner, config, brokenLogging);
+    RagRunTrace trace = new RagRunTrace(UUID.randomUUID(), OffsetDateTime.now(), System.nanoTime());
+
+    QueryPlan result = isolatedStage.execute(emptyMemory, "original-question", trace);
+
+    assertEquals("independent-question", result.standaloneQuestion());
+    assertEquals(
+        RagStageStatus.SUCCESS,
+        trace.finish(RagRunStatus.COMPLETED, null).stages().getFirst().status());
+  }
 
   @Test
   void acceptsSimpleAndComparisonQuestionsWithoutForcedSplitting() {

@@ -69,6 +69,11 @@ public final class RagRunTrace {
     return NOOP;
   }
 
+  /** 返回当前问答运行标识；空 Trace 返回 null。 */
+  public UUID runId() {
+    return runId;
+  }
+
   /**
    * 判断当前对象是否会采集数据。
    *
