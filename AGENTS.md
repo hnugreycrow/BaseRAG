@@ -49,4 +49,4 @@ Name Java tests `*Test.java` and frontend tests `*.test.ts`. Add focused tests f
 
 ## Commits & Pull Requests
 
-History currently contains only `initial commit`, so no established convention exists. Use short imperative subjects, preferably scoped, such as `conversation: handle duplicate cancel requests`. Keep commits reviewable. Pull requests should explain intent, affected modules, validation performed, configuration or migration impact, and linked issues. Include screenshots for visible UI changes and never commit `.env`, credentials, generated `target/`, `dist/`, or `node_modules/` files.
+Commit messages must follow Conventional Commits: `<type>(<scope>): <description>` (scope may be omitted). Use a suitable type such as `feat`, `fix`, `refactor`, `docs`, `test`, or `chore`; keep the description short and in Chinese. For example: `feat(document): 支持异步分块与批量提交`. Keep commits reviewable. Pull requests should explain intent, affected modules, validation performed, configuration or migration impact, and linked issues. Include screenshots for visible UI changes and never commit `.env`, credentials, generated `target/`, `dist/`, or `node_modules/` files.
