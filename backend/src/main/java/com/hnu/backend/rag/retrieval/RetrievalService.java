@@ -58,7 +58,7 @@ public class RetrievalService {
   /**
    * 使用各知识库当前绑定的模型分别生成查询向量，再按模型内名次融合结果。
    *
-   * @param ownerId 所属用户标识；检索 SQL 始终以该值约束知识库
+   * @param ownerId 提问者标识；知识库范围由 SQL 中的管理员创建者条件限定
    * @param question 已规范化的检索问题
    * @return 按 RRF 融合分排列且不超过最终 Top K 的候选分块
    */
@@ -94,10 +94,10 @@ public class RetrievalService {
    *
    * <p>每个模型最多查询 recallBudget 条，随后先按 RRF 合并并再次截断到整个向量通道的 recallBudget， 因此模型数量增加不会线性放大该子问题进入全局融合的候选数。
    *
-   * @param ownerId 所属用户标识；外部知识库 ID 仍会与该用户所有权取交集
+   * @param ownerId 提问者标识；外部知识库 ID 仍会与公共范围取交集
    * @param subQuestionId 子问题标识
    * @param question 子问题正文
-   * @param knowledgeBaseIds 可选知识库范围；{@code null} 表示该用户的全部知识库
+   * @param knowledgeBaseIds 可选知识库范围；{@code null} 表示全部公共知识库
    * @param budget 当前子问题的检索预算
    * @param cancellationToken 异步取消信号
    * @return 可供全局合并的证据候选

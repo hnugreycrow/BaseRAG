@@ -8,6 +8,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.hnu.backend.auth.entity.User;
 import com.hnu.backend.auth.service.CurrentUserService;
 import com.hnu.backend.document.service.DocumentService;
+import com.hnu.backend.knowledgebase.entity.KnowledgeBase;
+import com.hnu.backend.knowledgebase.service.KnowledgeBaseService;
 import com.hnu.backend.shared.web.ApiResponseAdvice;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
@@ -19,7 +21,9 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 class DocumentContentTest {
   private final DocumentService documents = mock(DocumentService.class);
   private final CurrentUserService users = mock(CurrentUserService.class);
-  private final DocumentController controller = new DocumentController(documents, users);
+  private final KnowledgeBaseService knowledgeBases = mock(KnowledgeBaseService.class);
+  private final DocumentController controller =
+      new DocumentController(documents, users, knowledgeBases);
   private final UUID owner = UUID.randomUUID();
   private final UUID kb = UUID.randomUUID();
   private final UUID document = UUID.randomUUID();
@@ -29,7 +33,10 @@ class DocumentContentTest {
   void mvcReturnsRawPdfRangeWithoutJsonEnvelope() throws Exception {
     User user = new User();
     user.setId(owner);
-    when(users.require()).thenReturn(user);
+    when(users.requireAdmin()).thenReturn(user);
+    KnowledgeBase managed = new KnowledgeBase();
+    managed.setOwnerId(owner);
+    when(knowledgeBases.requireAdminOwned(kb)).thenReturn(managed);
     when(documents.originalFile(owner, kb, document, version))
         .thenReturn(
             new DocumentService.OriginalFile(
@@ -57,7 +64,10 @@ class DocumentContentTest {
   void servesPdfAndSingleByteRanges() {
     User user = new User();
     user.setId(owner);
-    when(users.require()).thenReturn(user);
+    when(users.requireAdmin()).thenReturn(user);
+    KnowledgeBase managed = new KnowledgeBase();
+    managed.setOwnerId(owner);
+    when(knowledgeBases.requireAdminOwned(kb)).thenReturn(managed);
     when(documents.originalFile(owner, kb, document, version))
         .thenReturn(
             new DocumentService.OriginalFile(

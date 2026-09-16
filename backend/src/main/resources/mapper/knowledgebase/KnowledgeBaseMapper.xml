@@ -11,12 +11,18 @@
         FOR UPDATE
     </select>
 
+    <select id="findAdminOwned" resultType="com.hnu.backend.knowledgebase.entity.KnowledgeBase">
+        SELECT kb.* FROM knowledge_bases kb
+        JOIN users u ON u.id = kb.owner_id AND u.role = 'ADMIN'
+        WHERE kb.id = #{id}
+    </select>
+
     <select id="selectWithDocumentCount" resultType="com.hnu.backend.knowledgebase.entity.KnowledgeBase">
         SELECT kb.*, COUNT(d.id) AS document_count
         FROM knowledge_bases kb
         LEFT JOIN documents d ON d.knowledge_base_id = kb.id
         <where>
-            kb.owner_id = #{ownerId}
+            EXISTS (SELECT 1 FROM users u WHERE u.id = kb.owner_id AND u.role = 'ADMIN')
             <if test="query != null and query != ''">
                 AND (LOWER(kb.name) LIKE CONCAT('%', LOWER(#{query}), '%')
                 OR LOWER(COALESCE(kb.embedding_model, '')) LIKE CONCAT('%', LOWER(#{query}), '%'))
@@ -31,7 +37,7 @@
         SELECT COUNT(*)
         FROM knowledge_bases kb
         <where>
-            kb.owner_id = #{ownerId}
+            EXISTS (SELECT 1 FROM users u WHERE u.id = kb.owner_id AND u.role = 'ADMIN')
             <if test="query != null and query != ''">
                 AND (LOWER(kb.name) LIKE CONCAT('%', LOWER(#{query}), '%')
                 OR LOWER(COALESCE(kb.embedding_model, '')) LIKE CONCAT('%', LOWER(#{query}), '%'))

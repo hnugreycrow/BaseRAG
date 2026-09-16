@@ -315,6 +315,18 @@ class InfrastructureIntegrationTest {
     return kb.getId();
   }
 
+  private UUID createAdmin() {
+    User user = new User();
+    user.setId(UUID.randomUUID());
+    user.setUsername("integration-admin-" + user.getId());
+    user.setDisplayName("第二管理员");
+    user.setPasswordHash("$2a$12$not-used-by-this-integration-test");
+    user.setRole(com.hnu.backend.auth.entity.UserRole.ADMIN);
+    user.setEnabled(true);
+    userMapper.insert(user);
+    return user.getId();
+  }
+
   private UUID createUser() {
     User user = new User();
     user.setId(UUID.randomUUID());
@@ -614,6 +626,47 @@ class InfrastructureIntegrationTest {
     assertEquals(
         List.of(new EmbeddingBinding("qwen-emb-8b", "siliconflow", "Qwen/Qwen3-Embedding-8B", 2)),
         retrievalMapper.activeModelBindingsIn(ownerId, List.of(first)));
+  }
+
+  @Test
+  void publicRetrievalIncludesBothAdminsButNeverUserOwnedLibraries() {
+    UUID firstAdmin = ownerId();
+    UUID secondAdmin = createAdmin();
+    UUID reader = createUser();
+    UUID privateOwner = createUser();
+    UUID firstKb = kb(firstAdmin);
+    UUID secondKb = kb(secondAdmin);
+    UUID privateKb = kb(privateOwner);
+    var first = documents.upload(firstAdmin, firstKb, file("first.md", "# 公共\n管理员一。"));
+    var second = documents.upload(secondAdmin, secondKb, file("second.md", "# 公共\n管理员二。"));
+    var hidden = documents.upload(privateOwner, privateKb, file("private.md", "# 私有\n不应公开。"));
+    documents.createChunks(firstAdmin, firstKb, first.documentId());
+    documents.createChunks(secondAdmin, secondKb, second.documentId());
+    documents.createChunks(privateOwner, privateKb, hidden.documentId());
+
+    var hits =
+        retrievalMapper.searchAll(
+            reader, "[1,0]", "qwen-emb-8b", "siliconflow", "Qwen/Qwen3-Embedding-8B", 2, 20);
+    assertTrue(hits.stream().anyMatch(hit -> hit.getKnowledgeBaseId().equals(firstKb)));
+    assertTrue(hits.stream().anyMatch(hit -> hit.getKnowledgeBaseId().equals(secondKb)));
+    assertTrue(hits.stream().noneMatch(hit -> hit.getKnowledgeBaseId().equals(privateKb)));
+    assertTrue(
+        retrievalMapper
+            .searchIn(
+                reader,
+                List.of(privateKb),
+                "[1,0]",
+                "qwen-emb-8b",
+                "siliconflow",
+                "Qwen/Qwen3-Embedding-8B",
+                2,
+                20)
+            .isEmpty());
+    assertNotNull(kbMapper.findAdminOwned(secondKb));
+    assertNull(kbMapper.findAdminOwned(privateKb));
+    assertTrue(
+        kbMapper.selectWithDocumentCount(null, 20, 0).stream()
+            .anyMatch(item -> item.getId().equals(secondKb)));
   }
 
   @Test

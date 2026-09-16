@@ -38,7 +38,7 @@ describe('authentication route guard', () => {
     expect(router.currentRoute.value.name).toBe('chat')
   })
 
-  it('keeps the observability menu active on a deep-linked run', async () => {
+  it('blocks a regular user from every admin route and old address', async () => {
     const auth = useAuthStore(pinia)
     auth.applySession({
       user: {
@@ -54,13 +54,22 @@ describe('authentication route guard', () => {
       csrfToken: 'nonce',
     })
 
-    await router.push('/admin/observability/run-1?range=24h')
-
-    expect(router.currentRoute.value.name).toBe('observability-detail')
-    expect(router.currentRoute.value.meta.activeMenu).toBe('/admin/observability')
+    for (const path of [
+      '/admin',
+      '/admin/knowledge-bases',
+      '/admin/models',
+      '/admin/observability/run-1',
+      '/admin/users',
+      '/knowledge-bases',
+      '/models',
+      '/observability',
+    ]) {
+      await router.push(path)
+      expect(router.currentRoute.value.name).toBe('chat')
+    }
   })
 
-  it('restricts user management to administrators', async () => {
+  it('allows administrators into every management section', async () => {
     const auth = useAuthStore(pinia)
     const user = {
       id: 'user-1',
@@ -76,7 +85,15 @@ describe('authentication route guard', () => {
     await router.push('/admin/users')
     expect(router.currentRoute.value.name).toBe('chat')
     auth.applySession({ user: { ...user, role: 'ADMIN' }, csrfToken: 'nonce' })
-    await router.push('/admin/users')
-    expect(router.currentRoute.value.name).toBe('users')
+    for (const [path, name] of [
+      ['/admin', 'dashboard'],
+      ['/admin/knowledge-bases', 'knowledge-bases'],
+      ['/admin/models', 'models'],
+      ['/admin/observability', 'observability'],
+      ['/admin/users', 'users'],
+    ]) {
+      await router.push(path)
+      expect(router.currentRoute.value.name).toBe(name)
+    }
   })
 })

@@ -2,6 +2,7 @@
 import { ChatDotRound, Delete, EditPen, HomeFilled, Plus, Search } from '@element-plus/icons-vue'
 import type { ConversationSummary } from '../../api'
 import { useConversationGenerationStore } from '../../store'
+import { useAuthStore } from '../../store/auth'
 defineProps<{
   groups: { label: string; items: ConversationSummary[] }[]
   currentId: string
@@ -16,6 +17,7 @@ const emit = defineEmits<{
   remove: [item: ConversationSummary]
 }>()
 const generationStore = useConversationGenerationStore()
+const auth = useAuthStore()
 function taskStatusLabel(conversationId: string) {
   const phase = generationStore.taskFor(conversationId)?.phase
   if (phase === 'starting' || phase === 'streaming') return '生成中'
@@ -32,7 +34,12 @@ function taskStatusLabel(conversationId: string) {
     新对话
   </button>
 
-  <RouterLink class="management-link" to="/admin" @click="emit('manage')">
+  <RouterLink
+    v-if="auth.user?.role === 'ADMIN'"
+    class="management-link"
+    to="/admin"
+    @click="emit('manage')"
+  >
     <el-icon><HomeFilled /></el-icon>
     管理后台
   </RouterLink>

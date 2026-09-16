@@ -34,7 +34,7 @@ class RagRunControllerTest {
 
   @BeforeEach
   void setUp() {
-    when(currentUsers.require()).thenReturn(actor);
+    when(currentUsers.requireAdmin()).thenReturn(actor);
     mvc =
         MockMvcBuilders.standaloneSetup(new RagRunController(currentUsers, queries))
             .setControllerAdvice(new ApiResponseAdvice(), new GlobalExceptionHandler())

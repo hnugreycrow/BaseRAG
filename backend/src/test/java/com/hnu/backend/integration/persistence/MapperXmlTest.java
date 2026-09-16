@@ -31,7 +31,9 @@ class MapperXmlTest {
             "mapper/knowledgebase/KnowledgeBaseMapper.xml",
             new ExpectedMapper(
                 KnowledgeBaseMapper.class,
-                new String[] {"lock", "selectWithDocumentCount", "countWithDocumentCount"}),
+                new String[] {
+                  "lock", "findAdminOwned", "selectWithDocumentCount", "countWithDocumentCount"
+                }),
             "mapper/rag/retrieval/RetrievalMapper.xml",
             new ExpectedMapper(
                 RetrievalMapper.class,

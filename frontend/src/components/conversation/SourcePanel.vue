@@ -4,7 +4,11 @@ import { marked } from 'marked'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import type { AnswerSource, AssistantMessage } from '../../api'
 
-const props = defineProps<{ message: AssistantMessage | null; highlighted: string | null }>()
+const props = defineProps<{
+  message: AssistantMessage | null
+  highlighted: string | null
+  conversationId?: string
+}>()
 const open = defineModel<boolean>({ required: true })
 // sources 是完整提示词证据快照；来源抽屉只展示回答真正使用的引用。
 const citedSources = computed(() => {
@@ -35,6 +39,11 @@ function sourceSummary(content: string) {
 const previewHtml = computed(() =>
   selectedSource.value ? renderMarkdown(selectedSource.value.content) : '',
 )
+
+function originalFileUrl(source: AnswerSource) {
+  const base = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
+  return `${base}/conversations/${encodeURIComponent(props.conversationId || '')}/messages/${encodeURIComponent(props.message?.id || '')}/sources/${encodeURIComponent(source.citationId)}/content`
+}
 
 function showPreview(source: AnswerSource) {
   selectedCitationId.value = source.citationId
@@ -135,6 +144,14 @@ watch(() => [props.highlighted, props.message?.id], locate)
           </li>
         </ul>
         <div class="preview-content markdown-body" v-html="previewHtml"></div>
+        <a
+          v-if="conversationId && message?.status === 'COMPLETED'"
+          class="source-original-link"
+          :href="originalFileUrl(selectedSource)"
+          target="_blank"
+          rel="noopener noreferrer"
+          >查看原文件</a
+        >
       </template>
     </el-dialog>
   </div>

@@ -61,7 +61,7 @@ public class RagService {
   /**
    * 根据问题和可选知识库范围生成回答。
    *
-   * @param ownerId 所属用户标识；外部知识库范围不能扩大该用户权限
+   * @param ownerId 提问者标识；外部知识库范围不能扩大公共检索范围
    * @param question 用户问题
    * @param knowledgeBaseIds 允许检索的知识库；null 表示全部知识库
    * @return 回答、来源、实际引用和模型信息

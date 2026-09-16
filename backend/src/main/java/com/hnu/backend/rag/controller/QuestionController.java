@@ -31,7 +31,7 @@ public class QuestionController {
   }
 
   /**
-   * 只检索当前用户的知识库并生成带来源引用的回答。
+   * 检索管理员创建的公共知识库并生成带来源引用的回答。
    *
    * @param request 问题与可选知识库范围
    * @return 回答、引用和来源

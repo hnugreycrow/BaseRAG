@@ -118,3 +118,31 @@ it('switches sources and clears the preview when the message changes or drawer c
   expect(wrapper.find('.preview-dialog').exists()).toBe(false)
   wrapper.unmount()
 })
+
+it('offers the cited original only for a completed conversation answer', async () => {
+  const wrapper = mount(SourcePanel, {
+    props: {
+      message: { ...message('assistant', ['S1'], [source('S1')]), status: 'COMPLETED' },
+      highlighted: null,
+      conversationId: 'conversation',
+      modelValue: true,
+    },
+    global: {
+      stubs: {
+        ElDrawer: { template: '<div><slot /></div>' },
+        ElDialog: {
+          props: ['modelValue', 'title'],
+          template: '<div v-if="modelValue"><slot /></div>',
+        },
+        ElEmpty: { template: '<div />' },
+      },
+    },
+  })
+  await wrapper.get('.source-card').trigger('click')
+  const link = wrapper.get('.source-original-link')
+  expect(link.attributes('href')).toBe(
+    '/api/conversations/conversation/messages/assistant/sources/S1/content',
+  )
+  expect(link.attributes('target')).toBe('_blank')
+  wrapper.unmount()
+})

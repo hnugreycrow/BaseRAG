@@ -48,19 +48,20 @@ public class KnowledgeBaseController {
   }
 
   /**
-   * 分页查询当前用户的知识库及文档数量。
+   * 分页查询所有管理员共同维护的知识库及文档数量。
    *
    * @param page 页码
    * @param pageSize 每页数量
    * @param query 可选搜索词
-   * @return 当前用户的知识库分页
+   * @return 公共知识库分页
    */
   @GetMapping
   public PageResponse<KnowledgeBaseResponse> list(
       @RequestParam(defaultValue = "1") @Min(1) int page,
       @RequestParam(defaultValue = "10") @Min(1) @Max(100) int pageSize,
       @RequestParam(required = false) @Size(max = 200) String query) {
-    return knowledgeBases.list(currentUsers.require().getId(), page, pageSize, query);
+    currentUsers.requireAdmin();
+    return knowledgeBases.list(page, pageSize, query);
   }
 
   /**
@@ -68,22 +69,24 @@ public class KnowledgeBaseController {
    */
   @GetMapping("/embedding-models")
   public List<EmbeddingModelResponse> embeddingModels() {
+    currentUsers.requireAdmin();
     return knowledgeBases.embeddingModels();
   }
 
   /**
-   * 获取当前用户的指定知识库。
+   * 获取管理员创建的指定知识库。
    *
    * @param id 知识库标识
    * @return 知识库
    */
   @GetMapping("/{id}")
   public KnowledgeBaseResponse get(@PathVariable UUID id) {
-    return knowledgeBases.get(currentUsers.require().getId(), id);
+    currentUsers.requireAdmin();
+    return knowledgeBases.get(id);
   }
 
   /**
-   * 为当前用户创建知识库并绑定所选向量模型。
+   * 以当前管理员为创建者建立知识库并绑定所选向量模型。
    *
    * @param request 知识库字段
    * @return 新知识库
@@ -91,11 +94,11 @@ public class KnowledgeBaseController {
   @PostMapping
   public KnowledgeBaseResponse create(@Valid @RequestBody KnowledgeBaseRequest request) {
     return knowledgeBases.create(
-        currentUsers.require().getId(), request.name(), request.embeddingModelId());
+        currentUsers.requireAdmin().getId(), request.name(), request.embeddingModelId());
   }
 
   /**
-   * 修改当前用户的知识库名称。
+   * 修改公共知识库名称。
    *
    * @param id 知识库标识
    * @param request 新名称
@@ -104,17 +107,19 @@ public class KnowledgeBaseController {
   @PatchMapping("/{id}")
   public KnowledgeBaseResponse rename(
       @PathVariable UUID id, @Valid @RequestBody KnowledgeBaseRequest request) {
-    return knowledgeBases.rename(currentUsers.require().getId(), id, request.name());
+    currentUsers.requireAdmin();
+    return knowledgeBases.rename(id, request.name());
   }
 
   /**
-   * 删除当前用户的知识库及其全部文档资源。
+   * 删除公共知识库及其全部文档资源。
    *
    * @param id 知识库标识
    */
   @DeleteMapping("/{id}")
   @ResponseStatus(HttpStatus.NO_CONTENT)
   public void delete(@PathVariable UUID id) {
-    knowledgeBases.delete(currentUsers.require().getId(), id);
+    currentUsers.requireAdmin();
+    knowledgeBases.delete(id);
   }
 }

@@ -43,34 +43,31 @@ public class KnowledgeBaseService {
   }
 
   /**
-   * 分页查询当前用户的知识库，并附带文档数量。
+   * 分页查询所有管理员创建的公共知识库，并附带文档数量。
    *
-   * @param ownerId 所属用户标识
    * @param page 页码
    * @param pageSize 每页数量
    * @param rawQuery 可选搜索词
    * @return 知识库分页
    */
-  public PageResponse<KnowledgeBaseResponse> list(
-      UUID ownerId, int page, int pageSize, String rawQuery) {
+  public PageResponse<KnowledgeBaseResponse> list(int page, int pageSize, String rawQuery) {
     String query = normalizeQuery(rawQuery);
-    long total = mapper.countWithDocumentCount(ownerId, query);
+    long total = mapper.countWithDocumentCount(query);
     List<KnowledgeBaseResponse> items =
-        mapper.selectWithDocumentCount(ownerId, query, pageSize, offset(page, pageSize)).stream()
+        mapper.selectWithDocumentCount(query, pageSize, offset(page, pageSize)).stream()
             .map(this::toResponse)
             .toList();
     return PageResponse.of(items, total, page, pageSize);
   }
 
   /**
-   * 获取指定知识库的接口响应对象。
+   * 获取管理员创建的指定公共知识库。
    *
-   * @param ownerId 所属用户标识
    * @param id 知识库标识
    * @return 知识库响应
    */
-  public KnowledgeBaseResponse get(UUID ownerId, UUID id) {
-    return toResponse(requireEntity(ownerId, id));
+  public KnowledgeBaseResponse get(UUID id) {
+    return toResponse(requireAdminOwned(id));
   }
 
   /**
@@ -86,6 +83,19 @@ public class KnowledgeBaseService {
             Wrappers.<KnowledgeBase>lambdaQuery()
                 .eq(KnowledgeBase::getId, id)
                 .eq(KnowledgeBase::getOwnerId, ownerId));
+    if (kb == null)
+      throw new ApiException("KNOWLEDGE_BASE_NOT_FOUND", "知识库不存在", HttpStatus.NOT_FOUND);
+    return kb;
+  }
+
+  /**
+   * 查找管理员创建的公共知识库；内部处理仍使用记录中的创建者标识。
+   *
+   * @param id 知识库标识
+   * @return 公共知识库实体
+   */
+  public KnowledgeBase requireAdminOwned(UUID id) {
+    KnowledgeBase kb = mapper.findAdminOwned(id);
     if (kb == null)
       throw new ApiException("KNOWLEDGE_BASE_NOT_FOUND", "知识库不存在", HttpStatus.NOT_FOUND);
     return kb;
@@ -116,7 +126,7 @@ public class KnowledgeBaseService {
     kb.setEmbeddingModel(model.model());
     kb.setEmbeddingDimensions(model.dimension());
     mapper.insert(kb);
-    return get(ownerId, kb.getId());
+    return get(kb.getId());
   }
 
   /** 返回可用于新建知识库的向量模型配置。 */
@@ -162,18 +172,17 @@ public class KnowledgeBaseService {
   }
 
   /**
-   * 修改知识库名称。
+   * 修改公共知识库名称。
    *
-   * @param ownerId 所属用户标识
    * @param id 知识库标识
    * @param rawName 新名称
    * @return 更新后的知识库
    */
-  public KnowledgeBaseResponse rename(UUID ownerId, UUID id, String rawName) {
-    KnowledgeBase kb = requireEntity(ownerId, id);
+  public KnowledgeBaseResponse rename(UUID id, String rawName) {
+    KnowledgeBase kb = requireAdminOwned(id);
     kb.setName(normalizeName(rawName));
     mapper.updateById(kb);
-    return get(ownerId, id);
+    return get(id);
   }
 
   /**
@@ -181,11 +190,10 @@ public class KnowledgeBaseService {
    *
    * <p>存储清理失败只记录日志，避免把已提交的数据库删除误报为整体失败。
    *
-   * @param ownerId 所属用户标识
    * @param id 知识库标识
    */
-  public void delete(UUID ownerId, UUID id) {
-    requireEntity(ownerId, id);
+  public void delete(UUID id) {
+    requireAdminOwned(id);
     List<String> storageKeys = documentCleanup.storageKeys(id);
     tx.executeWithoutResult(
         status -> {

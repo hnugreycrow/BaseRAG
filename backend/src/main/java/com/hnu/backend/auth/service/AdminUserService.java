@@ -68,7 +68,7 @@ public class AdminUserService {
   }
 
   /**
-   * 创建账号。新账号不附带知识库，由用户按需创建。
+   * 创建账号。新账号不附带知识库；管理员可在账号创建后维护公共知识库。
    *
    * @param rawUsername 原始用户名
    * @param rawDisplayName 原始显示名

@@ -15,11 +15,15 @@ const activeMenu = computed(() =>
 )
 const menuItems = computed(() => [
   { label: '知识问答', path: '/chat', icon: ChatDotRound },
-  { label: '工作台', path: '/admin', icon: HomeFilled },
-  { label: '知识库', path: '/admin/knowledge-bases', icon: Collection },
-  { label: '链路追踪', path: '/admin/observability', icon: Share },
-  { label: '模型', path: '/admin/models', icon: Cpu },
-  ...(auth.user?.role === 'ADMIN' ? [{ label: '用户管理', path: '/admin/users', icon: User }] : []),
+  ...(auth.user?.role === 'ADMIN'
+    ? [
+        { label: '工作台', path: '/admin', icon: HomeFilled },
+        { label: '知识库', path: '/admin/knowledge-bases', icon: Collection },
+        { label: '链路追踪', path: '/admin/observability', icon: Share },
+        { label: '模型', path: '/admin/models', icon: Cpu },
+        { label: '用户管理', path: '/admin/users', icon: User },
+      ]
+    : []),
 ])
 </script>
 <template>

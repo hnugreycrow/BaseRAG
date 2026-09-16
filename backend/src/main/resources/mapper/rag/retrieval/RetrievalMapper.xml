@@ -12,7 +12,7 @@
         JOIN documents d ON d.active_version_id = v.id
         JOIN knowledge_bases kb ON kb.id = d.knowledge_base_id
         WHERE v.status IN ('READY', 'PROCESSING')
-          AND kb.owner_id = #{ownerId}
+          AND EXISTS (SELECT 1 FROM users u WHERE u.id = kb.owner_id AND u.role = 'ADMIN')
         ORDER BY v.embedding_model_id, v.embedding_provider, v.embedding_model, v.embedding_dimensions
     </select>
 
@@ -25,7 +25,7 @@
         JOIN documents d ON d.active_version_id = v.id
         JOIN knowledge_bases kb ON kb.id = d.knowledge_base_id
         WHERE v.status IN ('READY', 'PROCESSING')
-          AND kb.owner_id = #{ownerId}
+          AND EXISTS (SELECT 1 FROM users u WHERE u.id = kb.owner_id AND u.role = 'ADMIN')
           AND d.knowledge_base_id IN
           <foreach collection="knowledgeBaseIds" item="knowledgeBaseId" open="(" separator="," close=")">
               #{knowledgeBaseId}
@@ -55,7 +55,7 @@
         JOIN knowledge_bases kb ON kb.id = d.knowledge_base_id
         JOIN document_versions v ON v.id = c.version_id
         WHERE v.status IN ('READY', 'PROCESSING')
-          AND kb.owner_id = #{ownerId}
+          AND EXISTS (SELECT 1 FROM users u WHERE u.id = kb.owner_id AND u.role = 'ADMIN')
           AND v.embedding_model_id = #{modelId}
           AND v.embedding_provider = #{provider}
           AND v.embedding_model = #{model}
@@ -87,7 +87,7 @@
         JOIN knowledge_bases kb ON kb.id = d.knowledge_base_id
         JOIN document_versions v ON v.id = c.version_id
         WHERE v.status IN ('READY', 'PROCESSING')
-          AND kb.owner_id = #{ownerId}
+          AND EXISTS (SELECT 1 FROM users u WHERE u.id = kb.owner_id AND u.role = 'ADMIN')
           AND v.embedding_model_id = #{modelId}
           AND v.embedding_provider = #{provider}
           AND v.embedding_model = #{model}
@@ -125,7 +125,7 @@
         JOIN knowledge_bases kb ON kb.id = d.knowledge_base_id
         JOIN document_versions v ON v.id = c.version_id
         WHERE d.knowledge_base_id = #{knowledgeBaseId}
-          AND kb.owner_id = #{ownerId}
+          AND EXISTS (SELECT 1 FROM users u WHERE u.id = kb.owner_id AND u.role = 'ADMIN')
           AND v.status IN ('READY', 'PROCESSING')
           AND v.embedding_model_id = #{modelId}
           AND v.embedding_provider = #{provider}

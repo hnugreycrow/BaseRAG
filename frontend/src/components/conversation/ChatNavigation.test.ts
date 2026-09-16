@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
 import AppSidebar from '../../layout/AppSidebar.vue'
+import { useAuthStore } from '../../store/auth'
 import ConversationHistory from './ConversationHistory.vue'
 
 async function testRouter() {
@@ -21,17 +22,31 @@ async function testRouter() {
 describe('chat and management navigation', () => {
   it('shows only conversation controls and the management entry in the chat sidebar', async () => {
     const router = await testRouter()
+    const pinia = createPinia()
+    useAuthStore(pinia).applySession({
+      user: {
+        id: 'admin',
+        username: 'admin',
+        displayName: '管理员',
+        role: 'ADMIN',
+        enabled: true,
+        lastLoginAt: null,
+        createdAt: '',
+        updatedAt: '',
+      },
+      csrfToken: 'nonce',
+    })
     const sidebar = mount(AppSidebar, {
       props: { mode: 'chat' },
       slots: { default: '<div class="conversation-slot" />' },
-      global: { plugins: [createPinia(), router], stubs: { AccountMenu: true } },
+      global: { plugins: [pinia, router], stubs: { AccountMenu: true } },
     })
     expect(sidebar.find('.workspace-nav').exists()).toBe(false)
     expect(sidebar.find('.conversation-slot').exists()).toBe(true)
 
     const history = mount(ConversationHistory, {
       props: { groups: [], currentId: '', loading: false, query: '' },
-      global: { plugins: [createPinia(), router] },
+      global: { plugins: [pinia, router] },
     })
     const newChat = history.get('.new-chat-button')
     const management = history.get('.management-link')
@@ -44,11 +59,54 @@ describe('chat and management navigation', () => {
     expect(router.currentRoute.value.path).toBe('/admin')
   })
 
-  it('keeps the management menu and a return link to chat on admin pages', async () => {
+  it('hides management links from a regular user', async () => {
     const router = await testRouter()
+    const pinia = createPinia()
+    useAuthStore(pinia).applySession({
+      user: {
+        id: 'reader',
+        username: 'reader',
+        displayName: '读者',
+        role: 'USER',
+        enabled: true,
+        lastLoginAt: null,
+        createdAt: '',
+        updatedAt: '',
+      },
+      csrfToken: 'nonce',
+    })
+    const history = mount(ConversationHistory, {
+      props: { groups: [], currentId: '', loading: false, query: '' },
+      global: { plugins: [pinia, router] },
+    })
+    expect(history.find('.management-link').exists()).toBe(false)
     const sidebar = mount(AppSidebar, {
       props: { mode: 'admin' },
-      global: { plugins: [createPinia(), router], stubs: { AccountMenu: true } },
+      global: { plugins: [pinia, router], stubs: { AccountMenu: true } },
+    })
+    expect(sidebar.get('.workspace-nav').text()).toContain('知识问答')
+    expect(sidebar.get('.workspace-nav').text()).not.toContain('工作台')
+  })
+
+  it('keeps the management menu and a return link to chat on admin pages', async () => {
+    const router = await testRouter()
+    const pinia = createPinia()
+    useAuthStore(pinia).applySession({
+      user: {
+        id: 'admin',
+        username: 'admin',
+        displayName: '管理员',
+        role: 'ADMIN',
+        enabled: true,
+        lastLoginAt: null,
+        createdAt: '',
+        updatedAt: '',
+      },
+      csrfToken: 'nonce',
+    })
+    const sidebar = mount(AppSidebar, {
+      props: { mode: 'admin' },
+      global: { plugins: [pinia, router], stubs: { AccountMenu: true } },
     })
     const navigation = sidebar.get('.workspace-nav')
     expect(navigation.text()).toContain('知识问答')

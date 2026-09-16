@@ -26,6 +26,7 @@ export const router = createRouter({
     {
       path: '/admin',
       component: AdminLayout,
+      meta: { adminOnly: true },
       children: [
         {
           path: 'users',
@@ -95,7 +96,8 @@ router.beforeEach(async (to) => {
   }
   if (to.meta.public) return auth.authenticated ? redirectTarget(to.query.redirect) : true
   if (auth.authenticated) {
-    if (to.meta.adminOnly && auth.user?.role !== 'ADMIN') return '/chat'
+    if (to.matched.some((record) => record.meta.adminOnly) && auth.user?.role !== 'ADMIN')
+      return '/chat'
     return true
   }
   return { name: 'login', query: { redirect: to.fullPath } }

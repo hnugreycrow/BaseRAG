@@ -918,6 +918,7 @@ onBeforeUnmount(() => {
     <SourcePanel
       v-model="sourcePanelOpen"
       :message="sourceMessage"
+      :conversation-id="currentConversationId"
       :highlighted="highlightedCitation"
     />
   </div>

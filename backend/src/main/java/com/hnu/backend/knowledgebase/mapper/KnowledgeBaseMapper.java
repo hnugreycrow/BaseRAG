@@ -10,6 +10,9 @@ import org.apache.ibatis.annotations.Param;
 /** 知识库的数据访问接口。 */
 @Mapper
 public interface KnowledgeBaseMapper extends BaseMapper<KnowledgeBase> {
+  /** 根据标识查找管理员创建的公共知识库。 */
+  KnowledgeBase findAdminOwned(@Param("id") UUID id);
+
   /**
    * 按标识查询并锁定知识库行。
    *
@@ -22,24 +25,19 @@ public interface KnowledgeBaseMapper extends BaseMapper<KnowledgeBase> {
   /**
    * 分页查询知识库，并附带各知识库的文档数量。
    *
-   * @param ownerId 所属用户标识
    * @param query 可选的名称搜索词
    * @param limit 最大返回数量
    * @param offset 分页偏移量
    * @return 知识库列表
    */
   List<KnowledgeBase> selectWithDocumentCount(
-      @Param("ownerId") UUID ownerId,
-      @Param("query") String query,
-      @Param("limit") int limit,
-      @Param("offset") long offset);
+      @Param("query") String query, @Param("limit") int limit, @Param("offset") long offset);
 
   /**
    * 统计匹配名称条件的知识库数量。
    *
-   * @param ownerId 所属用户标识
    * @param query 可选的名称搜索词
    * @return 匹配数量
    */
-  long countWithDocumentCount(@Param("ownerId") UUID ownerId, @Param("query") String query);
+  long countWithDocumentCount(@Param("query") String query);
 }

@@ -10,6 +10,7 @@ import com.hnu.backend.document.vo.DocumentChunkDetailResponse;
 import com.hnu.backend.document.vo.DocumentChunkResponse;
 import com.hnu.backend.document.vo.DocumentImportResponse;
 import com.hnu.backend.document.vo.DocumentResponse;
+import com.hnu.backend.knowledgebase.service.KnowledgeBaseService;
 import com.hnu.backend.shared.web.PageResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -48,30 +49,47 @@ import org.springframework.web.multipart.MultipartFile;
 public class DocumentController {
   private final DocumentService documents;
   private final CurrentUserService currentUsers;
+  private final KnowledgeBaseService knowledgeBases;
 
   /**
    * 创建文档控制器。
    *
    * @param documents 文档服务
    * @param currentUsers 当前用户解析服务
+   * @param knowledgeBases 公共知识库查询服务
    */
-  public DocumentController(DocumentService documents, CurrentUserService currentUsers) {
+  public DocumentController(
+      DocumentService documents,
+      CurrentUserService currentUsers,
+      KnowledgeBaseService knowledgeBases) {
     this.documents = documents;
     this.currentUsers = currentUsers;
+    this.knowledgeBases = knowledgeBases;
+  }
+
+  /**
+   * 校验管理员身份并取得知识库创建者，供对象存储与异步任务沿用。
+   *
+   * @param knowledgeBaseId 公共知识库标识
+   * @return 知识库创建者标识
+   */
+  private UUID managedOwner(UUID knowledgeBaseId) {
+    currentUsers.requireAdmin();
+    return knowledgeBases.requireAdminOwned(knowledgeBaseId).getOwnerId();
   }
 
   /** 上传原文件；分块和向量化由独立接口显式触发。 */
   @PostMapping
   public DocumentImportResponse upload(
       @PathVariable UUID knowledgeBaseId, @RequestPart("file") MultipartFile file) {
-    return documents.upload(currentUsers.require().getId(), knowledgeBaseId, file);
+    return documents.upload(managedOwner(knowledgeBaseId), knowledgeBaseId, file);
   }
 
   /** 批量上传原文件，每个文件独立返回处理结果。 */
   @PostMapping("/batch")
   public DocumentBatchUploadResponse uploadBatch(
       @PathVariable UUID knowledgeBaseId, @RequestPart("files") List<MultipartFile> files) {
-    return documents.uploadBatch(currentUsers.require().getId(), knowledgeBaseId, files);
+    return documents.uploadBatch(managedOwner(knowledgeBaseId), knowledgeBaseId, files);
   }
 
   /**
@@ -91,7 +109,19 @@ public class DocumentController {
       @RequestHeader(value = HttpHeaders.RANGE, required = false) String range) {
     var file =
         documents.originalFile(
-            currentUsers.require().getId(), knowledgeBaseId, documentId, versionId);
+            managedOwner(knowledgeBaseId), knowledgeBaseId, documentId, versionId);
+    return fileResponse(file, range);
+  }
+
+  /**
+   * 将已完成授权的原文件转换为浏览器可预览的响应，PDF 支持单段范围请求。
+   *
+   * @param file 已授权的原文件
+   * @param range 可选 HTTP Range 请求头
+   * @return 原文件或部分内容
+   */
+  public static ResponseEntity<byte[]> fileResponse(
+      DocumentService.OriginalFile file, String range) {
     byte[] bytes = file.bytes();
     boolean pdf = "application/pdf".equals(file.mediaType());
     var disposition = pdf ? ContentDisposition.inline() : ContentDisposition.attachment();
@@ -150,13 +180,13 @@ public class DocumentController {
       @RequestParam(defaultValue = "1") @Min(1) int page,
       @RequestParam(defaultValue = "10") @Min(1) @Max(100) int pageSize,
       @RequestParam(required = false) @Size(max = 200) String query) {
-    return documents.list(currentUsers.require().getId(), knowledgeBaseId, page, pageSize, query);
+    return documents.list(managedOwner(knowledgeBaseId), knowledgeBaseId, page, pageSize, query);
   }
 
   /** 查询单篇文档的最新处理状态。 */
   @GetMapping("/{documentId}")
   public DocumentResponse get(@PathVariable UUID knowledgeBaseId, @PathVariable UUID documentId) {
-    return documents.get(currentUsers.require().getId(), knowledgeBaseId, documentId);
+    return documents.get(managedOwner(knowledgeBaseId), knowledgeBaseId, documentId);
   }
 
   /** 修改文档显示名称，不改变存储文件与已有版本。 */
@@ -166,14 +196,14 @@ public class DocumentController {
       @PathVariable UUID documentId,
       @Valid @RequestBody DocumentRequest request) {
     return documents.rename(
-        currentUsers.require().getId(), knowledgeBaseId, documentId, request.name());
+        managedOwner(knowledgeBaseId), knowledgeBaseId, documentId, request.name());
   }
 
   /** 删除文档、版本、分块及对应的存储文件。 */
   @DeleteMapping("/{documentId}")
   @ResponseStatus(HttpStatus.NO_CONTENT)
   public void delete(@PathVariable UUID knowledgeBaseId, @PathVariable UUID documentId) {
-    documents.delete(currentUsers.require().getId(), knowledgeBaseId, documentId);
+    documents.delete(managedOwner(knowledgeBaseId), knowledgeBaseId, documentId);
   }
 
   /** 分页查询文档当前生效版本的分块摘要。 */
@@ -185,7 +215,7 @@ public class DocumentController {
       @RequestParam(defaultValue = "10") @Min(1) @Max(100) int pageSize,
       @RequestParam(required = false) @Size(max = 200) String query) {
     return documents.listChunks(
-        currentUsers.require().getId(), knowledgeBaseId, documentId, page, pageSize, query);
+        managedOwner(knowledgeBaseId), knowledgeBaseId, documentId, page, pageSize, query);
   }
 
   /** 对文档最新版本执行分块和向量化，已就绪版本可通过该接口重建。 */
@@ -193,7 +223,7 @@ public class DocumentController {
   @ResponseStatus(HttpStatus.ACCEPTED)
   public DocumentImportResponse createChunks(
       @PathVariable UUID knowledgeBaseId, @PathVariable UUID documentId) {
-    return documents.enqueueChunks(currentUsers.require().getId(), knowledgeBaseId, documentId);
+    return documents.enqueueChunks(managedOwner(knowledgeBaseId), knowledgeBaseId, documentId);
   }
 
   /** 一次提交当前页多篇文档，处理中项跳过。 */
@@ -202,7 +232,7 @@ public class DocumentController {
   public DocumentChunkBatchResponse createChunkBatch(
       @PathVariable UUID knowledgeBaseId, @Valid @RequestBody DocumentChunkBatchRequest request) {
     return documents.enqueueBatch(
-        currentUsers.require().getId(), knowledgeBaseId, request.documentIds(), true);
+        managedOwner(knowledgeBaseId), knowledgeBaseId, request.documentIds(), true);
   }
 
   /** 获取当前生效版本中的指定分块全文。 */
@@ -211,6 +241,6 @@ public class DocumentController {
       @PathVariable UUID knowledgeBaseId,
       @PathVariable UUID documentId,
       @PathVariable UUID chunkId) {
-    return documents.chunk(currentUsers.require().getId(), knowledgeBaseId, documentId, chunkId);
+    return documents.chunk(managedOwner(knowledgeBaseId), knowledgeBaseId, documentId, chunkId);
   }
 }

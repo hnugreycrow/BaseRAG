@@ -3,6 +3,7 @@ package com.hnu.backend.document.controller;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -10,6 +11,9 @@ import com.hnu.backend.auth.entity.User;
 import com.hnu.backend.auth.service.CurrentUserService;
 import com.hnu.backend.document.service.DocumentService;
 import com.hnu.backend.document.vo.DocumentBatchUploadResponse;
+import com.hnu.backend.document.vo.DocumentChunkBatchResponse;
+import com.hnu.backend.knowledgebase.entity.KnowledgeBase;
+import com.hnu.backend.knowledgebase.service.KnowledgeBaseService;
 import com.hnu.backend.shared.error.GlobalExceptionHandler;
 import com.hnu.backend.shared.web.ApiResponseAdvice;
 import java.nio.charset.StandardCharsets;
@@ -17,6 +21,7 @@ import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -24,6 +29,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 class DocumentControllerBatchTest {
   private final DocumentService documents = mock(DocumentService.class);
   private final CurrentUserService currentUsers = mock(CurrentUserService.class);
+  private final KnowledgeBaseService knowledgeBases = mock(KnowledgeBaseService.class);
   private final UUID ownerId = UUID.randomUUID();
   private final UUID knowledgeBaseId = UUID.randomUUID();
   private MockMvc mvc;
@@ -31,10 +37,15 @@ class DocumentControllerBatchTest {
   @BeforeEach
   void setUp() {
     User user = new User();
-    user.setId(ownerId);
-    when(currentUsers.require()).thenReturn(user);
+    // 操作者与知识库创建者不同，异步任务仍须使用创建者标识。
+    user.setId(UUID.randomUUID());
+    when(currentUsers.requireAdmin()).thenReturn(user);
+    KnowledgeBase managed = new KnowledgeBase();
+    managed.setOwnerId(ownerId);
+    when(knowledgeBases.requireAdminOwned(knowledgeBaseId)).thenReturn(managed);
     mvc =
-        MockMvcBuilders.standaloneSetup(new DocumentController(documents, currentUsers))
+        MockMvcBuilders.standaloneSetup(
+                new DocumentController(documents, currentUsers, knowledgeBases))
             .setControllerAdvice(new ApiResponseAdvice(), new GlobalExceptionHandler())
             .build();
   }
@@ -70,6 +81,21 @@ class DocumentControllerBatchTest {
                     files.size() == 2
                         && "first.md".equals(files.get(0).getOriginalFilename())
                         && "second.markdown".equals(files.get(1).getOriginalFilename())));
+  }
+
+  @Test
+  void queuesChunksUnderLibraryCreatorAcrossAdministrators() throws Exception {
+    UUID documentId = UUID.randomUUID();
+    when(documents.enqueueBatch(ownerId, knowledgeBaseId, List.of(documentId), true))
+        .thenReturn(new DocumentChunkBatchResponse(List.of(documentId), List.of()));
+
+    mvc.perform(
+            post("/api/knowledge-bases/{knowledgeBaseId}/documents/chunk-jobs", knowledgeBaseId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"documentIds\":[\"" + documentId + "\"]}"))
+        .andExpect(status().isAccepted())
+        .andExpect(jsonPath("$.data.acceptedDocumentIds[0]").value(documentId.toString()));
+    verify(documents).enqueueBatch(ownerId, knowledgeBaseId, List.of(documentId), true);
   }
 
   @Test

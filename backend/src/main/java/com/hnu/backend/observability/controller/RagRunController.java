@@ -66,7 +66,7 @@ public class RagRunController {
       @RequestParam(required = false) UUID userId,
       @RequestParam(defaultValue = "1") @Min(1) int page,
       @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize) {
-    User actor = currentUsers.require();
+    User actor = currentUsers.requireAdmin();
     return queries.list(actor, from, to, status, model, executionMode, userId, page, pageSize);
   }
 
@@ -78,7 +78,7 @@ public class RagRunController {
    */
   @GetMapping("/{id}")
   public RagRunResponses.Detail get(@PathVariable UUID id) {
-    return queries.get(currentUsers.require(), id);
+    return queries.get(currentUsers.requireAdmin(), id);
   }
 
   /**
@@ -102,6 +102,7 @@ public class RagRunController {
       @RequestParam(required = false) @Size(max = 200) String model,
       @RequestParam(required = false) RagExecutionMode executionMode,
       @RequestParam(required = false) UUID userId) {
-    return queries.summary(currentUsers.require(), from, to, status, model, executionMode, userId);
+    return queries.summary(
+        currentUsers.requireAdmin(), from, to, status, model, executionMode, userId);
   }
 }
