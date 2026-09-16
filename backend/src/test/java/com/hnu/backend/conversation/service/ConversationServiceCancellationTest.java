@@ -11,6 +11,8 @@ import com.hnu.backend.configuration.RagProperties;
 import com.hnu.backend.conversation.entity.Conversation;
 import com.hnu.backend.conversation.entity.GenerationAttempt;
 import com.hnu.backend.conversation.entity.Message;
+import com.hnu.backend.conversation.entity.MessageRole;
+import com.hnu.backend.conversation.entity.MessageStatus;
 import com.hnu.backend.conversation.mapper.ConversationMapper;
 import com.hnu.backend.conversation.mapper.GenerationAttemptMapper;
 import com.hnu.backend.conversation.mapper.MessageMapper;
@@ -110,17 +112,17 @@ class ConversationServiceCancellationTest {
     conversation.setThinkingEnabled(true);
     Message user = new Message();
     user.setId(UUID.randomUUID());
-    user.setRole("USER");
+    user.setRole(MessageRole.USER);
     user.setTurnIndex(1);
     user.setContent("问题");
     Message assistant = new Message();
     assistant.setId(UUID.randomUUID());
-    assistant.setRole("ASSISTANT");
+    assistant.setRole(MessageRole.ASSISTANT);
     assistant.setReplyToId(user.getId());
     assistant.setTurnIndex(1);
     assistant.setVariantIndex(1);
     assistant.setActive(true);
-    assistant.setStatus("COMPLETED");
+    assistant.setStatus(MessageStatus.COMPLETED);
     assistant.setContent("答案");
     assistant.setThinkingEnabled(true);
     assistant.setReasoningContent("模型思考内容");
@@ -141,7 +143,7 @@ class ConversationServiceCancellationTest {
     UUID conversationId = UUID.randomUUID();
     UUID generationId = UUID.randomUUID();
     when(conversationMapper.find(ownerId, conversationId)).thenReturn(conversation(conversationId));
-    Message pending = assistant(conversationId, generationId, "PENDING");
+    Message pending = assistant(conversationId, generationId, MessageStatus.PENDING);
     when(messageMapper.find(ownerId, generationId)).thenReturn(pending);
     when(messageMapper.cancelRunning(ownerId, generationId, conversationId, "partial"))
         .thenReturn(1);
@@ -161,7 +163,7 @@ class ConversationServiceCancellationTest {
     UUID generationId = UUID.randomUUID();
     when(conversationMapper.find(ownerId, conversationId)).thenReturn(conversation(conversationId));
     when(messageMapper.find(ownerId, generationId))
-        .thenReturn(assistant(conversationId, generationId, "CANCELLED"));
+        .thenReturn(assistant(conversationId, generationId, MessageStatus.CANCELLED));
 
     conversationService.cancel(ownerId, conversationId, generationId);
 
@@ -174,7 +176,7 @@ class ConversationServiceCancellationTest {
     UUID generationId = UUID.randomUUID();
     when(conversationMapper.find(ownerId, conversationId)).thenReturn(conversation(conversationId));
     when(messageMapper.find(ownerId, generationId))
-        .thenReturn(assistant(UUID.randomUUID(), generationId, "PENDING"));
+        .thenReturn(assistant(UUID.randomUUID(), generationId, MessageStatus.PENDING));
 
     ApiException error =
         assertThrows(
@@ -472,11 +474,11 @@ class ConversationServiceCancellationTest {
     return new com.hnu.backend.rag.memory.RagMemory("{}", 0, List.of(), List.of(), 0);
   }
 
-  private Message assistant(UUID conversationId, UUID generationId, String status) {
+  private Message assistant(UUID conversationId, UUID generationId, MessageStatus status) {
     Message message = new Message();
     message.setId(generationId);
     message.setConversationId(conversationId);
-    message.setRole("ASSISTANT");
+    message.setRole(MessageRole.ASSISTANT);
     message.setStatus(status);
     message.setContent("partial");
     return message;

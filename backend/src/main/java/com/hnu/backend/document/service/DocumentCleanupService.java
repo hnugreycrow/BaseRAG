@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.hnu.backend.document.entity.Document;
 import com.hnu.backend.document.entity.DocumentVersion;
+import com.hnu.backend.document.entity.DocumentVersionStatus;
 import com.hnu.backend.document.mapper.DocumentChunkMapper;
 import com.hnu.backend.document.mapper.DocumentMapper;
 import com.hnu.backend.document.mapper.DocumentVersionMapper;
@@ -55,7 +56,7 @@ public class DocumentCleanupService {
     if (documentVersionMapper.selectCount(
             new LambdaQueryWrapper<DocumentVersion>()
                 .eq(DocumentVersion::getKnowledgeBaseId, knowledgeBaseId)
-                .eq(DocumentVersion::getStatus, "PROCESSING"))
+                .eq(DocumentVersion::getStatus, DocumentVersionStatus.PROCESSING))
         > 0) throw ApiException.conflict("DOCUMENT_PROCESSING", "知识库中有文档正在分块，完成后才能删除");
     documentMapper.update(
         new LambdaUpdateWrapper<Document>()

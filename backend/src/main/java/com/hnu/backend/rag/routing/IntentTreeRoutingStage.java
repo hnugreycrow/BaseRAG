@@ -328,7 +328,9 @@ public class IntentTreeRoutingStage {
 
   /** 分类模型输出的原因码，与最终路由决策的 {@link RoutingReasonCode} 区分。 */
   private enum ModelReasonCode {
+    /** 模型确定了匹配意图。 */
     MATCHED,
+    /** 模型认为存在多个候选意图。 */
     AMBIGUOUS;
 
     static ModelReasonCode parse(String value) {

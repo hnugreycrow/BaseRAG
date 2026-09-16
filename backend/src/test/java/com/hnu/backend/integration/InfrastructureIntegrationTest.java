@@ -8,11 +8,17 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.hnu.backend.auth.entity.User;
 import com.hnu.backend.auth.mapper.UserMapper;
+import com.hnu.backend.conversation.entity.GenerationAttempt;
+import com.hnu.backend.conversation.entity.GenerationAttemptStatus;
 import com.hnu.backend.conversation.entity.Message;
+import com.hnu.backend.conversation.entity.MessageRole;
+import com.hnu.backend.conversation.entity.MessageStatus;
 import com.hnu.backend.conversation.mapper.ConversationMapper;
+import com.hnu.backend.conversation.mapper.GenerationAttemptMapper;
 import com.hnu.backend.conversation.mapper.MessageMapper;
 import com.hnu.backend.document.entity.DocumentChunk;
 import com.hnu.backend.document.entity.DocumentVersion;
+import com.hnu.backend.document.entity.DocumentVersionStatus;
 import com.hnu.backend.document.mapper.DocumentChunkMapper;
 import com.hnu.backend.document.mapper.DocumentMapper;
 import com.hnu.backend.document.mapper.DocumentVersionMapper;
@@ -84,6 +90,7 @@ class InfrastructureIntegrationTest {
   @Autowired RetrievalMapper retrievalMapper;
   @Autowired ConversationMapper conversationMapper;
   @Autowired MessageMapper messageMapper;
+  @Autowired GenerationAttemptMapper generationAttemptMapper;
   @Autowired RagRunMapper ragRunMapper;
   @Autowired RagStageRunMapper ragStageRunMapper;
   @Autowired DocumentService documentService;
@@ -106,11 +113,11 @@ class InfrastructureIntegrationTest {
     user.setId(UUID.randomUUID());
     user.setConversationId(conversationId);
     user.setClientRequestId(UUID.randomUUID());
-    user.setRole("USER");
+    user.setRole(MessageRole.USER);
     user.setTurnIndex(1);
     user.setVariantIndex(0);
     user.setActive(true);
-    user.setStatus("COMPLETED");
+    user.setStatus(MessageStatus.COMPLETED);
     user.setContent("问题");
     user.setSourcesJson("[]");
     user.setCitationsJson("[]");
@@ -119,12 +126,12 @@ class InfrastructureIntegrationTest {
     Message assistant = new Message();
     assistant.setId(UUID.randomUUID());
     assistant.setConversationId(conversationId);
-    assistant.setRole("ASSISTANT");
+    assistant.setRole(MessageRole.ASSISTANT);
     assistant.setTurnIndex(1);
     assistant.setVariantIndex(1);
     assistant.setActive(true);
     assistant.setReplyToId(user.getId());
-    assistant.setStatus("PENDING");
+    assistant.setStatus(MessageStatus.PENDING);
     assistant.setContent("");
     assistant.setSourcesJson("[]");
     assistant.setCitationsJson("[]");
@@ -138,11 +145,29 @@ class InfrastructureIntegrationTest {
         "{\"id\":\"test\",\"provider\":\"test\",\"model\":\"test\"}");
 
     var stored = messageMapper.find(ownerId, assistant.getId());
-    assertEquals("COMPLETED", stored.getStatus());
+    assertEquals(MessageStatus.COMPLETED, stored.getStatus());
     assertTrue(stored.getSourcesJson().contains("S1"));
     assertTrue(stored.getCitationsJson().contains("S1"));
     assertTrue(stored.getModelInfoJson().contains("test"));
     assertEquals(2, messageMapper.list(ownerId, conversationId).size());
+    GenerationAttempt attempt = new GenerationAttempt();
+    attempt.setId(UUID.randomUUID());
+    attempt.setAssistantMessageId(assistant.getId());
+    attempt.setAttemptIndex(1);
+    attempt.setReason("PRIMARY");
+    attempt.setModelId("test");
+    attempt.setProvider("test");
+    attempt.setModel("test");
+    attempt.setStatus(GenerationAttemptStatus.STREAMING);
+    attempt.setContent("");
+    generationAttemptMapper.insert(attempt);
+    assertEquals(
+        GenerationAttemptStatus.STREAMING,
+        generationAttemptMapper.selectById(attempt.getId()).getStatus());
+    assertEquals(1, generationAttemptMapper.complete(ownerId, attempt.getId(), "回答", "stop"));
+    assertEquals(
+        GenerationAttemptStatus.COMPLETED,
+        generationAttemptMapper.selectById(attempt.getId()).getStatus());
     assertEquals(
         1,
         conversationMapper.updateSummary(
@@ -167,11 +192,11 @@ class InfrastructureIntegrationTest {
     user.setId(userId);
     user.setConversationId(conversationId);
     user.setClientRequestId(UUID.randomUUID());
-    user.setRole("USER");
+    user.setRole(MessageRole.USER);
     user.setTurnIndex(1);
     user.setVariantIndex(0);
     user.setActive(true);
-    user.setStatus("COMPLETED");
+    user.setStatus(MessageStatus.COMPLETED);
     user.setContent("问题");
     user.setSourcesJson("[]");
     user.setCitationsJson("[]");
@@ -180,12 +205,12 @@ class InfrastructureIntegrationTest {
     Message assistant = new Message();
     assistant.setId(generationId);
     assistant.setConversationId(conversationId);
-    assistant.setRole("ASSISTANT");
+    assistant.setRole(MessageRole.ASSISTANT);
     assistant.setTurnIndex(1);
     assistant.setVariantIndex(1);
     assistant.setActive(true);
     assistant.setReplyToId(userId);
-    assistant.setStatus("PENDING");
+    assistant.setStatus(MessageStatus.PENDING);
     assistant.setContent("");
     assistant.setSourcesJson("[]");
     assistant.setCitationsJson("[]");
@@ -204,7 +229,7 @@ class InfrastructureIntegrationTest {
             "{\"id\":\"late\",\"provider\":\"test\",\"model\":\"test\"}"));
 
     Message stored = messageMapper.find(ownerId, generationId);
-    assertEquals("CANCELLED", stored.getStatus());
+    assertEquals(MessageStatus.CANCELLED, stored.getStatus());
     assertEquals("部分回答", stored.getContent());
     assertEquals("GENERATION_CANCELLED", stored.getErrorCode());
     conversationMapper.delete(ownerId, conversationId);
@@ -220,11 +245,11 @@ class InfrastructureIntegrationTest {
     user.setId(UUID.randomUUID());
     user.setConversationId(conversationId);
     user.setClientRequestId(UUID.randomUUID());
-    user.setRole("USER");
+    user.setRole(MessageRole.USER);
     user.setTurnIndex(1);
     user.setVariantIndex(0);
     user.setActive(true);
-    user.setStatus("COMPLETED");
+    user.setStatus(MessageStatus.COMPLETED);
     user.setContent("不会进入 Trace 的问题正文");
     user.setSourcesJson("[]");
     user.setCitationsJson("[]");
@@ -233,12 +258,12 @@ class InfrastructureIntegrationTest {
     Message assistant = new Message();
     assistant.setId(UUID.randomUUID());
     assistant.setConversationId(conversationId);
-    assistant.setRole("ASSISTANT");
+    assistant.setRole(MessageRole.ASSISTANT);
     assistant.setTurnIndex(1);
     assistant.setVariantIndex(1);
     assistant.setActive(true);
     assistant.setReplyToId(user.getId());
-    assistant.setStatus("COMPLETED");
+    assistant.setStatus(MessageStatus.COMPLETED);
     assistant.setContent("不会进入 Trace 的回答正文");
     assistant.setSourcesJson("[]");
     assistant.setCitationsJson("[]");
@@ -916,7 +941,7 @@ class InfrastructureIntegrationTest {
         new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<
                 com.hnu.backend.document.entity.DocumentVersion>()
             .eq(com.hnu.backend.document.entity.DocumentVersion::getDocumentId, failed.documentId())
-            .set(com.hnu.backend.document.entity.DocumentVersion::getStatus, "FAILED"));
+            .set(DocumentVersion::getStatus, DocumentVersionStatus.FAILED));
     documentVersionMapper.update(
         new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<
                 com.hnu.backend.document.entity.DocumentVersion>()

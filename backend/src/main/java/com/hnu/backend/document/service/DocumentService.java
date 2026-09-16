@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.hnu.backend.document.entity.Document;
 import com.hnu.backend.document.entity.DocumentChunk;
 import com.hnu.backend.document.entity.DocumentVersion;
+import com.hnu.backend.document.entity.DocumentVersionStatus;
 import com.hnu.backend.document.mapper.DocumentChunkMapper;
 import com.hnu.backend.document.mapper.DocumentMapper;
 import com.hnu.backend.document.mapper.DocumentVersionMapper;
@@ -163,7 +164,7 @@ public class DocumentService {
     version.setFormat(format.name());
     version.setMediaType(format.mediaType());
     version.setFileSizeBytes((long) bytes.length);
-    version.setStatus("UPLOADED");
+    version.setStatus(DocumentVersionStatus.UPLOADED);
     version.setParserVersion(format.parserVersion());
     version.setChunkerVersion("structured-block-v6");
     version.setEmbeddingModelId(knowledgeBase.getEmbeddingModelId());
@@ -186,7 +187,7 @@ public class DocumentService {
             documentVersionMapper.insert(version);
           });
       log.info("upload documentId={} status=UPLOADED", document.getId());
-      return new DocumentImportResponse(document.getId(), "UPLOADED", 0);
+      return new DocumentImportResponse(document.getId(), DocumentVersionStatus.UPLOADED.name(), 0);
     } catch (RuntimeException e) {
       removeStoredFile(version.getStorageKey());
       if (e instanceof ApiException api) throw api;
@@ -214,7 +215,12 @@ public class DocumentService {
       } catch (ApiException e) {
         results.add(
             new DocumentBatchUploadResponse.Item(
-                index, fileName, "FAILED", null, e.code(), e.getMessage()));
+                index,
+                fileName,
+                DocumentVersionStatus.FAILED.name(),
+                null,
+                e.code(),
+                e.getMessage()));
       }
     }
     return new DocumentBatchUploadResponse(results);
@@ -250,7 +256,8 @@ public class DocumentService {
             : documentChunkMapper.selectCount(
                 new LambdaQueryWrapper<DocumentChunk>()
                     .eq(DocumentChunk::getVersionId, document.getActiveVersionId()));
-    return new DocumentImportResponse(documentId, "PROCESSING", (int) count);
+    return new DocumentImportResponse(
+        documentId, DocumentVersionStatus.PROCESSING.name(), (int) count);
   }
 
   /** 校验所有权，跳过已有任务，原子抢占其余文档后提交进程内队列。 */
@@ -279,7 +286,7 @@ public class DocumentService {
                 for (int i = 0; i < documentIds.size(); i++) {
                   UUID documentId = documentIds.get(i);
                   DocumentVersion version = selectedVersions.get(i);
-                  if ("PROCESSING".equals(version.getStatus())) {
+                  if (version.getStatus() == DocumentVersionStatus.PROCESSING) {
                     if (!skipProcessing)
                       throw ApiException.conflict("DOCUMENT_PROCESSING", "文档正在分块，请稍后刷新");
                     skipped.add(documentId);
@@ -292,7 +299,7 @@ public class DocumentService {
                   DocumentVersion current = latestVersion(documentId);
                   if (skipProcessing
                       && current.getId().equals(version.getId())
-                      && "PROCESSING".equals(current.getStatus())) {
+                      && current.getStatus() == DocumentVersionStatus.PROCESSING) {
                     skipped.add(documentId);
                     continue;
                   }
@@ -342,8 +349,13 @@ public class DocumentService {
             .eq(DocumentVersion::getId, version.getId())
             .in(
                 DocumentVersion::getStatus,
-                allowReady ? List.of("UPLOADED", "FAILED", "READY") : List.of("UPLOADED", "FAILED"))
-            .set(DocumentVersion::getStatus, "PROCESSING")
+                allowReady
+                    ? List.of(
+                        DocumentVersionStatus.UPLOADED,
+                        DocumentVersionStatus.FAILED,
+                        DocumentVersionStatus.READY)
+                    : List.of(DocumentVersionStatus.UPLOADED, DocumentVersionStatus.FAILED))
+            .set(DocumentVersion::getStatus, DocumentVersionStatus.PROCESSING)
             .set(DocumentVersion::getErrorCode, null);
     return documentVersionMapper.update(update);
   }
@@ -353,7 +365,8 @@ public class DocumentService {
   public void markInterruptedTasks() {
     List<DocumentVersion> interrupted =
         documentVersionMapper.selectList(
-            new LambdaQueryWrapper<DocumentVersion>().eq(DocumentVersion::getStatus, "PROCESSING"));
+            new LambdaQueryWrapper<DocumentVersion>()
+                .eq(DocumentVersion::getStatus, DocumentVersionStatus.PROCESSING));
     interrupted.forEach(version -> markInterrupted(version.getDocumentId()));
   }
 
@@ -361,13 +374,17 @@ public class DocumentService {
     Document document = documentMapper.selectById(documentId);
     if (document == null) return;
     DocumentVersion version = latestVersion(documentId);
-    if (!"PROCESSING".equals(version.getStatus())) return;
+    if (version.getStatus() != DocumentVersionStatus.PROCESSING) {
+      return;
+    }
     boolean rebuilding = Objects.equals(document.getActiveVersionId(), version.getId());
     documentVersionMapper.update(
         new LambdaUpdateWrapper<DocumentVersion>()
             .eq(DocumentVersion::getId, version.getId())
-            .eq(DocumentVersion::getStatus, "PROCESSING")
-            .set(DocumentVersion::getStatus, rebuilding ? "READY" : "FAILED")
+            .eq(DocumentVersion::getStatus, DocumentVersionStatus.PROCESSING)
+            .set(
+                DocumentVersion::getStatus,
+                rebuilding ? DocumentVersionStatus.READY : DocumentVersionStatus.FAILED)
             .set(DocumentVersion::getErrorCode, "IMPORT_INTERRUPTED"));
   }
 
@@ -389,18 +406,19 @@ public class DocumentService {
     Document document = requireDocument(ownerId, knowledgeBaseId, documentId);
     DocumentVersion version = latestVersion(documentId);
     boolean rebuilding = Objects.equals(document.getActiveVersionId(), version.getId());
-    if (!alreadyClaimed && "PROCESSING".equals(version.getStatus())) {
+    if (!alreadyClaimed && version.getStatus() == DocumentVersionStatus.PROCESSING) {
       throw new ApiException("DOCUMENT_PROCESSING", "文档正在分块，请稍后刷新", HttpStatus.CONFLICT);
     }
     if (alreadyClaimed) {
-      if (!"PROCESSING".equals(version.getStatus()))
+      if (version.getStatus() != DocumentVersionStatus.PROCESSING) {
         throw new ApiException("DOCUMENT_PROCESSING", "文档状态已变化，请稍后刷新", HttpStatus.CONFLICT);
+      }
     } else {
       int claimed = claimVersion(version, true);
       if (claimed != 1)
         throw new ApiException("DOCUMENT_PROCESSING", "文档正在分块，请稍后刷新", HttpStatus.CONFLICT);
     }
-    version.setStatus("PROCESSING");
+    version.setStatus(DocumentVersionStatus.PROCESSING);
     version.setErrorCode(null);
     try {
       // 迁移前的版本没有格式字段，按原有 Markdown 格式处理。
@@ -460,21 +478,23 @@ public class DocumentService {
               chunk.setVector(EmbeddingClient.literal(vectors.get(i)));
               documentChunkMapper.insertVector(chunk);
             }
-            version.setStatus("READY");
+            version.setStatus(DocumentVersionStatus.READY);
             version.setChunkerVersion("structured-block-v6");
             documentVersionMapper.updateById(version);
             document.setActiveVersionId(version.getId());
             documentMapper.updateById(document);
           });
       log.info("chunk documentId={} chunks={} status=READY", document.getId(), pieces.size());
-      return new DocumentImportResponse(document.getId(), "READY", pieces.size());
+      return new DocumentImportResponse(
+          document.getId(), DocumentVersionStatus.READY.name(), pieces.size());
     } catch (RuntimeException e) {
       String code = e instanceof ApiException api ? api.code() : "IMPORT_FAILED";
       try {
         tx.executeWithoutResult(
             status -> {
               // 重建失败时保留原 READY 状态和旧分块；首次处理失败则标记为 FAILED。
-              version.setStatus(rebuilding ? "READY" : "FAILED");
+              version.setStatus(
+                  rebuilding ? DocumentVersionStatus.READY : DocumentVersionStatus.FAILED);
               version.setErrorCode(code);
               documentVersionMapper.updateById(version);
             });
@@ -547,8 +567,9 @@ public class DocumentService {
    */
   public void delete(UUID ownerId, UUID knowledgeBaseId, UUID documentId) {
     requireDocument(ownerId, knowledgeBaseId, documentId);
-    if ("PROCESSING".equals(latestVersion(documentId).getStatus()))
+    if (latestVersion(documentId).getStatus() == DocumentVersionStatus.PROCESSING) {
       throw ApiException.conflict("DOCUMENT_PROCESSING", "文档正在分块，完成后才能删除");
+    }
     List<DocumentVersion> storedVersions =
         documentVersionMapper.selectList(
             new LambdaQueryWrapper<DocumentVersion>()
@@ -679,7 +700,7 @@ public class DocumentService {
     return new DocumentResponse(
         document.getId(),
         document.getName(),
-        version.getStatus(),
+        version.getStatus().name(),
         version.getErrorCode(),
         chunkCount,
         document.getCreatedAt(),

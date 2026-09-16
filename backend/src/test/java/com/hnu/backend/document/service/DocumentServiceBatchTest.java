@@ -6,6 +6,7 @@ import static org.mockito.Mockito.*;
 
 import com.hnu.backend.document.entity.Document;
 import com.hnu.backend.document.entity.DocumentVersion;
+import com.hnu.backend.document.entity.DocumentVersionStatus;
 import com.hnu.backend.document.mapper.DocumentChunkMapper;
 import com.hnu.backend.document.mapper.DocumentMapper;
 import com.hnu.backend.document.mapper.DocumentVersionMapper;
@@ -104,7 +105,7 @@ class DocumentServiceBatchTest {
     for (int i = 0; i < 10; i++) {
       assertEquals(created.get(i).getId(), savedVersions.get(i).getDocumentId());
       assertEquals(created.get(i).getId(), result.results().get(i).documentId());
-      assertEquals("UPLOADED", savedVersions.get(i).getStatus());
+      assertEquals(DocumentVersionStatus.UPLOADED, savedVersions.get(i).getStatus());
     }
     verify(storage, times(10)).put(any(), any(), any());
   }

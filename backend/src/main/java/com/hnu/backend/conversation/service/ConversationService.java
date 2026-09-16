@@ -4,7 +4,10 @@ import com.hnu.backend.configuration.ConversationProperties;
 import com.hnu.backend.configuration.RagProperties;
 import com.hnu.backend.conversation.entity.Conversation;
 import com.hnu.backend.conversation.entity.GenerationAttempt;
+import com.hnu.backend.conversation.entity.GenerationAttemptStatus;
 import com.hnu.backend.conversation.entity.Message;
+import com.hnu.backend.conversation.entity.MessageRole;
+import com.hnu.backend.conversation.entity.MessageStatus;
 import com.hnu.backend.conversation.mapper.ConversationMapper;
 import com.hnu.backend.conversation.mapper.GenerationAttemptMapper;
 import com.hnu.backend.conversation.mapper.MessageMapper;
@@ -185,11 +188,13 @@ public class ConversationService {
     Map<Integer, Message> users = new LinkedHashMap<>();
     Map<Integer, List<Message>> assistants = new LinkedHashMap<>();
     for (Message message : all) {
-      if ("USER".equals(message.getRole())) users.put(message.getTurnIndex(), message);
-      else
+      if (message.getRole() == MessageRole.USER) {
+        users.put(message.getTurnIndex(), message);
+      } else {
         assistants
             .computeIfAbsent(message.getTurnIndex(), ignored -> new ArrayList<>())
             .add(message);
+      }
     }
     List<ConversationResponses.Turn> turns = new ArrayList<>();
     for (Message user : users.values()) {
@@ -303,7 +308,7 @@ public class ConversationService {
           messageMapper.findByClientRequest(ownerId, conversationId, clientMessageId);
       if (existing != null) {
         Message assistant =
-            "USER".equals(existing.getRole())
+            existing.getRole() == MessageRole.USER
                 ? messageMapper.latestReply(ownerId, existing.getId())
                 : existing;
         return replayOrConflict(conversation, existing, assistant, timing.requestId());
@@ -428,18 +433,18 @@ public class ConversationService {
       Message previous = messageMapper.find(ownerId, assistantMessageId);
       if (previous == null
           || !conversationId.equals(previous.getConversationId())
-          || !"ASSISTANT".equals(previous.getRole())) {
+          || previous.getRole() != MessageRole.ASSISTANT) {
         throw ApiException.notFound("MESSAGE_NOT_FOUND", "回答不存在");
       }
       if (regenerate) {
         int lastTurn = messageMapper.nextTurn(ownerId, conversationId) - 1;
         if (!previous.isActive()
-            || !"COMPLETED".equals(previous.getStatus())
+            || previous.getStatus() != MessageStatus.COMPLETED
             || previous.getTurnIndex() != lastTurn) {
           throw ApiException.conflict("REGENERATE_NOT_ALLOWED", "只能重新生成会话最后一轮的当前成功回答");
         }
-      } else if (!("FAILED".equals(previous.getStatus())
-          || "CANCELLED".equals(previous.getStatus()))) {
+      } else if (!(previous.getStatus() == MessageStatus.FAILED
+          || previous.getStatus() == MessageStatus.CANCELLED)) {
         throw ApiException.conflict("RETRY_NOT_ALLOWED", "只能重试失败或已停止的回答");
       }
       Message user = messageMapper.find(ownerId, previous.getReplyToId());
@@ -486,10 +491,13 @@ public class ConversationService {
     Message stored = messageMapper.find(ownerId, generationId);
     if (stored == null
         || !conversationId.equals(stored.getConversationId())
-        || !"ASSISTANT".equals(stored.getRole())) {
+        || stored.getRole() != MessageRole.ASSISTANT) {
       throw ApiException.notFound("GENERATION_NOT_FOUND", "生成任务不存在");
     }
-    if (!("PENDING".equals(stored.getStatus()) || "STREAMING".equals(stored.getStatus()))) return;
+    if (stored.getStatus() != MessageStatus.PENDING
+        && stored.getStatus() != MessageStatus.STREAMING) {
+      return;
+    }
     tx.executeWithoutResult(
         ignored -> {
           int changed =
@@ -544,7 +552,8 @@ public class ConversationService {
   private SseEmitter replayOrConflict(
       Conversation conversation, Message user, Message assistant, String requestId) {
     if (assistant == null) throw ApiException.conflict("MESSAGE_INCOMPLETE", "消息尚未创建回答");
-    if ("PENDING".equals(assistant.getStatus()) || "STREAMING".equals(assistant.getStatus())) {
+    if (assistant.getStatus() == MessageStatus.PENDING
+        || assistant.getStatus() == MessageStatus.STREAMING) {
       throw ApiException.conflict("GENERATION_IN_PROGRESS", "相同请求正在生成");
     }
     SseEmitter emitter = new SseEmitter(0L);
@@ -554,8 +563,8 @@ public class ConversationService {
             send(emitter, "started", startedPayload(conversation, user, assistant));
             String event =
                 switch (assistant.getStatus()) {
-                  case "COMPLETED" -> "complete";
-                  case "CANCELLED" -> "cancelled";
+                  case COMPLETED -> "complete";
+                  case CANCELLED -> "cancelled";
                   default -> "error";
                 };
             send(emitter, event, terminalPayload(assistant, requestId));
@@ -831,7 +840,7 @@ public class ConversationService {
       attempt.setModelId(target.id());
       attempt.setProvider(target.provider());
       attempt.setModel(target.model());
-      attempt.setStatus("STREAMING");
+      attempt.setStatus(GenerationAttemptStatus.STREAMING);
       attempt.setContent("");
       attempt.setReasoningContent("");
       generationAttemptMapper.insert(attempt);
@@ -900,7 +909,9 @@ public class ConversationService {
         generationAttemptMapper.fail(
             active.ownerId,
             active.currentAttemptId,
-            active.control.cancelled() ? "CANCELLED" : "FAILED",
+            active.control.cancelled()
+                ? GenerationAttemptStatus.CANCELLED
+                : GenerationAttemptStatus.FAILED,
             partialContent,
             error.code(),
             error.getMessage());
@@ -982,7 +993,7 @@ public class ConversationService {
    * @param message 用户可读错误信息
    */
   private void failCurrentAttempt(
-      ActiveGeneration active, String status, String code, String message) {
+      ActiveGeneration active, GenerationAttemptStatus status, String code, String message) {
     if (active.currentAttemptId != null) {
       generationAttemptMapper.fail(
           active.ownerId, active.currentAttemptId, status, active.buffer.toString(), code, message);
@@ -1093,11 +1104,16 @@ public class ConversationService {
           ignored -> {
             int changed =
                 messageMapper.terminalFailure(
-                    active.ownerId, active.generationId, "FAILED", content, code, message);
+                    active.ownerId,
+                    active.generationId,
+                    MessageStatus.FAILED,
+                    content,
+                    code,
+                    message);
             if (changed > 0) {
               messageMapper.saveReasoning(
                   active.ownerId, active.generationId, active.reasoningBuffer.toString());
-              failCurrentAttempt(active, "FAILED", code, message);
+              failCurrentAttempt(active, GenerationAttemptStatus.FAILED, code, message);
               conversationMapper.touch(active.ownerId, active.conversation.getId());
             }
             persistenceSpan.success(changed);
@@ -1147,8 +1163,8 @@ public class ConversationService {
     active.assistant = stored;
     String event =
         switch (stored.getStatus()) {
-          case "COMPLETED" -> "complete";
-          case "CANCELLED" -> "cancelled";
+          case COMPLETED -> "complete";
+          case CANCELLED -> "cancelled";
           default -> "error";
         };
     finish(active, event, terminalPayload(stored, active.requestId));
@@ -1270,7 +1286,7 @@ public class ConversationService {
         message.getTurnIndex(),
         message.getVariantIndex(),
         message.isActive(),
-        message.getStatus(),
+        message.getStatus().name(),
         message.getContent(),
         message.isThinkingEnabled(),
         message.getReasoningContent(),
@@ -1367,11 +1383,11 @@ public class ConversationService {
     value.setId(UUID.randomUUID());
     value.setConversationId(conversationId);
     value.setClientRequestId(clientId);
-    value.setRole("USER");
+    value.setRole(MessageRole.USER);
     value.setTurnIndex(turn);
     value.setVariantIndex(0);
     value.setActive(true);
-    value.setStatus("COMPLETED");
+    value.setStatus(MessageStatus.COMPLETED);
     value.setContent(content);
     value.setSourcesJson("[]");
     value.setCitationsJson("[]");
@@ -1394,12 +1410,12 @@ public class ConversationService {
     value.setId(UUID.randomUUID());
     value.setConversationId(conversationId);
     value.setClientRequestId(clientId);
-    value.setRole("ASSISTANT");
+    value.setRole(MessageRole.ASSISTANT);
     value.setTurnIndex(turn);
     value.setVariantIndex(variant);
     value.setActive(true);
     value.setReplyToId(replyTo);
-    value.setStatus("PENDING");
+    value.setStatus(MessageStatus.PENDING);
     value.setContent("");
     value.setReasoningContent("");
     value.setSourcesJson("[]");

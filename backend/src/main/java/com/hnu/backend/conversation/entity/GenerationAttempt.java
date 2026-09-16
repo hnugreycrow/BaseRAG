@@ -34,7 +34,7 @@ public class GenerationAttempt {
   private String model;
 
   /** 尝试状态。 */
-  private String status;
+  private GenerationAttemptStatus status;
 
   /** 本次尝试生成的完整或部分内容。 */
   private String content;

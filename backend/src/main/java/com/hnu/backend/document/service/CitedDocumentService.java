@@ -1,5 +1,6 @@
 package com.hnu.backend.document.service;
 
+import com.hnu.backend.conversation.entity.MessageStatus;
 import com.hnu.backend.conversation.service.ConversationService;
 import com.hnu.backend.conversation.vo.ConversationResponses;
 import com.hnu.backend.knowledgebase.entity.KnowledgeBase;
@@ -44,7 +45,8 @@ public class CitedDocumentService {
             .filter(candidate -> candidate.id().equals(messageId))
             .findFirst()
             .orElseThrow(CitedDocumentService::notFound);
-    if (!"COMPLETED".equals(message.status()) || !message.citations().contains(citationId)) {
+    if (!MessageStatus.COMPLETED.name().equals(message.status())
+        || !message.citations().contains(citationId)) {
       throw notFound();
     }
     SourceResponse source =

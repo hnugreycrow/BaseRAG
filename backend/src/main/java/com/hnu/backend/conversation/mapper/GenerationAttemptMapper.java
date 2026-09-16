@@ -3,6 +3,7 @@ package com.hnu.backend.conversation.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.hnu.backend.conversation.entity.GenerationAttempt;
+import com.hnu.backend.conversation.entity.GenerationAttemptStatus;
 import java.util.UUID;
 import org.apache.ibatis.annotations.Mapper;
 
@@ -24,7 +25,7 @@ public interface GenerationAttemptMapper extends BaseMapper<GenerationAttempt> {
             .apply(
                 "assistant_message_id IN (SELECT m.id FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE c.owner_id = {0})",
                 ownerId)
-            .eq(GenerationAttempt::getStatus, "STREAMING")
+            .eq(GenerationAttempt::getStatus, GenerationAttemptStatus.STREAMING)
             .set(GenerationAttempt::getContent, content));
   }
 
@@ -36,7 +37,7 @@ public interface GenerationAttemptMapper extends BaseMapper<GenerationAttempt> {
             .apply(
                 "assistant_message_id IN (SELECT m.id FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE c.owner_id = {0})",
                 ownerId)
-            .eq(GenerationAttempt::getStatus, "STREAMING")
+            .eq(GenerationAttempt::getStatus, GenerationAttemptStatus.STREAMING)
             .set(GenerationAttempt::getReasoningContent, reasoning));
   }
 
@@ -67,8 +68,8 @@ public interface GenerationAttemptMapper extends BaseMapper<GenerationAttempt> {
             .apply(
                 "assistant_message_id IN (SELECT m.id FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE c.owner_id = {0})",
                 ownerId)
-            .eq(GenerationAttempt::getStatus, "STREAMING")
-            .set(GenerationAttempt::getStatus, "COMPLETED")
+            .eq(GenerationAttempt::getStatus, GenerationAttemptStatus.STREAMING)
+            .set(GenerationAttempt::getStatus, GenerationAttemptStatus.COMPLETED)
             .set(GenerationAttempt::getContent, content)
             .set(GenerationAttempt::getFinishReason, finishReason)
             .setSql("completed_at = now()"));
@@ -86,14 +87,19 @@ public interface GenerationAttemptMapper extends BaseMapper<GenerationAttempt> {
    * @return 实际更新行数
    */
   default int fail(
-      UUID ownerId, UUID id, String status, String content, String code, String message) {
+      UUID ownerId,
+      UUID id,
+      GenerationAttemptStatus status,
+      String content,
+      String code,
+      String message) {
     return update(
         Wrappers.<GenerationAttempt>lambdaUpdate()
             .eq(GenerationAttempt::getId, id)
             .apply(
                 "assistant_message_id IN (SELECT m.id FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE c.owner_id = {0})",
                 ownerId)
-            .eq(GenerationAttempt::getStatus, "STREAMING")
+            .eq(GenerationAttempt::getStatus, GenerationAttemptStatus.STREAMING)
             .set(GenerationAttempt::getStatus, status)
             .set(GenerationAttempt::getContent, content)
             .set(GenerationAttempt::getErrorCode, code)
@@ -119,8 +125,8 @@ public interface GenerationAttemptMapper extends BaseMapper<GenerationAttempt> {
             .apply(
                 "assistant_message_id IN (SELECT m.id FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE c.owner_id = {0})",
                 ownerId)
-            .eq(GenerationAttempt::getStatus, "COMPLETED")
-            .set(GenerationAttempt::getStatus, "FAILED")
+            .eq(GenerationAttempt::getStatus, GenerationAttemptStatus.COMPLETED)
+            .set(GenerationAttempt::getStatus, GenerationAttemptStatus.FAILED)
             .set(GenerationAttempt::getErrorCode, code)
             .set(GenerationAttempt::getErrorMessage, message)
             .setSql("completed_at = now()"));
@@ -140,8 +146,8 @@ public interface GenerationAttemptMapper extends BaseMapper<GenerationAttempt> {
             .apply(
                 "assistant_message_id IN (SELECT m.id FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE c.owner_id = {0})",
                 ownerId)
-            .eq(GenerationAttempt::getStatus, "STREAMING")
-            .set(GenerationAttempt::getStatus, "CANCELLED")
+            .eq(GenerationAttempt::getStatus, GenerationAttemptStatus.STREAMING)
+            .set(GenerationAttempt::getStatus, GenerationAttemptStatus.CANCELLED)
             .set(GenerationAttempt::getErrorCode, "GENERATION_CANCELLED")
             .set(GenerationAttempt::getErrorMessage, "生成已停止")
             .setSql("completed_at = now()"));
@@ -155,8 +161,8 @@ public interface GenerationAttemptMapper extends BaseMapper<GenerationAttempt> {
   default int recoverInterrupted() {
     return update(
         Wrappers.<GenerationAttempt>lambdaUpdate()
-            .eq(GenerationAttempt::getStatus, "STREAMING")
-            .set(GenerationAttempt::getStatus, "FAILED")
+            .eq(GenerationAttempt::getStatus, GenerationAttemptStatus.STREAMING)
+            .set(GenerationAttempt::getStatus, GenerationAttemptStatus.FAILED)
             .set(GenerationAttempt::getErrorCode, "GENERATION_INTERRUPTED")
             .set(GenerationAttempt::getErrorMessage, "应用重启中断了生成")
             .setSql("completed_at = now()"));

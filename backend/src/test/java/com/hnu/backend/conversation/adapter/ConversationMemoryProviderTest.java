@@ -14,6 +14,8 @@ import static org.mockito.Mockito.when;
 import com.hnu.backend.configuration.ConversationProperties;
 import com.hnu.backend.conversation.entity.Conversation;
 import com.hnu.backend.conversation.entity.Message;
+import com.hnu.backend.conversation.entity.MessageRole;
+import com.hnu.backend.conversation.entity.MessageStatus;
 import com.hnu.backend.conversation.mapper.ConversationMapper;
 import com.hnu.backend.conversation.mapper.MessageMapper;
 import com.hnu.backend.model.client.ChatClient;
@@ -356,7 +358,8 @@ class ConversationMemoryProviderTest {
     String longAnswer = "完整历史".repeat(13_000);
     List<Message> history = turns(conversation.getId(), 8);
     history.stream()
-        .filter(message -> "ASSISTANT".equals(message.getRole()) && message.getTurnIndex() == 8)
+        .filter(
+            message -> message.getRole() == MessageRole.ASSISTANT && message.getTurnIndex() == 8)
         .findFirst()
         .orElseThrow()
         .setContent(longAnswer);
@@ -386,17 +389,19 @@ class ConversationMemoryProviderTest {
     updated.setSummaryRevision(1);
     List<Message> history = new ArrayList<>();
     for (int index : List.of(1, 2, 4, 5, 7, 8, 9, 10, 11)) {
-      addTurn(history, conversation.getId(), index, true, "COMPLETED", true, "回答" + index);
+      addTurn(
+          history, conversation.getId(), index, true, MessageStatus.COMPLETED, true, "回答" + index);
     }
-    addTurn(history, conversation.getId(), 3, true, "FAILED", true, "失败回答");
-    addTurn(history, conversation.getId(), 6, true, "CANCELLED", true, "已取消回答");
+    addTurn(history, conversation.getId(), 3, true, MessageStatus.FAILED, true, "失败回答");
+    addTurn(history, conversation.getId(), 6, true, MessageStatus.CANCELLED, true, "已取消回答");
     history.stream()
-        .filter(message -> "USER".equals(message.getRole()) && message.getTurnIndex() == 1)
+        .filter(message -> message.getRole() == MessageRole.USER && message.getTurnIndex() == 1)
         .findFirst()
         .orElseThrow()
         .setContent("准备制度修订，截止2026-09-20，预算不超过3000元；偏好中文，负责人未定");
     history.stream()
-        .filter(message -> "ASSISTANT".equals(message.getRole()) && message.getTurnIndex() == 1)
+        .filter(
+            message -> message.getRole() == MessageRole.ASSISTANT && message.getTurnIndex() == 1)
         .findFirst()
         .orElseThrow()
         .setContent("HNU负责审批，仅是助手曾回答的历史陈述");
@@ -454,14 +459,14 @@ class ConversationMemoryProviderTest {
   void includesOnlyActiveCompletedPairedAnswersBeforeCurrentTurn() {
     Conversation conversation = conversation();
     List<Message> history = new ArrayList<>();
-    addTurn(history, conversation.getId(), 1, true, "COMPLETED", true, "回答1");
-    addTurn(history, conversation.getId(), 2, true, "CANCELLED", true, "回答2");
-    addTurn(history, conversation.getId(), 3, false, "COMPLETED", true, "旧回答3");
-    addAssistant(history, conversation.getId(), 3, true, "COMPLETED", "新回答3");
-    addTurn(history, conversation.getId(), 4, true, "FAILED", true, "回答4");
-    addAssistant(history, conversation.getId(), 5, true, "COMPLETED", "无用户回答");
-    addTurn(history, conversation.getId(), 6, true, "COMPLETED", true, "回答6");
-    addTurn(history, conversation.getId(), 7, true, "COMPLETED", true, "当前回答");
+    addTurn(history, conversation.getId(), 1, true, MessageStatus.COMPLETED, true, "回答1");
+    addTurn(history, conversation.getId(), 2, true, MessageStatus.CANCELLED, true, "回答2");
+    addTurn(history, conversation.getId(), 3, false, MessageStatus.COMPLETED, true, "旧回答3");
+    addAssistant(history, conversation.getId(), 3, true, MessageStatus.COMPLETED, "新回答3");
+    addTurn(history, conversation.getId(), 4, true, MessageStatus.FAILED, true, "回答4");
+    addAssistant(history, conversation.getId(), 5, true, MessageStatus.COMPLETED, "无用户回答");
+    addTurn(history, conversation.getId(), 6, true, MessageStatus.COMPLETED, true, "回答6");
+    addTurn(history, conversation.getId(), 7, true, MessageStatus.COMPLETED, true, "当前回答");
     when(conversationMapper.find(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(conversation);
     when(messageMapper.list(conversation.getOwnerId(), conversation.getId())).thenReturn(history);
@@ -485,7 +490,7 @@ class ConversationMemoryProviderTest {
   private List<Message> turns(UUID conversationId, int count) {
     List<Message> result = new ArrayList<>();
     for (int i = 1; i <= count; i++) {
-      addTurn(result, conversationId, i, true, "COMPLETED", true, "回答" + i);
+      addTurn(result, conversationId, i, true, MessageStatus.COMPLETED, true, "回答" + i);
     }
     return result;
   }
@@ -495,16 +500,16 @@ class ConversationMemoryProviderTest {
       UUID conversationId,
       int turnIndex,
       boolean active,
-      String status,
+      MessageStatus status,
       boolean includeUser,
       String answer) {
     if (includeUser) {
       Message user = new Message();
       user.setId(UUID.randomUUID());
       user.setConversationId(conversationId);
-      user.setRole("USER");
+      user.setRole(MessageRole.USER);
       user.setTurnIndex(turnIndex);
-      user.setStatus("COMPLETED");
+      user.setStatus(MessageStatus.COMPLETED);
       user.setContent("问题" + turnIndex);
       result.add(user);
     }
@@ -516,12 +521,12 @@ class ConversationMemoryProviderTest {
       UUID conversationId,
       int turnIndex,
       boolean active,
-      String status,
+      MessageStatus status,
       String answer) {
     Message assistant = new Message();
     assistant.setId(UUID.randomUUID());
     assistant.setConversationId(conversationId);
-    assistant.setRole("ASSISTANT");
+    assistant.setRole(MessageRole.ASSISTANT);
     assistant.setTurnIndex(turnIndex);
     assistant.setVariantIndex(1);
     assistant.setActive(active);

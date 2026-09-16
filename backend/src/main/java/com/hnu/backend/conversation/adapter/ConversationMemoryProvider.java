@@ -3,6 +3,8 @@ package com.hnu.backend.conversation.adapter;
 import com.hnu.backend.configuration.ConversationProperties;
 import com.hnu.backend.conversation.entity.Conversation;
 import com.hnu.backend.conversation.entity.Message;
+import com.hnu.backend.conversation.entity.MessageRole;
+import com.hnu.backend.conversation.entity.MessageStatus;
 import com.hnu.backend.conversation.mapper.ConversationMapper;
 import com.hnu.backend.conversation.mapper.MessageMapper;
 import com.hnu.backend.model.client.ChatClient;
@@ -220,15 +222,15 @@ public class ConversationMemoryProvider implements MemoryProvider {
     List<Message> all = messageMapper.list(ownerId, conversationId);
     Map<Integer, Message> users = new LinkedHashMap<>();
     all.stream()
-        .filter(message -> "USER".equals(message.getRole()))
+        .filter(message -> message.getRole() == MessageRole.USER)
         .forEach(message -> users.put(message.getTurnIndex(), message));
     List<MemoryTurn> result = new ArrayList<>();
     all.stream()
         .filter(
             message ->
-                "ASSISTANT".equals(message.getRole())
+                message.getRole() == MessageRole.ASSISTANT
                     && message.isActive()
-                    && "COMPLETED".equals(message.getStatus())
+                    && message.getStatus() == MessageStatus.COMPLETED
                     && message.getTurnIndex() < beforeTurn)
         .sorted(Comparator.comparingInt(Message::getTurnIndex))
         .forEach(

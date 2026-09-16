@@ -25,7 +25,7 @@ public class Message {
   private UUID clientRequestId;
 
   /** 消息角色，取值为 USER 或 ASSISTANT。 */
-  private String role;
+  private MessageRole role;
 
   /** 会话中的轮次序号。 */
   private int turnIndex;
@@ -40,7 +40,7 @@ public class Message {
   private UUID replyToId;
 
   /** 消息生成状态。 */
-  private String status;
+  private MessageStatus status;
 
   /** 消息正文或流式生成的已保存部分。 */
   private String content;

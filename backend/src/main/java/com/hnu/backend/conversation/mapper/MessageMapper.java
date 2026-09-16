@@ -3,6 +3,8 @@ package com.hnu.backend.conversation.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.hnu.backend.conversation.entity.Message;
+import com.hnu.backend.conversation.entity.MessageRole;
+import com.hnu.backend.conversation.entity.MessageStatus;
 import java.util.List;
 import java.util.UUID;
 import org.apache.ibatis.annotations.Mapper;
@@ -93,7 +95,7 @@ public interface MessageMapper extends BaseMapper<Message> {
                     .apply(
                         "conversation_id IN (SELECT id FROM conversations WHERE owner_id = {0})",
                         ownerId)
-                    .eq("role", "USER"))
+                    .eq("role", MessageRole.USER.name()))
             .getFirst();
     return ((Number) value).intValue();
   }
@@ -114,7 +116,7 @@ public interface MessageMapper extends BaseMapper<Message> {
                     .apply(
                         "conversation_id IN (SELECT id FROM conversations WHERE owner_id = {0})",
                         ownerId)
-                    .eq("role", "ASSISTANT"))
+                    .eq("role", MessageRole.ASSISTANT.name()))
             .getFirst();
     return ((Number) value).intValue();
   }
@@ -132,7 +134,7 @@ public interface MessageMapper extends BaseMapper<Message> {
             .eq(Message::getReplyToId, userMessageId)
             .apply(
                 "conversation_id IN (SELECT id FROM conversations WHERE owner_id = {0})", ownerId)
-            .eq(Message::getRole, "ASSISTANT")
+            .eq(Message::getRole, MessageRole.ASSISTANT)
             .eq(Message::isActive, true)
             .set(Message::isActive, false)
             .setSql("updated_at = now()"));
@@ -153,7 +155,7 @@ public interface MessageMapper extends BaseMapper<Message> {
             .eq(Message::getId, id)
             .apply(
                 "conversation_id IN (SELECT id FROM conversations WHERE owner_id = {0})", ownerId)
-            .in(Message::getStatus, "PENDING", "STREAMING")
+            .in(Message::getStatus, MessageStatus.PENDING, MessageStatus.STREAMING)
             .set(Message::getRetrievalQuery, query)
             .setSql("sources = CAST({0} AS jsonb)", sourcesJson)
             .setSql("updated_at = now()"));
@@ -172,8 +174,8 @@ public interface MessageMapper extends BaseMapper<Message> {
             .eq(Message::getId, id)
             .apply(
                 "conversation_id IN (SELECT id FROM conversations WHERE owner_id = {0})", ownerId)
-            .eq(Message::getStatus, "PENDING")
-            .set(Message::getStatus, "STREAMING")
+            .eq(Message::getStatus, MessageStatus.PENDING)
+            .set(Message::getStatus, MessageStatus.STREAMING)
             .setSql("updated_at = now()"));
   }
 
@@ -191,7 +193,7 @@ public interface MessageMapper extends BaseMapper<Message> {
             .eq(Message::getId, id)
             .apply(
                 "conversation_id IN (SELECT id FROM conversations WHERE owner_id = {0})", ownerId)
-            .in(Message::getStatus, "PENDING", "STREAMING")
+            .in(Message::getStatus, MessageStatus.PENDING, MessageStatus.STREAMING)
             .setSql("model_info = CAST({0} AS jsonb)", modelInfoJson)
             .setSql("updated_at = now()"));
   }
@@ -210,7 +212,7 @@ public interface MessageMapper extends BaseMapper<Message> {
             .eq(Message::getId, id)
             .apply(
                 "conversation_id IN (SELECT id FROM conversations WHERE owner_id = {0})", ownerId)
-            .in(Message::getStatus, "PENDING", "STREAMING")
+            .in(Message::getStatus, MessageStatus.PENDING, MessageStatus.STREAMING)
             .set(Message::getContent, content)
             .setSql("updated_at = now()"));
   }
@@ -222,7 +224,7 @@ public interface MessageMapper extends BaseMapper<Message> {
             .eq(Message::getId, id)
             .apply(
                 "conversation_id IN (SELECT id FROM conversations WHERE owner_id = {0})", ownerId)
-            .in(Message::getStatus, "PENDING", "STREAMING")
+            .in(Message::getStatus, MessageStatus.PENDING, MessageStatus.STREAMING)
             .set(Message::getReasoningContent, reasoning)
             .setSql("updated_at = now()"));
   }
@@ -232,7 +234,7 @@ public interface MessageMapper extends BaseMapper<Message> {
     return update(
         Wrappers.<Message>lambdaUpdate()
             .eq(Message::getId, id)
-            .eq(Message::getRole, "ASSISTANT")
+            .eq(Message::getRole, MessageRole.ASSISTANT)
             .apply(
                 "conversation_id IN (SELECT id FROM conversations WHERE owner_id = {0})", ownerId)
             .set(Message::getReasoningContent, reasoning));
@@ -255,8 +257,8 @@ public interface MessageMapper extends BaseMapper<Message> {
             .eq(Message::getId, id)
             .apply(
                 "conversation_id IN (SELECT id FROM conversations WHERE owner_id = {0})", ownerId)
-            .in(Message::getStatus, "PENDING", "STREAMING")
-            .set(Message::getStatus, "COMPLETED")
+            .in(Message::getStatus, MessageStatus.PENDING, MessageStatus.STREAMING)
+            .set(Message::getStatus, MessageStatus.COMPLETED)
             .set(Message::getContent, content)
             .setSql("citations = CAST({0} AS jsonb)", citationsJson)
             .set(Message::getErrorCode, null)
@@ -284,13 +286,13 @@ public interface MessageMapper extends BaseMapper<Message> {
    * @return 受影响行数
    */
   default int terminalFailure(
-      UUID ownerId, UUID id, String status, String content, String code, String message) {
+      UUID ownerId, UUID id, MessageStatus status, String content, String code, String message) {
     return update(
         Wrappers.<Message>lambdaUpdate()
             .eq(Message::getId, id)
             .apply(
                 "conversation_id IN (SELECT id FROM conversations WHERE owner_id = {0})", ownerId)
-            .in(Message::getStatus, "PENDING", "STREAMING")
+            .in(Message::getStatus, MessageStatus.PENDING, MessageStatus.STREAMING)
             .set(Message::getStatus, status)
             .set(Message::getContent, content)
             .set(Message::getErrorCode, code)
@@ -315,9 +317,9 @@ public interface MessageMapper extends BaseMapper<Message> {
             .eq(Message::getConversationId, conversationId)
             .apply(
                 "conversation_id IN (SELECT id FROM conversations WHERE owner_id = {0})", ownerId)
-            .eq(Message::getRole, "ASSISTANT")
-            .in(Message::getStatus, "PENDING", "STREAMING")
-            .set(Message::getStatus, "CANCELLED")
+            .eq(Message::getRole, MessageRole.ASSISTANT)
+            .in(Message::getStatus, MessageStatus.PENDING, MessageStatus.STREAMING)
+            .set(Message::getStatus, MessageStatus.CANCELLED)
             .set(Message::getContent, content)
             .set(Message::getErrorCode, "GENERATION_CANCELLED")
             .set(Message::getErrorMessage, "生成已停止")
@@ -333,9 +335,9 @@ public interface MessageMapper extends BaseMapper<Message> {
   default int recoverInterrupted() {
     return update(
         Wrappers.<Message>lambdaUpdate()
-            .eq(Message::getRole, "ASSISTANT")
-            .in(Message::getStatus, "PENDING", "STREAMING")
-            .set(Message::getStatus, "FAILED")
+            .eq(Message::getRole, MessageRole.ASSISTANT)
+            .in(Message::getStatus, MessageStatus.PENDING, MessageStatus.STREAMING)
+            .set(Message::getStatus, MessageStatus.FAILED)
             .set(Message::getErrorCode, "GENERATION_INTERRUPTED")
             .set(Message::getErrorMessage, "应用重启中断了生成，请重试")
             .setSql("updated_at = now()")
@@ -355,7 +357,7 @@ public interface MessageMapper extends BaseMapper<Message> {
             .eq(Message::getConversationId, conversationId)
             .apply(
                 "conversation_id IN (SELECT id FROM conversations WHERE owner_id = {0})", ownerId)
-            .eq(Message::getRole, "ASSISTANT")
-            .in(Message::getStatus, "PENDING", "STREAMING"));
+            .eq(Message::getRole, MessageRole.ASSISTANT)
+            .in(Message::getStatus, MessageStatus.PENDING, MessageStatus.STREAMING));
   }
 }

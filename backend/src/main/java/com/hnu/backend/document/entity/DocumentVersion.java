@@ -37,7 +37,7 @@ public class DocumentVersion {
   private Long fileSizeBytes;
 
   /** 导入处理状态。 */
-  private String status;
+  private DocumentVersionStatus status;
 
   /** 导入失败时的稳定错误码。 */
   private String errorCode;
