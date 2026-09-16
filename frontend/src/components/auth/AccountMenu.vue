@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ArrowDown, Key, SwitchButton } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
-import { computed, reactive, ref } from 'vue'
+import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { computed, nextTick, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import { getErrorMessage } from '../../api'
@@ -15,7 +15,36 @@ const auth = useAuthStore()
 const router = useRouter()
 const passwordOpen = ref(false)
 const saving = ref(false)
+const formRef = ref<FormInstance>()
 const form = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' })
+const rules: FormRules = {
+  oldPassword: [{ required: true, message: '请输入当前密码', trigger: 'blur' }],
+  newPassword: [
+    { required: true, message: '请输入新密码', trigger: 'blur' },
+    {
+      validator: (_rule, value: string) => {
+        if ([...value].length < 12 || new TextEncoder().encode(value).length > 72) {
+          return Promise.reject(new Error('密码至少 12 个字符，UTF-8 编码不超过 72 字节'))
+        }
+        if (value.includes('\0')) {
+          return Promise.reject(new Error('密码不能包含空字符'))
+        }
+        return Promise.resolve()
+      },
+      trigger: 'blur',
+    },
+  ],
+  confirmPassword: [
+    { required: true, message: '请确认新密码', trigger: 'blur' },
+    {
+      validator: (_rule, value: string) =>
+        value === form.newPassword
+          ? Promise.resolve()
+          : Promise.reject(new Error('两次输入的新密码不一致')),
+      trigger: 'blur',
+    },
+  ],
+}
 const initials = computed(() => (auth.user?.displayName || auth.user?.username || '?').slice(0, 2))
 const roleLabel = computed(() => (auth.user?.role === 'ADMIN' ? '管理员' : '用户'))
 
@@ -29,18 +58,18 @@ async function logout() {
   }
 }
 
-function openPasswordDialog() {
+async function openPasswordDialog() {
   Object.assign(form, { oldPassword: '', newPassword: '', confirmPassword: '' })
   passwordOpen.value = true
+  await nextTick()
+  formRef.value?.clearValidate()
 }
 
 async function changePassword() {
-  if (!form.oldPassword || !form.newPassword) {
-    ElMessage.warning('请填写当前密码和新密码')
+  if (saving.value || !formRef.value) {
     return
   }
-  if (form.newPassword !== form.confirmPassword) {
-    ElMessage.warning('两次输入的新密码不一致')
+  if (!(await formRef.value.validate().catch(() => false))) {
     return
   }
   saving.value = true
@@ -76,8 +105,14 @@ async function changePassword() {
     </el-dropdown>
 
     <el-dialog v-model="passwordOpen" title="修改密码" width="min(92vw, 430px)" append-to-body>
-      <el-form label-position="top" @submit.prevent="changePassword">
-        <el-form-item label="当前密码">
+      <el-form
+        ref="formRef"
+        :model="form"
+        :rules="rules"
+        label-position="top"
+        @submit.prevent="changePassword"
+      >
+        <el-form-item label="当前密码" prop="oldPassword">
           <el-input
             v-model="form.oldPassword"
             type="password"
@@ -85,7 +120,7 @@ async function changePassword() {
             autocomplete="current-password"
           />
         </el-form-item>
-        <el-form-item label="新密码">
+        <el-form-item label="新密码" prop="newPassword">
           <el-input
             v-model="form.newPassword"
             type="password"
@@ -94,7 +129,7 @@ async function changePassword() {
           />
           <small class="password-hint">至少 12 个字符，UTF-8 编码不超过 72 字节</small>
         </el-form-item>
-        <el-form-item label="确认新密码">
+        <el-form-item label="确认新密码" prop="confirmPassword">
           <el-input
             v-model="form.confirmPassword"
             type="password"
