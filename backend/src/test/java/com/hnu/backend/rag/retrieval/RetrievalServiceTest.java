@@ -21,13 +21,13 @@ class RetrievalServiceTest {
   @Test
   void embedsPerModelAndMergesByRankInsteadOfRawSimilarity() {
     EmbeddingClient embedding = mock(EmbeddingClient.class);
-    RetrievalMapper mapper = mock(RetrievalMapper.class);
+    RetrievalMapper retrievalMapper = mock(RetrievalMapper.class);
     RagProperties config = new RagProperties();
     config.getSearch().setDefaultTopK(2);
     config.getSearch().setRecallBudget(2);
     var first = new EmbeddingBinding("id-a", "supplier-a", "model-a", 2);
     var second = new EmbeddingBinding("id-b", "supplier-b", "model-b", 3);
-    when(mapper.activeModelBindings(ownerId)).thenReturn(List.of(first, second));
+    when(retrievalMapper.activeModelBindings(ownerId)).thenReturn(List.of(first, second));
     when(embedding.embed("id-a", "supplier-a", "model-a", 2, List.of("问题")))
         .thenReturn(List.of(new float[] {1, 0}));
     when(embedding.embed("id-b", "supplier-b", "model-b", 3, List.of("问题")))
@@ -36,13 +36,14 @@ class RetrievalServiceTest {
     SearchHit modelASecond = hit(id(4), .59);
     SearchHit modelBFirst = hit(id(2), .99);
     SearchHit modelBSecond = hit(id(3), .98);
-    when(mapper.searchAll(ownerId, "[1.0, 0.0]", "id-a", "supplier-a", "model-a", 2, 2))
+    when(retrievalMapper.searchAll(ownerId, "[1.0, 0.0]", "id-a", "supplier-a", "model-a", 2, 2))
         .thenReturn(List.of(modelAFirst, modelASecond));
-    when(mapper.searchAll(ownerId, "[0.0, 1.0, 0.0]", "id-b", "supplier-b", "model-b", 3, 2))
+    when(retrievalMapper.searchAll(
+            ownerId, "[0.0, 1.0, 0.0]", "id-b", "supplier-b", "model-b", 3, 2))
         .thenReturn(List.of(modelBFirst, modelBSecond));
 
     var result =
-        new RetrievalService(embedding, mapper, config, new CandidateMerge())
+        new RetrievalService(embedding, retrievalMapper, config, new CandidateMerge())
             .retrieve(ownerId, "问题");
 
     assertEquals(List.of(id(1), id(2)), result.stream().map(SearchHit::getChunkId).toList());
@@ -53,11 +54,11 @@ class RetrievalServiceTest {
   @Test
   void sameModelNameAndDimensionStayIsolatedByProvider() {
     EmbeddingClient embedding = mock(EmbeddingClient.class);
-    RetrievalMapper mapper = mock(RetrievalMapper.class);
+    RetrievalMapper retrievalMapper = mock(RetrievalMapper.class);
     RagProperties config = new RagProperties();
     config.getSearch().setDefaultTopK(2);
     config.getSearch().setRecallBudget(2);
-    when(mapper.activeModelBindings(ownerId))
+    when(retrievalMapper.activeModelBindings(ownerId))
         .thenReturn(
             List.of(
                 new EmbeddingBinding("silicon-id", "siliconflow", "same-model", 2),
@@ -66,52 +67,55 @@ class RetrievalServiceTest {
         .thenReturn(List.of(new float[] {1, 0}));
     when(embedding.embed("aliyun-id", "bailian", "same-model", 2, List.of("问题")))
         .thenReturn(List.of(new float[] {0, 1}));
-    when(mapper.searchAll(ownerId, "[1.0, 0.0]", "silicon-id", "siliconflow", "same-model", 2, 2))
+    when(retrievalMapper.searchAll(
+            ownerId, "[1.0, 0.0]", "silicon-id", "siliconflow", "same-model", 2, 2))
         .thenReturn(List.of(hit(id(1), .95)));
-    when(mapper.searchAll(ownerId, "[0.0, 1.0]", "aliyun-id", "bailian", "same-model", 2, 2))
+    when(retrievalMapper.searchAll(
+            ownerId, "[0.0, 1.0]", "aliyun-id", "bailian", "same-model", 2, 2))
         .thenReturn(List.of(hit(id(2), .95)));
-    RetrievalService service =
-        new RetrievalService(embedding, mapper, config, new CandidateMerge());
+    RetrievalService retrievalService =
+        new RetrievalService(embedding, retrievalMapper, config, new CandidateMerge());
     try {
       assertEquals(
           List.of(id(1), id(2)),
-          service.retrieve(ownerId, "问题").stream().map(SearchHit::getChunkId).toList());
-      verify(mapper)
+          retrievalService.retrieve(ownerId, "问题").stream().map(SearchHit::getChunkId).toList());
+      verify(retrievalMapper)
           .searchAll(ownerId, "[1.0, 0.0]", "silicon-id", "siliconflow", "same-model", 2, 2);
-      verify(mapper).searchAll(ownerId, "[0.0, 1.0]", "aliyun-id", "bailian", "same-model", 2, 2);
+      verify(retrievalMapper)
+          .searchAll(ownerId, "[0.0, 1.0]", "aliyun-id", "bailian", "same-model", 2, 2);
     } finally {
-      service.close();
+      retrievalService.close();
     }
   }
 
   @Test
   void failedFixedBindingNeverFallsBackToAnotherModel() {
     EmbeddingClient embedding = mock(EmbeddingClient.class);
-    RetrievalMapper mapper = mock(RetrievalMapper.class);
-    when(mapper.activeModelBindings(ownerId))
+    RetrievalMapper retrievalMapper = mock(RetrievalMapper.class);
+    when(retrievalMapper.activeModelBindings(ownerId))
         .thenReturn(
             List.of(
                 new EmbeddingBinding("fixed-id", "siliconflow", "same-model", 2),
                 new EmbeddingBinding("other-id", "bailian", "same-model", 2)));
     when(embedding.embed("fixed-id", "siliconflow", "same-model", 2, List.of("问题")))
         .thenThrow(ApiException.upstream("MODEL_UNAVAILABLE", "test"));
-    RetrievalService service =
-        new RetrievalService(embedding, mapper, new RagProperties(), new CandidateMerge());
+    RetrievalService retrievalService =
+        new RetrievalService(embedding, retrievalMapper, new RagProperties(), new CandidateMerge());
     try {
-      assertThrows(ApiException.class, () -> service.retrieve(ownerId, "问题"));
+      assertThrows(ApiException.class, () -> retrievalService.retrieve(ownerId, "问题"));
       verify(embedding, never())
           .embed(eq("other-id"), anyString(), anyString(), anyInt(), anyList());
-      verify(mapper, never())
+      verify(retrievalMapper, never())
           .searchAll(any(), anyString(), anyString(), anyString(), anyString(), anyInt(), anyInt());
     } finally {
-      service.close();
+      retrievalService.close();
     }
   }
 
   @Test
   void limitsBindingsAndCandidatesToRequestedKnowledgeBases() {
     EmbeddingClient embedding = mock(EmbeddingClient.class);
-    RetrievalMapper mapper = mock(RetrievalMapper.class);
+    RetrievalMapper retrievalMapper = mock(RetrievalMapper.class);
     RagProperties config = new RagProperties();
     config.getSearch().setDefaultTopK(2);
     config.getSearch().setRecallBudget(2);
@@ -119,59 +123,61 @@ class RetrievalServiceTest {
     UUID second = UUID.randomUUID();
     List<UUID> scope = List.of(first, second);
     var binding = new EmbeddingBinding("id-a", "supplier-a", "model-a", 2);
-    when(mapper.activeModelBindingsIn(ownerId, scope)).thenReturn(List.of(binding));
+    when(retrievalMapper.activeModelBindingsIn(ownerId, scope)).thenReturn(List.of(binding));
     when(embedding.embed("id-a", "supplier-a", "model-a", 2, List.of("问题")))
         .thenReturn(List.of(new float[] {1, 0}));
-    when(mapper.searchIn(ownerId, scope, "[1.0, 0.0]", "id-a", "supplier-a", "model-a", 2, 2))
+    when(retrievalMapper.searchIn(
+            ownerId, scope, "[1.0, 0.0]", "id-a", "supplier-a", "model-a", 2, 2))
         .thenReturn(List.of(hit(id(1), .91)));
 
     var result =
-        new RetrievalService(embedding, mapper, config, new CandidateMerge())
+        new RetrievalService(embedding, retrievalMapper, config, new CandidateMerge())
             .retrieve(ownerId, "问题", scope);
 
     assertEquals(List.of(.91), result.stream().map(SearchHit::getSimilarity).toList());
-    verify(mapper).activeModelBindingsIn(ownerId, scope);
-    verify(mapper).searchIn(ownerId, scope, "[1.0, 0.0]", "id-a", "supplier-a", "model-a", 2, 2);
-    verify(mapper, never()).activeModelBindings(any());
-    verify(mapper, never())
+    verify(retrievalMapper).activeModelBindingsIn(ownerId, scope);
+    verify(retrievalMapper)
+        .searchIn(ownerId, scope, "[1.0, 0.0]", "id-a", "supplier-a", "model-a", 2, 2);
+    verify(retrievalMapper, never()).activeModelBindings(any());
+    verify(retrievalMapper, never())
         .searchAll(any(), anyString(), anyString(), anyString(), anyString(), anyInt(), anyInt());
   }
 
   @Test
   void doesNotSearchWhenRequestedScopeIsEmpty() {
     EmbeddingClient embedding = mock(EmbeddingClient.class);
-    RetrievalMapper mapper = mock(RetrievalMapper.class);
+    RetrievalMapper retrievalMapper = mock(RetrievalMapper.class);
 
     var result =
-        new RetrievalService(embedding, mapper, new RagProperties(), new CandidateMerge())
+        new RetrievalService(embedding, retrievalMapper, new RagProperties(), new CandidateMerge())
             .retrieve(ownerId, "问题", List.of());
 
     assertTrue(result.isEmpty());
-    verifyNoInteractions(embedding, mapper);
+    verifyNoInteractions(embedding, retrievalMapper);
   }
 
   @Test
   void skipsAllVectorWorkWhenChannelIsDisabled() {
     EmbeddingClient embedding = mock(EmbeddingClient.class);
-    RetrievalMapper mapper = mock(RetrievalMapper.class);
+    RetrievalMapper retrievalMapper = mock(RetrievalMapper.class);
     RagProperties config = new RagProperties();
     config.getSearch().getChannels().getVector().setEnabled(false);
 
     var result =
-        new RetrievalService(embedding, mapper, config, new CandidateMerge())
+        new RetrievalService(embedding, retrievalMapper, config, new CandidateMerge())
             .retrieve(ownerId, "问题");
 
     assertTrue(result.isEmpty());
-    verifyNoInteractions(embedding, mapper);
+    verifyNoInteractions(embedding, retrievalMapper);
   }
 
   @Test
   void slowEmbeddingDoesNotConsumeChannelSearchBudget() {
     EmbeddingClient embedding = mock(EmbeddingClient.class);
-    RetrievalMapper mapper = mock(RetrievalMapper.class);
+    RetrievalMapper retrievalMapper = mock(RetrievalMapper.class);
     RagProperties config = new RagProperties();
     config.getSearch().getChannels().setTimeoutMs(200);
-    when(mapper.activeModelBindings(ownerId))
+    when(retrievalMapper.activeModelBindings(ownerId))
         .thenReturn(List.of(new EmbeddingBinding("id-a", "supplier-a", "model-a", 2)));
     when(embedding.embed("id-a", "supplier-a", "model-a", 2, List.of("问题")))
         .thenAnswer(
@@ -179,13 +185,13 @@ class RetrievalServiceTest {
               Thread.sleep(300);
               return List.of(new float[] {1, 0});
             });
-    when(mapper.searchAll(ownerId, "[1.0, 0.0]", "id-a", "supplier-a", "model-a", 2, 20))
+    when(retrievalMapper.searchAll(ownerId, "[1.0, 0.0]", "id-a", "supplier-a", "model-a", 2, 20))
         .thenReturn(List.of(hit(id(1), .91)));
-    RetrievalService service =
-        new RetrievalService(embedding, mapper, config, new CandidateMerge());
+    RetrievalService retrievalService =
+        new RetrievalService(embedding, retrievalMapper, config, new CandidateMerge());
     try {
       var result =
-          service.retrieveCandidates(
+          retrievalService.retrieveCandidates(
               ownerId,
               "Q1",
               "问题",
@@ -194,34 +200,34 @@ class RetrievalServiceTest {
               CancellationToken.NONE);
       assertEquals(1, result.size());
     } finally {
-      service.close();
+      retrievalService.close();
     }
   }
 
   @Test
   void slowDatabaseSearchExhaustsChannelBudget() {
     EmbeddingClient embedding = mock(EmbeddingClient.class);
-    RetrievalMapper mapper = mock(RetrievalMapper.class);
+    RetrievalMapper retrievalMapper = mock(RetrievalMapper.class);
     RagProperties config = new RagProperties();
     config.getSearch().getChannels().setTimeoutMs(50);
-    when(mapper.activeModelBindings(ownerId))
+    when(retrievalMapper.activeModelBindings(ownerId))
         .thenReturn(List.of(new EmbeddingBinding("id-a", "supplier-a", "model-a", 2)));
     when(embedding.embed("id-a", "supplier-a", "model-a", 2, List.of("问题")))
         .thenReturn(List.of(new float[] {1, 0}));
-    when(mapper.searchAll(ownerId, "[1.0, 0.0]", "id-a", "supplier-a", "model-a", 2, 20))
+    when(retrievalMapper.searchAll(ownerId, "[1.0, 0.0]", "id-a", "supplier-a", "model-a", 2, 20))
         .thenAnswer(
             ignored -> {
               Thread.sleep(1_000);
               return List.of(hit(id(1), .91));
             });
-    RetrievalService service =
-        new RetrievalService(embedding, mapper, config, new CandidateMerge());
+    RetrievalService retrievalService =
+        new RetrievalService(embedding, retrievalMapper, config, new CandidateMerge());
     try {
       ApiException error =
           assertThrows(
               ApiException.class,
               () ->
-                  service.retrieveCandidates(
+                  retrievalService.retrieveCandidates(
                       ownerId,
                       "Q1",
                       "问题",
@@ -230,7 +236,7 @@ class RetrievalServiceTest {
                       CancellationToken.NONE));
       assertEquals("SUBQUESTION_TIMEOUT", error.code());
     } finally {
-      service.close();
+      retrievalService.close();
     }
   }
 

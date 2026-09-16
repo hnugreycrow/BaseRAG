@@ -32,12 +32,12 @@ import org.springframework.web.multipart.MultipartFile;
 class DocumentServiceBatchTest {
   private final UUID ownerId = UUID.randomUUID();
   private final UUID knowledgeBaseId = UUID.randomUUID();
-  private final KnowledgeBaseService knowledgeBases = mock(KnowledgeBaseService.class);
-  private final DocumentMapper documents = mock(DocumentMapper.class);
-  private final DocumentVersionMapper versions = mock(DocumentVersionMapper.class);
+  private final KnowledgeBaseService knowledgeBaseService = mock(KnowledgeBaseService.class);
+  private final DocumentMapper documentMapper = mock(DocumentMapper.class);
+  private final DocumentVersionMapper documentVersionMapper = mock(DocumentVersionMapper.class);
   private final FileStorage storage = mock(FileStorage.class);
   private final TransactionTemplate tx = mock(TransactionTemplate.class);
-  private DocumentService service;
+  private DocumentService documentService;
 
   @BeforeEach
   void setUp() {
@@ -46,7 +46,7 @@ class DocumentServiceBatchTest {
     kb.setEmbeddingProvider("local");
     kb.setEmbeddingModel("embedding");
     kb.setEmbeddingDimensions(2);
-    when(knowledgeBases.ensureModel(ownerId, knowledgeBaseId)).thenReturn(kb);
+    when(knowledgeBaseService.ensureModel(ownerId, knowledgeBaseId)).thenReturn(kb);
     doAnswer(
             invocation -> {
               Consumer<TransactionStatus> callback = invocation.getArgument(0);
@@ -55,11 +55,11 @@ class DocumentServiceBatchTest {
             })
         .when(tx)
         .executeWithoutResult(any());
-    service =
+    documentService =
         new DocumentService(
-            knowledgeBases,
-            documents,
-            versions,
+            knowledgeBaseService,
+            documentMapper,
+            documentVersionMapper,
             mock(DocumentChunkMapper.class),
             mock(MarkdownChunker.class),
             mock(EmbeddingClient.class),
@@ -69,20 +69,20 @@ class DocumentServiceBatchTest {
 
   @Test
   void oneFileReturnsOneUploadedResult() {
-    var result = service.uploadBatch(ownerId, knowledgeBaseId, List.of(file("one.md")));
+    var result = documentService.uploadBatch(ownerId, knowledgeBaseId, List.of(file("one.md")));
     assertEquals(1, result.results().size());
     assertEquals(0, result.results().getFirst().index());
     assertEquals("UPLOADED", result.results().getFirst().status());
     assertNotNull(result.results().getFirst().documentId());
-    verify(documents).insert(any(Document.class));
-    verify(versions).insert(any(DocumentVersion.class));
+    verify(documentMapper).insert(any(Document.class));
+    verify(documentVersionMapper).insert(any(DocumentVersion.class));
   }
 
   @Test
   void tenSameNamedFilesCreateIndependentDocumentsAndVersions() {
     List<MultipartFile> files =
         IntStream.range(0, 10).mapToObj(index -> (MultipartFile) file("same.md")).toList();
-    var result = service.uploadBatch(ownerId, knowledgeBaseId, files);
+    var result = documentService.uploadBatch(ownerId, knowledgeBaseId, files);
 
     assertEquals(10, result.results().size());
     assertEquals(
@@ -91,8 +91,8 @@ class DocumentServiceBatchTest {
     assertTrue(result.results().stream().allMatch(item -> "UPLOADED".equals(item.status())));
     var documentsCaptor = ArgumentCaptor.forClass(Document.class);
     var versionsCaptor = ArgumentCaptor.forClass(DocumentVersion.class);
-    verify(documents, times(10)).insert(documentsCaptor.capture());
-    verify(versions, times(10)).insert(versionsCaptor.capture());
+    verify(documentMapper, times(10)).insert(documentsCaptor.capture());
+    verify(documentVersionMapper, times(10)).insert(versionsCaptor.capture());
     var created = documentsCaptor.getAllValues();
     var savedVersions = versionsCaptor.getAllValues();
     assertEquals(10, new HashSet<>(created.stream().map(Document::getId).toList()).size());
@@ -115,9 +115,9 @@ class DocumentServiceBatchTest {
         IntStream.range(0, 11).mapToObj(index -> (MultipartFile) file("same.md")).toList();
     ApiException error =
         assertThrows(
-            ApiException.class, () -> service.uploadBatch(ownerId, knowledgeBaseId, files));
+            ApiException.class, () -> documentService.uploadBatch(ownerId, knowledgeBaseId, files));
     assertEquals("INVALID_BATCH_SIZE", error.code());
-    verifyNoInteractions(knowledgeBases, documents, versions, storage);
+    verifyNoInteractions(knowledgeBaseService, documentMapper, documentVersionMapper, storage);
   }
 
   @Test
@@ -126,24 +126,26 @@ class DocumentServiceBatchTest {
         new MockMultipartFile(
             "files", "wrong.txt", "text/plain", "bad".getBytes(StandardCharsets.UTF_8));
     var result =
-        service.uploadBatch(ownerId, knowledgeBaseId, List.of(invalid, file("good.markdown")));
+        documentService.uploadBatch(
+            ownerId, knowledgeBaseId, List.of(invalid, file("good.markdown")));
     assertEquals(
         List.of("FAILED", "UPLOADED"),
         result.results().stream().map(item -> item.status()).toList());
     assertEquals("INVALID_FILE", result.results().getFirst().errorCode());
     assertNull(result.results().getFirst().documentId());
     assertNotNull(result.results().get(1).documentId());
-    verify(documents).insert(any(Document.class));
+    verify(documentMapper).insert(any(Document.class));
   }
 
   @Test
   void oversizedFileFailsIndividually() {
     var oversized =
         new MockMultipartFile("files", "large.md", "text/markdown", new byte[5 * 1024 * 1024 + 1]);
-    var result = service.uploadBatch(ownerId, knowledgeBaseId, List.of(oversized, file("good.md")));
+    var result =
+        documentService.uploadBatch(ownerId, knowledgeBaseId, List.of(oversized, file("good.md")));
     assertEquals("FILE_TOO_LARGE", result.results().getFirst().errorCode());
     assertEquals("UPLOADED", result.results().get(1).status());
-    verify(documents).insert(any(Document.class));
+    verify(documentMapper).insert(any(Document.class));
   }
 
   @Test
@@ -154,22 +156,22 @@ class DocumentServiceBatchTest {
     var docx =
         new MockMultipartFile(
             "files", "huge.docx", "application/octet-stream", new byte[20 * 1024 * 1024 + 1]);
-    var result = service.uploadBatch(ownerId, knowledgeBaseId, List.of(pdf, docx));
+    var result = documentService.uploadBatch(ownerId, knowledgeBaseId, List.of(pdf, docx));
     assertEquals(
         List.of("FILE_TOO_LARGE", "FILE_TOO_LARGE"),
         result.results().stream().map(item -> item.errorCode()).toList());
-    verifyNoInteractions(documents, versions, storage);
+    verifyNoInteractions(documentMapper, documentVersionMapper, storage);
   }
 
   @Test
   void allInvalidFilesReturnFailuresWithoutSaving() {
     var invalid = new MockMultipartFile("files", "wrong.txt", "text/plain", new byte[] {1});
     var empty = new MockMultipartFile("files", "empty.md", "text/markdown", new byte[0]);
-    var result = service.uploadBatch(ownerId, knowledgeBaseId, List.of(invalid, empty));
+    var result = documentService.uploadBatch(ownerId, knowledgeBaseId, List.of(invalid, empty));
     assertEquals(
         List.of("INVALID_FILE", "EMPTY_DOCUMENT"),
         result.results().stream().map(item -> item.errorCode()).toList());
-    verifyNoInteractions(documents, versions, storage);
+    verifyNoInteractions(documentMapper, documentVersionMapper, storage);
   }
 
   private MockMultipartFile file(String name) {

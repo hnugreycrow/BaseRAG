@@ -18,26 +18,26 @@ import org.springframework.transaction.support.TransactionTemplate;
 /** 处理知识库生命周期及其向量模型绑定规则。 */
 @Service
 public class KnowledgeBaseService {
-  private final KnowledgeBaseMapper mapper;
-  private final DocumentCleanupService documentCleanup;
+  private final KnowledgeBaseMapper knowledgeBaseMapper;
+  private final DocumentCleanupService documentCleanupService;
   private final TransactionTemplate tx;
   private final AiProperties ai;
 
   /**
    * 创建知识库服务。
    *
-   * @param mapper 知识库持久化接口
-   * @param documentCleanup 关联文档清理服务
+   * @param knowledgeBaseMapper 知识库持久化接口
+   * @param documentCleanupService 关联文档清理服务
    * @param tx 事务模板
    * @param ai 模型配置
    */
   public KnowledgeBaseService(
-      KnowledgeBaseMapper mapper,
-      DocumentCleanupService documentCleanup,
+      KnowledgeBaseMapper knowledgeBaseMapper,
+      DocumentCleanupService documentCleanupService,
       TransactionTemplate tx,
       AiProperties ai) {
-    this.mapper = mapper;
-    this.documentCleanup = documentCleanup;
+    this.knowledgeBaseMapper = knowledgeBaseMapper;
+    this.documentCleanupService = documentCleanupService;
     this.tx = tx;
     this.ai = ai;
   }
@@ -52,9 +52,11 @@ public class KnowledgeBaseService {
    */
   public PageResponse<KnowledgeBaseResponse> list(int page, int pageSize, String rawQuery) {
     String query = normalizeQuery(rawQuery);
-    long total = mapper.countWithDocumentCount(query);
+    long total = knowledgeBaseMapper.countWithDocumentCount(query);
     List<KnowledgeBaseResponse> items =
-        mapper.selectWithDocumentCount(query, pageSize, offset(page, pageSize)).stream()
+        knowledgeBaseMapper
+            .selectWithDocumentCount(query, pageSize, offset(page, pageSize))
+            .stream()
             .map(this::toResponse)
             .toList();
     return PageResponse.of(items, total, page, pageSize);
@@ -79,7 +81,7 @@ public class KnowledgeBaseService {
    */
   public KnowledgeBase requireEntity(UUID ownerId, UUID id) {
     KnowledgeBase kb =
-        mapper.selectOne(
+        knowledgeBaseMapper.selectOne(
             Wrappers.<KnowledgeBase>lambdaQuery()
                 .eq(KnowledgeBase::getId, id)
                 .eq(KnowledgeBase::getOwnerId, ownerId));
@@ -95,7 +97,7 @@ public class KnowledgeBaseService {
    * @return 公共知识库实体
    */
   public KnowledgeBase requireAdminOwned(UUID id) {
-    KnowledgeBase kb = mapper.findAdminOwned(id);
+    KnowledgeBase kb = knowledgeBaseMapper.findAdminOwned(id);
     if (kb == null)
       throw new ApiException("KNOWLEDGE_BASE_NOT_FOUND", "知识库不存在", HttpStatus.NOT_FOUND);
     return kb;
@@ -125,7 +127,7 @@ public class KnowledgeBaseService {
     kb.setEmbeddingProvider(model.provider());
     kb.setEmbeddingModel(model.model());
     kb.setEmbeddingDimensions(model.dimension());
-    mapper.insert(kb);
+    knowledgeBaseMapper.insert(kb);
     return get(kb.getId());
   }
 
@@ -181,7 +183,7 @@ public class KnowledgeBaseService {
   public KnowledgeBaseResponse rename(UUID id, String rawName) {
     KnowledgeBase kb = requireAdminOwned(id);
     kb.setName(normalizeName(rawName));
-    mapper.updateById(kb);
+    knowledgeBaseMapper.updateById(kb);
     return get(id);
   }
 
@@ -194,13 +196,13 @@ public class KnowledgeBaseService {
    */
   public void delete(UUID id) {
     requireAdminOwned(id);
-    List<String> storageKeys = documentCleanup.storageKeys(id);
+    List<String> storageKeys = documentCleanupService.storageKeys(id);
     tx.executeWithoutResult(
         status -> {
-          documentCleanup.deleteRecords(id);
-          mapper.deleteById(id);
+          documentCleanupService.deleteRecords(id);
+          knowledgeBaseMapper.deleteById(id);
         });
-    documentCleanup.removeStoredFiles(storageKeys);
+    documentCleanupService.removeStoredFiles(storageKeys);
   }
 
   /**
@@ -286,7 +288,7 @@ public class KnowledgeBaseService {
    */
   public KnowledgeBase lockAndBindModel(
       UUID ownerId, UUID id, String modelId, String provider, String model, int dimensions) {
-    KnowledgeBase kb = mapper.lock(ownerId, id);
+    KnowledgeBase kb = knowledgeBaseMapper.lock(ownerId, id);
     if (kb == null)
       throw new ApiException("KNOWLEDGE_BASE_NOT_FOUND", "知识库不存在", HttpStatus.NOT_FOUND);
     checkModel(kb, modelId, provider, model, dimensions);
@@ -295,7 +297,7 @@ public class KnowledgeBaseService {
       kb.setEmbeddingProvider(provider);
       kb.setEmbeddingModel(model);
       kb.setEmbeddingDimensions(dimensions);
-      mapper.updateById(kb);
+      knowledgeBaseMapper.updateById(kb);
     }
     return kb;
   }

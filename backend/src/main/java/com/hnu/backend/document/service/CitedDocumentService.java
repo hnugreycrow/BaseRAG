@@ -12,18 +12,18 @@ import org.springframework.stereotype.Service;
 /** 仅允许用户读取本人已完成回答中实际引用的文档原文件。 */
 @Service
 public class CitedDocumentService {
-  private final ConversationService conversations;
-  private final KnowledgeBaseService knowledgeBases;
-  private final DocumentService documents;
+  private final ConversationService conversationService;
+  private final KnowledgeBaseService knowledgeBaseService;
+  private final DocumentService documentService;
 
   /** 创建引用原文件授权服务。 */
   public CitedDocumentService(
-      ConversationService conversations,
-      KnowledgeBaseService knowledgeBases,
-      DocumentService documents) {
-    this.conversations = conversations;
-    this.knowledgeBases = knowledgeBases;
-    this.documents = documents;
+      ConversationService conversationService,
+      KnowledgeBaseService knowledgeBaseService,
+      DocumentService documentService) {
+    this.conversationService = conversationService;
+    this.knowledgeBaseService = knowledgeBaseService;
+    this.documentService = documentService;
   }
 
   /**
@@ -37,7 +37,7 @@ public class CitedDocumentService {
    */
   public DocumentService.OriginalFile originalFile(
       UUID userId, UUID conversationId, UUID messageId, String citationId) {
-    ConversationResponses.Detail conversation = conversations.get(userId, conversationId);
+    ConversationResponses.Detail conversation = conversationService.get(userId, conversationId);
     ConversationResponses.AssistantMessage message =
         conversation.turns().stream()
             .flatMap(turn -> turn.assistantVersions().stream())
@@ -52,8 +52,8 @@ public class CitedDocumentService {
             .filter(candidate -> candidate.citationId().equals(citationId))
             .findFirst()
             .orElseThrow(CitedDocumentService::notFound);
-    KnowledgeBase knowledgeBase = knowledgeBases.requireAdminOwned(source.knowledgeBaseId());
-    return documents.originalFile(
+    KnowledgeBase knowledgeBase = knowledgeBaseService.requireAdminOwned(source.knowledgeBaseId());
+    return documentService.originalFile(
         knowledgeBase.getOwnerId(),
         source.knowledgeBaseId(),
         source.documentId(),

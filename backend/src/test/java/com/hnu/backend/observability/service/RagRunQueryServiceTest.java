@@ -23,9 +23,10 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 class RagRunQueryServiceTest {
-  private final RagRunMapper runs = mock(RagRunMapper.class);
-  private final RagStageRunMapper stages = mock(RagStageRunMapper.class);
-  private final RagRunQueryService service = new RagRunQueryService(runs, stages);
+  private final RagRunMapper ragRunMapper = mock(RagRunMapper.class);
+  private final RagStageRunMapper ragStageRunMapper = mock(RagStageRunMapper.class);
+  private final RagRunQueryService ragRunQueryService =
+      new RagRunQueryService(ragRunMapper, ragStageRunMapper);
 
   @Test
   void rejectsOtherUserFilterForRegularUser() {
@@ -34,29 +35,34 @@ class RagRunQueryServiceTest {
     ApiException error =
         assertThrows(
             ApiException.class,
-            () -> service.list(actor, null, null, null, null, null, UUID.randomUUID(), 1, 20));
+            () ->
+                ragRunQueryService.list(
+                    actor, null, null, null, null, null, UUID.randomUUID(), 1, 20));
 
     assertEquals("FORBIDDEN", error.code());
-    verifyNoInteractions(runs, stages);
+    verifyNoInteractions(ragRunMapper, ragStageRunMapper);
   }
 
   @Test
   void scopesRegularUserAndAllowsAdministratorGlobalSummary() {
     User regular = user(UserRole.USER);
-    when(runs.count(argThat(filter -> regular.getId().equals(filter.ownerId())))).thenReturn(0L);
-    when(runs.list(any(), eq(20), eq(0L))).thenReturn(List.of());
+    when(ragRunMapper.count(argThat(filter -> regular.getId().equals(filter.ownerId()))))
+        .thenReturn(0L);
+    when(ragRunMapper.list(any(), eq(20), eq(0L))).thenReturn(List.of());
 
     assertEquals(
-        0, service.list(regular, null, null, null, null, null, null, 1, 20).items().size());
+        0,
+        ragRunQueryService.list(regular, null, null, null, null, null, null, 1, 20).items().size());
 
     RagRunSummaryRow row = new RagRunSummaryRow();
     row.setRequestCount(5);
     row.setTerminalCount(4);
     row.setSuccessCount(3);
     row.setDegradedCount(1);
-    when(runs.summary(argThat(filter -> filter.ownerId() == null))).thenReturn(row);
+    when(ragRunMapper.summary(argThat(filter -> filter.ownerId() == null))).thenReturn(row);
 
-    var aggregate = service.summary(user(UserRole.ADMIN), null, null, null, null, null, null);
+    var aggregate =
+        ragRunQueryService.summary(user(UserRole.ADMIN), null, null, null, null, null, null);
     assertEquals(5, aggregate.requestCount());
     assertEquals(0.75, aggregate.successRate());
     assertEquals(0.25, aggregate.degradedRate());
@@ -66,17 +72,20 @@ class RagRunQueryServiceTest {
   void hidesUserFieldsFromRegularResponsesAndIncludesThemForAdministrator() {
     User regular = user(UserRole.USER);
     RagRunViewRow row = run(regular.getId());
-    when(runs.count(any())).thenReturn(1L);
-    when(runs.list(any(), eq(20), eq(0L))).thenReturn(List.of(row));
+    when(ragRunMapper.count(any())).thenReturn(1L);
+    when(ragRunMapper.list(any(), eq(20), eq(0L))).thenReturn(List.of(row));
 
     var regularSummary =
-        service.list(regular, null, null, null, null, null, null, 1, 20).items().getFirst();
+        ragRunQueryService
+            .list(regular, null, null, null, null, null, null, 1, 20)
+            .items()
+            .getFirst();
     assertNull(regularSummary.ownerId());
     assertNull(regularSummary.username());
     assertNull(regularSummary.displayName());
 
     var adminSummary =
-        service
+        ragRunQueryService
             .list(user(UserRole.ADMIN), null, null, null, null, null, null, 1, 20)
             .items()
             .getFirst();
@@ -89,13 +98,14 @@ class RagRunQueryServiceTest {
   void hidesCrossUserDetailAsNotFound() {
     User regular = user(UserRole.USER);
     UUID runId = UUID.randomUUID();
-    when(runs.findView(runId, regular.getId())).thenReturn(null);
+    when(ragRunMapper.findView(runId, regular.getId())).thenReturn(null);
 
-    ApiException error = assertThrows(ApiException.class, () -> service.get(regular, runId));
+    ApiException error =
+        assertThrows(ApiException.class, () -> ragRunQueryService.get(regular, runId));
 
     assertEquals("RAG_RUN_NOT_FOUND", error.code());
     assertEquals(404, error.status().value());
-    verifyNoInteractions(stages);
+    verifyNoInteractions(ragStageRunMapper);
   }
 
   @Test
@@ -108,19 +118,21 @@ class RagRunQueryServiceTest {
         stage(RagStageName.ANSWER_MODEL, RagStageStatus.SUCCESS, "PROVIDER_FALLBACK");
     RagStageRun summary =
         stage(RagStageName.MEMORY_SUMMARY, RagStageStatus.DEGRADED, "MODEL_TIMEOUT");
-    when(runs.findView(row.getId(), null)).thenReturn(row);
-    when(stages.listByRun(row.getId())).thenReturn(List.of(fallback, duplicate, summary));
+    when(ragRunMapper.findView(row.getId(), null)).thenReturn(row);
+    when(ragStageRunMapper.listByRun(row.getId()))
+        .thenReturn(List.of(fallback, duplicate, summary));
 
-    var detail = service.get(admin, row.getId());
+    var detail = ragRunQueryService.get(admin, row.getId());
 
     assertEquals(List.of("PROVIDER_FALLBACK", "MODEL_TIMEOUT"), detail.degradationReasons());
   }
 
   @Test
   void returnsZeroRatesAndNullPercentilesWithoutSamples() {
-    when(runs.summary(any())).thenReturn(new RagRunSummaryRow());
+    when(ragRunMapper.summary(any())).thenReturn(new RagRunSummaryRow());
 
-    var aggregate = service.summary(user(UserRole.USER), null, null, null, null, null, null);
+    var aggregate =
+        ragRunQueryService.summary(user(UserRole.USER), null, null, null, null, null, null);
 
     assertEquals(0, aggregate.requestCount());
     assertEquals(0, aggregate.successRate());
@@ -140,13 +152,13 @@ class RagRunQueryServiceTest {
         "INVALID_TIME_RANGE",
         assertThrows(
                 ApiException.class,
-                () -> service.list(actor, now, now, null, null, null, null, 1, 20))
+                () -> ragRunQueryService.list(actor, now, now, null, null, null, null, 1, 20))
             .code());
     assertEquals(
         "INVALID_PAGE",
         assertThrows(
                 ApiException.class,
-                () -> service.list(actor, null, null, null, null, null, null, 0, 20))
+                () -> ragRunQueryService.list(actor, null, null, null, null, null, null, 0, 20))
             .code());
   }
 

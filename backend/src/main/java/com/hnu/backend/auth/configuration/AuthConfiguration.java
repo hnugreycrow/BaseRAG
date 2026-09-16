@@ -14,15 +14,15 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 /** 注册密码编码器、认证拦截器和写请求 CSRF 防护。 */
 @Configuration
 public class AuthConfiguration implements WebMvcConfigurer {
-  private final CsrfTokenService csrfTokens;
+  private final CsrfTokenService csrfTokenService;
 
   /**
    * 创建认证配置。
    *
-   * @param csrfTokens CSRF nonce 服务
+   * @param csrfTokenService CSRF nonce 服务
    */
-  public AuthConfiguration(CsrfTokenService csrfTokens) {
-    this.csrfTokens = csrfTokens;
+  public AuthConfiguration(CsrfTokenService csrfTokenService) {
+    this.csrfTokenService = csrfTokenService;
   }
 
   /**
@@ -48,7 +48,7 @@ public class AuthConfiguration implements WebMvcConfigurer {
         .excludePathPatterns("/api/auth/login")
         .order(Ordered.HIGHEST_PRECEDENCE);
     registry
-        .addInterceptor(new CsrfInterceptor(csrfTokens))
+        .addInterceptor(new CsrfInterceptor(csrfTokenService))
         .addPathPatterns("/api/**")
         .excludePathPatterns("/api/auth/login")
         .order(Ordered.HIGHEST_PRECEDENCE + 1);

@@ -21,15 +21,15 @@ import org.springframework.web.bind.annotation.RestController;
 @Profile("local")
 @RequestMapping("/api/auth")
 public class AuthController {
-  private final AuthService auth;
+  private final AuthService authService;
 
   /**
    * 创建认证控制器。
    *
-   * @param auth 认证服务
+   * @param authService 认证服务
    */
-  public AuthController(AuthService auth) {
-    this.auth = auth;
+  public AuthController(AuthService authService) {
+    this.authService = authService;
   }
 
   /**
@@ -42,7 +42,7 @@ public class AuthController {
   @PostMapping("/login")
   public AuthSessionResponse login(
       @Valid @RequestBody LoginRequest request, HttpServletRequest http) {
-    return auth.login(request.username(), request.password(), http.getRemoteAddr());
+    return authService.login(request.username(), request.password(), http.getRemoteAddr());
   }
 
   /**
@@ -52,14 +52,14 @@ public class AuthController {
    */
   @GetMapping("/session")
   public AuthSessionResponse session() {
-    return auth.restore();
+    return authService.restore();
   }
 
   /** 注销当前 Token 并清除 Cookie。 */
   @PostMapping("/logout")
   @ResponseStatus(HttpStatus.NO_CONTENT)
   public void logout() {
-    auth.logout();
+    authService.logout();
   }
 
   /**
@@ -70,6 +70,6 @@ public class AuthController {
    */
   @PutMapping("/password")
   public AuthSessionResponse changePassword(@Valid @RequestBody ChangePasswordRequest request) {
-    return auth.changePassword(request.oldPassword(), request.newPassword());
+    return authService.changePassword(request.oldPassword(), request.newPassword());
   }
 }

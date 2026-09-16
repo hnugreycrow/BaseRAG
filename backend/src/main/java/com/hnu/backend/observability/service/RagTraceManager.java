@@ -15,18 +15,18 @@ import org.springframework.stereotype.Service;
 /** 创建、封存和恢复单次会话问答 Trace。 */
 @Service
 public class RagTraceManager {
-  private final RagRunMapper runs;
-  private final RagStageRunMapper stages;
+  private final RagRunMapper ragRunMapper;
+  private final RagStageRunMapper ragStageRunMapper;
 
   /**
    * 创建 Trace 管理器。
    *
-   * @param runs 运行记录接口
-   * @param stages 阶段记录接口
+   * @param ragRunMapper 运行记录接口
+   * @param ragStageRunMapper 阶段记录接口
    */
-  public RagTraceManager(RagRunMapper runs, RagStageRunMapper stages) {
-    this.runs = runs;
-    this.stages = stages;
+  public RagTraceManager(RagRunMapper ragRunMapper, RagStageRunMapper ragStageRunMapper) {
+    this.ragRunMapper = ragRunMapper;
+    this.ragStageRunMapper = ragStageRunMapper;
   }
 
   /**
@@ -56,7 +56,7 @@ public class RagTraceManager {
     run.setStatus(RagRunStatus.RUNNING);
     run.setExecutionMode(RagExecutionMode.FULL_PIPELINE);
     run.setStartedAt(timing.startedAt());
-    runs.insert(run);
+    ragRunMapper.insert(run);
     return new RagRunTrace(id, timing.startedAt(), timing.startedNanos());
   }
 
@@ -70,9 +70,9 @@ public class RagTraceManager {
   public void finish(RagRunTrace trace, RagRunStatus status, String errorCode) {
     RagRunTrace.RunSnapshot snapshot = trace.finish(status, errorCode);
     if (snapshot.runId() == null) return;
-    if (runs.finish(snapshot) == 0) return;
+    if (ragRunMapper.finish(snapshot) == 0) return;
     List<RagStageRun> entities = snapshot.stages().stream().map(this::stage).toList();
-    if (!entities.isEmpty()) stages.insertBatch(entities);
+    if (!entities.isEmpty()) ragStageRunMapper.insertBatch(entities);
   }
 
   /**
@@ -81,7 +81,7 @@ public class RagTraceManager {
    * @param assistantMessageId 回答消息标识
    */
   public void cancelStored(UUID assistantMessageId) {
-    runs.cancelByAssistantMessage(assistantMessageId);
+    ragRunMapper.cancelByAssistantMessage(assistantMessageId);
   }
 
   /**
@@ -90,7 +90,7 @@ public class RagTraceManager {
    * @return 恢复数量
    */
   public int recoverInterrupted() {
-    return runs.recoverInterrupted();
+    return ragRunMapper.recoverInterrupted();
   }
 
   /** 将不可变阶段快照转换为 MyBatis 实体。 */

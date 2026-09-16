@@ -14,23 +14,23 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/evaluation")
 public class RagEvaluationController {
   private final RagProperties rag;
-  private final CurrentUserService currentUsers;
+  private final CurrentUserService currentUserService;
 
   /**
    * 创建本地评测配置接口。
    *
    * @param rag RAG 配置
-   * @param currentUsers 当前用户校验服务
+   * @param currentUserService 当前用户校验服务
    */
-  public RagEvaluationController(RagProperties rag, CurrentUserService currentUsers) {
+  public RagEvaluationController(RagProperties rag, CurrentUserService currentUserService) {
     this.rag = rag;
-    this.currentUsers = currentUsers;
+    this.currentUserService = currentUserService;
   }
 
   /** 返回影响分块和检索结果的当前生效参数，不包含任何凭据。 */
   @GetMapping("/config")
   public RagEvaluationConfigResponse config() {
-    currentUsers.requireAdmin();
+    currentUserService.requireAdmin();
     return new RagEvaluationConfigResponse(
         rag.getChunkSize(),
         rag.getChunkMinSize(),

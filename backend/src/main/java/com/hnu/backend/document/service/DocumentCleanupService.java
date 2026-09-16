@@ -19,25 +19,25 @@ import org.springframework.stereotype.Service;
 @Service
 public class DocumentCleanupService {
   private static final Logger log = LoggerFactory.getLogger(DocumentCleanupService.class);
-  private final DocumentMapper documents;
-  private final DocumentVersionMapper versions;
-  private final DocumentChunkMapper chunks;
+  private final DocumentMapper documentMapper;
+  private final DocumentVersionMapper documentVersionMapper;
+  private final DocumentChunkMapper documentChunkMapper;
   private final FileStorage storage;
 
   public DocumentCleanupService(
-      DocumentMapper documents,
-      DocumentVersionMapper versions,
-      DocumentChunkMapper chunks,
+      DocumentMapper documentMapper,
+      DocumentVersionMapper documentVersionMapper,
+      DocumentChunkMapper documentChunkMapper,
       FileStorage storage) {
-    this.documents = documents;
-    this.versions = versions;
-    this.chunks = chunks;
+    this.documentMapper = documentMapper;
+    this.documentVersionMapper = documentVersionMapper;
+    this.documentChunkMapper = documentChunkMapper;
     this.storage = storage;
   }
 
   /** 查询知识库全部文档版本对应的对象存储键。 */
   public List<String> storageKeys(UUID knowledgeBaseId) {
-    return versions
+    return documentVersionMapper
         .selectList(
             new LambdaQueryWrapper<DocumentVersion>()
                 .eq(DocumentVersion::getKnowledgeBaseId, knowledgeBaseId))
@@ -52,20 +52,20 @@ public class DocumentCleanupService {
    * <p>调用方应在事务中执行该方法。
    */
   public void deleteRecords(UUID knowledgeBaseId) {
-    if (versions.selectCount(
+    if (documentVersionMapper.selectCount(
             new LambdaQueryWrapper<DocumentVersion>()
                 .eq(DocumentVersion::getKnowledgeBaseId, knowledgeBaseId)
                 .eq(DocumentVersion::getStatus, "PROCESSING"))
         > 0) throw ApiException.conflict("DOCUMENT_PROCESSING", "知识库中有文档正在分块，完成后才能删除");
-    documents.update(
+    documentMapper.update(
         new LambdaUpdateWrapper<Document>()
             .eq(Document::getKnowledgeBaseId, knowledgeBaseId)
             .set(Document::getActiveVersionId, null));
-    chunks.deleteByKnowledgeBase(knowledgeBaseId);
-    versions.delete(
+    documentChunkMapper.deleteByKnowledgeBase(knowledgeBaseId);
+    documentVersionMapper.delete(
         new LambdaQueryWrapper<DocumentVersion>()
             .eq(DocumentVersion::getKnowledgeBaseId, knowledgeBaseId));
-    documents.delete(
+    documentMapper.delete(
         new LambdaQueryWrapper<Document>().eq(Document::getKnowledgeBaseId, knowledgeBaseId));
   }
 

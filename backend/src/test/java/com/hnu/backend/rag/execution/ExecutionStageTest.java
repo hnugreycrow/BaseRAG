@@ -44,9 +44,9 @@ class ExecutionStageTest {
 
   @Test
   void executesKnowledgeToolAndSystemRoutesIndependently() {
-    RetrievalService retrieval = mock(RetrievalService.class);
+    RetrievalService retrievalService = mock(RetrievalService.class);
     McpToolExecutor tools = mock(McpToolExecutor.class);
-    ExecutionStage stage = stage(retrieval, tools, new RagProperties());
+    ExecutionStage stage = stage(retrievalService, tools, new RagProperties());
     QueryPlan plan =
         new QueryPlan(
             "组合问题",
@@ -75,7 +75,8 @@ class ExecutionStageTest {
     EvidenceCandidate candidate =
         com.hnu.backend.rag.retrieval.CandidateMergeTest.candidate(
             com.hnu.backend.rag.retrieval.CandidateMergeTest.id(1), "Q1", "model-a", .9, 1, .05);
-    when(retrieval.retrieveCandidates(eq(ownerId), eq("Q1"), eq("年假制度"), isNull(), any(), any()))
+    when(retrievalService.retrieveCandidates(
+            eq(ownerId), eq("Q1"), eq("年假制度"), isNull(), any(), any()))
         .thenReturn(List.of(candidate));
     when(tools.execute(any()))
         .thenReturn(
@@ -103,16 +104,18 @@ class ExecutionStageTest {
 
   @Test
   void isolatesChannelTimeoutFromOtherSubQuestions() {
-    RetrievalService retrieval = mock(RetrievalService.class);
+    RetrievalService retrievalService = mock(RetrievalService.class);
     McpToolExecutor tools = mock(McpToolExecutor.class);
     RagProperties config = new RagProperties();
-    ExecutionStage stage = stage(retrieval, tools, config);
+    ExecutionStage stage = stage(retrievalService, tools, config);
     QueryPlan plan =
         new QueryPlan("两个问题", List.of(new SubQuestion("Q1", "慢问题"), new SubQuestion("Q2", "失败问题")));
     RoutingPlan routing = new RoutingPlan(List.of(knowledge("Q1"), knowledge("Q2")));
-    when(retrieval.retrieveCandidates(eq(ownerId), eq("Q1"), anyString(), isNull(), any(), any()))
+    when(retrievalService.retrieveCandidates(
+            eq(ownerId), eq("Q1"), anyString(), isNull(), any(), any()))
         .thenThrow(ApiException.upstream("SUBQUESTION_TIMEOUT", "向量检索通道超时"));
-    when(retrieval.retrieveCandidates(eq(ownerId), eq("Q2"), anyString(), isNull(), any(), any()))
+    when(retrievalService.retrieveCandidates(
+            eq(ownerId), eq("Q2"), anyString(), isNull(), any(), any()))
         .thenThrow(new IllegalStateException("boom"));
 
     ExecutionResult result = stage.execute(ownerId, plan, routing);
@@ -123,15 +126,16 @@ class ExecutionStageTest {
 
   @Test
   void cancellationStopsRunningSubQuestions() throws Exception {
-    RetrievalService retrieval = mock(RetrievalService.class);
+    RetrievalService retrievalService = mock(RetrievalService.class);
     McpToolExecutor tools = mock(McpToolExecutor.class);
     RagProperties config = new RagProperties();
     config.getPipeline().setMaxSubQuestions(1);
-    ExecutionStage stage = stage(retrieval, tools, config);
+    ExecutionStage stage = stage(retrievalService, tools, config);
     QueryPlan plan = new QueryPlan("问题", List.of(new SubQuestion("Q1", "运行中")));
     RoutingPlan routing = new RoutingPlan(List.of(knowledge("Q1")));
     AtomicBoolean cancelled = new AtomicBoolean();
-    when(retrieval.retrieveCandidates(eq(ownerId), eq("Q1"), anyString(), isNull(), any(), any()))
+    when(retrievalService.retrieveCandidates(
+            eq(ownerId), eq("Q1"), anyString(), isNull(), any(), any()))
         .thenAnswer(
             ignored -> {
               Thread.sleep(1000);
@@ -146,21 +150,21 @@ class ExecutionStageTest {
 
     CompletionException error = assertThrows(CompletionException.class, future::join);
     assertEquals(ApiException.class, error.getCause().getClass());
-    verify(retrieval, timeout(1000))
+    verify(retrievalService, timeout(1000))
         .retrieveCandidates(eq(ownerId), eq("Q1"), anyString(), isNull(), any(), any());
   }
 
   @Test
   void recordsChannelTimeoutOnOuterSubQuestionSpan() {
-    RetrievalService retrieval = mock(RetrievalService.class);
+    RetrievalService retrievalService = mock(RetrievalService.class);
     McpToolExecutor tools = mock(McpToolExecutor.class);
     RagProperties config = new RagProperties();
-    ExecutionStage stage = stage(retrieval, tools, config);
+    ExecutionStage stage = stage(retrievalService, tools, config);
     QueryPlan plan = new QueryPlan("问题", List.of(new SubQuestion("Q1", "慢问题")));
     RoutingPlan routing = new RoutingPlan(List.of(knowledge("Q1")));
     RagRunTrace trace =
         new RagRunTrace(UUID.randomUUID(), OffsetDateTime.now(ZoneOffset.UTC), System.nanoTime());
-    when(retrieval.retrieveCandidates(
+    when(retrievalService.retrieveCandidates(
             eq(ownerId), eq("Q1"), anyString(), isNull(), any(), any(), same(trace)))
         .thenThrow(ApiException.upstream("SUBQUESTION_TIMEOUT", "向量检索通道超时"));
 
@@ -178,8 +182,9 @@ class ExecutionStageTest {
   }
 
   private ExecutionStage stage(
-      RetrievalService retrieval, McpToolExecutor tools, RagProperties config) {
-    ExecutionStage stage = new ExecutionStage(retrieval, tools, new CandidateMerge(), config);
+      RetrievalService retrievalService, McpToolExecutor tools, RagProperties config) {
+    ExecutionStage stage =
+        new ExecutionStage(retrievalService, tools, new CandidateMerge(), config);
     stages.add(stage);
     return stage;
   }

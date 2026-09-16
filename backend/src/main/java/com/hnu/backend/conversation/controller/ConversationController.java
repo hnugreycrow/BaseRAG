@@ -25,18 +25,19 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 @Profile("local")
 @RequestMapping("/api/conversations")
 public class ConversationController {
-  private final ConversationService service;
-  private final CurrentUserService currentUsers;
+  private final ConversationService conversationService;
+  private final CurrentUserService currentUserService;
 
   /**
    * 创建会话控制器。
    *
-   * @param service 会话服务
-   * @param currentUsers 当前用户解析服务
+   * @param conversationService 会话服务
+   * @param currentUserService 当前用户解析服务
    */
-  public ConversationController(ConversationService service, CurrentUserService currentUsers) {
-    this.service = service;
-    this.currentUsers = currentUsers;
+  public ConversationController(
+      ConversationService conversationService, CurrentUserService currentUserService) {
+    this.conversationService = conversationService;
+    this.currentUserService = currentUserService;
   }
 
   /** 创建会话。 */
@@ -44,8 +45,8 @@ public class ConversationController {
   @ResponseStatus(HttpStatus.CREATED)
   public ConversationResponses.Summary create(
       @Valid @RequestBody CreateConversationRequest request) {
-    return service.create(
-        currentUsers.require().getId(),
+    return conversationService.create(
+        currentUserService.require().getId(),
         request.title(),
         Boolean.TRUE.equals(request.thinkingEnabled()));
   }
@@ -54,43 +55,43 @@ public class ConversationController {
   @GetMapping
   public List<ConversationResponses.Summary> list(
       @RequestParam(defaultValue = "") String q, @RequestParam(defaultValue = "50") int limit) {
-    return service.list(currentUsers.require().getId(), q, limit);
+    return conversationService.list(currentUserService.require().getId(), q, limit);
   }
 
   /** 获取会话详情及各轮回答版本。 */
   @GetMapping("/{id}")
   public ConversationResponses.Detail get(@PathVariable UUID id) {
-    return service.get(currentUsers.require().getId(), id);
+    return conversationService.get(currentUserService.require().getId(), id);
   }
 
   /** 修改会话标题。 */
   @PatchMapping("/{id}")
   public ConversationResponses.Summary rename(
       @PathVariable UUID id, @Valid @RequestBody TitleRequest request) {
-    return service.rename(currentUsers.require().getId(), id, request.title());
+    return conversationService.rename(currentUserService.require().getId(), id, request.title());
   }
 
   /** 更新本会话后续回答使用的深度思考选择。 */
   @PatchMapping("/{id}/thinking")
   public ConversationResponses.Summary setThinking(
       @PathVariable UUID id, @Valid @RequestBody ThinkingRequest request) {
-    return service.setThinkingEnabled(
-        currentUsers.require().getId(), id, request.thinkingEnabled());
+    return conversationService.setThinkingEnabled(
+        currentUserService.require().getId(), id, request.thinkingEnabled());
   }
 
   /** 删除没有正在生成回答的会话。 */
   @DeleteMapping("/{id}")
   @ResponseStatus(HttpStatus.NO_CONTENT)
   public void delete(@PathVariable UUID id) {
-    service.delete(currentUsers.require().getId(), id);
+    conversationService.delete(currentUserService.require().getId(), id);
   }
 
   /** 提交用户问题，并通过 SSE 持续返回生成事件。 */
   @PostMapping(value = "/{id}/messages", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
   public SseEmitter ask(
       @PathVariable UUID id, @Valid @RequestBody MessageRequest request, HttpServletRequest http) {
-    return service.ask(
-        currentUsers.require().getId(),
+    return conversationService.ask(
+        currentUserService.require().getId(),
         id,
         request.clientMessageId(),
         request.content(),
@@ -106,8 +107,8 @@ public class ConversationController {
       @PathVariable UUID assistantMessageId,
       @Valid @RequestBody ActionRequest request,
       HttpServletRequest http) {
-    return service.retry(
-        currentUsers.require().getId(),
+    return conversationService.retry(
+        currentUserService.require().getId(),
         id,
         assistantMessageId,
         request.clientRequestId(),
@@ -123,8 +124,8 @@ public class ConversationController {
       @PathVariable UUID assistantMessageId,
       @Valid @RequestBody ActionRequest request,
       HttpServletRequest http) {
-    return service.regenerate(
-        currentUsers.require().getId(),
+    return conversationService.regenerate(
+        currentUserService.require().getId(),
         id,
         assistantMessageId,
         request.clientRequestId(),
@@ -135,7 +136,7 @@ public class ConversationController {
   @PostMapping("/{id}/generations/{generationId}/cancel")
   @ResponseStatus(HttpStatus.NO_CONTENT)
   public void cancel(@PathVariable UUID id, @PathVariable UUID generationId) {
-    service.cancel(currentUsers.require().getId(), id, generationId);
+    conversationService.cancel(currentUserService.require().getId(), id, generationId);
   }
 
   /**

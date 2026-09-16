@@ -47,10 +47,10 @@ import tools.jackson.databind.json.JsonMapper;
 @Service
 public class ConversationService {
   private static final Logger log = LoggerFactory.getLogger(ConversationService.class);
-  private final ConversationMapper conversations;
-  private final MessageMapper messages;
-  private final GenerationAttemptMapper attempts;
-  private final ConversationContextService conversationContext;
+  private final ConversationMapper conversationMapper;
+  private final MessageMapper messageMapper;
+  private final GenerationAttemptMapper generationAttemptMapper;
+  private final ConversationContextService conversationContextService;
   private final ExecutionStage executionStage;
   private final DeduplicationStage deduplicationStage;
   private final RerankStage rerankStage;
@@ -71,10 +71,10 @@ public class ConversationService {
   /**
    * 创建会话应用服务。
    *
-   * @param conversations 会话持久化接口
-   * @param messages 消息持久化接口
-   * @param attempts 模型生成尝试持久化接口
-   * @param conversationContext 会话记忆、规划和路由准备服务
+   * @param conversationMapper 会话持久化接口
+   * @param messageMapper 消息持久化接口
+   * @param generationAttemptMapper 模型生成尝试持久化接口
+   * @param conversationContextService 会话记忆、规划和路由准备服务
    * @param executionStage 子问题执行阶段
    * @param deduplicationStage 证据去重阶段
    * @param rerankStage 证据重排阶段
@@ -86,10 +86,10 @@ public class ConversationService {
    * @param traces 单次问答 Trace 管理器
    */
   public ConversationService(
-      ConversationMapper conversations,
-      MessageMapper messages,
-      GenerationAttemptMapper attempts,
-      ConversationContextService conversationContext,
+      ConversationMapper conversationMapper,
+      MessageMapper messageMapper,
+      GenerationAttemptMapper generationAttemptMapper,
+      ConversationContextService conversationContextService,
       ExecutionStage executionStage,
       DeduplicationStage deduplicationStage,
       RerankStage rerankStage,
@@ -99,10 +99,10 @@ public class ConversationService {
       ConversationProperties config,
       TransactionTemplate tx,
       RagTraceManager traces) {
-    this.conversations = conversations;
-    this.messages = messages;
-    this.attempts = attempts;
-    this.conversationContext = conversationContext;
+    this.conversationMapper = conversationMapper;
+    this.messageMapper = messageMapper;
+    this.generationAttemptMapper = generationAttemptMapper;
+    this.conversationContextService = conversationContextService;
     this.executionStage = executionStage;
     this.deduplicationStage = deduplicationStage;
     this.rerankStage = rerankStage;
@@ -117,8 +117,8 @@ public class ConversationService {
   /** 将进程异常退出时遗留的运行中消息和尝试恢复为终态。 */
   @PostConstruct
   void recoverInterrupted() {
-    int recoveredAttempts = attempts.recoverInterrupted();
-    int recoveredMessages = messages.recoverInterrupted();
+    int recoveredAttempts = generationAttemptMapper.recoverInterrupted();
+    int recoveredMessages = messageMapper.recoverInterrupted();
     int recoveredRuns = traces.recoverInterrupted();
     if (recoveredMessages > 0 || recoveredAttempts > 0 || recoveredRuns > 0) {
       log.warn(
@@ -151,7 +151,7 @@ public class ConversationService {
       UUID ownerId, String rawTitle, boolean thinkingEnabled) {
     String title = normalizeTitle(rawTitle);
     UUID id = UUID.randomUUID();
-    conversations.insert(ownerId, id, title, thinkingEnabled);
+    conversationMapper.insert(ownerId, id, title, thinkingEnabled);
     return summary(require(ownerId, id));
   }
 
@@ -169,7 +169,7 @@ public class ConversationService {
             ? ""
             : rawQuery.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     int limit = rawLimit <= 0 ? 50 : Math.min(rawLimit, 100);
-    return conversations.list(ownerId, query, limit).stream().map(this::summary).toList();
+    return conversationMapper.list(ownerId, query, limit).stream().map(this::summary).toList();
   }
 
   /**
@@ -181,7 +181,7 @@ public class ConversationService {
    */
   public ConversationResponses.Detail get(UUID ownerId, UUID id) {
     Conversation conversation = require(ownerId, id);
-    List<Message> all = messages.list(ownerId, id);
+    List<Message> all = messageMapper.list(ownerId, id);
     Map<Integer, Message> users = new LinkedHashMap<>();
     Map<Integer, List<Message>> assistants = new LinkedHashMap<>();
     for (Message message : all) {
@@ -229,14 +229,14 @@ public class ConversationService {
    */
   public ConversationResponses.Summary rename(UUID ownerId, UUID id, String rawTitle) {
     require(ownerId, id);
-    conversations.rename(ownerId, id, normalizeTitle(rawTitle));
+    conversationMapper.rename(ownerId, id, normalizeTitle(rawTitle));
     return summary(require(ownerId, id));
   }
 
   /** 更新会话后续回答的深度思考选择；运行中的回答沿用其创建时的快照。 */
   public ConversationResponses.Summary setThinkingEnabled(UUID ownerId, UUID id, boolean enabled) {
     require(ownerId, id);
-    conversations.setThinkingEnabled(ownerId, id, enabled);
+    conversationMapper.setThinkingEnabled(ownerId, id, enabled);
     return summary(require(ownerId, id));
   }
 
@@ -248,10 +248,10 @@ public class ConversationService {
    */
   public void delete(UUID ownerId, UUID id) {
     require(ownerId, id);
-    if (activeByConversation.containsKey(id) || messages.countRunning(ownerId, id) > 0) {
+    if (activeByConversation.containsKey(id) || messageMapper.countRunning(ownerId, id) > 0) {
       throw ApiException.conflict("GENERATION_IN_PROGRESS", "请先停止当前生成再删除会话");
     }
-    conversations.delete(ownerId, id);
+    conversationMapper.delete(ownerId, id);
     conversationLocks.remove(id);
   }
 
@@ -299,11 +299,12 @@ public class ConversationService {
     Object lock = conversationLocks.computeIfAbsent(conversationId, ignored -> new Object());
     synchronized (lock) {
       Conversation conversation = require(ownerId, conversationId);
-      Message existing = messages.findByClientRequest(ownerId, conversationId, clientMessageId);
+      Message existing =
+          messageMapper.findByClientRequest(ownerId, conversationId, clientMessageId);
       if (existing != null) {
         Message assistant =
             "USER".equals(existing.getRole())
-                ? messages.latestReply(ownerId, existing.getId())
+                ? messageMapper.latestReply(ownerId, existing.getId())
                 : existing;
         return replayOrConflict(conversation, existing, assistant, timing.requestId());
       }
@@ -311,15 +312,15 @@ public class ConversationService {
       PreparedMessages prepared =
           tx.execute(
               ignored -> {
-                int turn = messages.nextTurn(ownerId, conversationId);
+                int turn = messageMapper.nextTurn(ownerId, conversationId);
                 Message user = userMessage(conversationId, clientMessageId, turn, question);
-                messages.insert(user);
+                messageMapper.insert(user);
                 Message assistant = assistantMessage(conversationId, null, turn, 1, user.getId());
                 assistant.setThinkingEnabled(conversation.isThinkingEnabled());
-                messages.insert(assistant);
+                messageMapper.insert(assistant);
                 RagRunTrace trace =
                     traces.start(ownerId, conversationId, user.getId(), assistant.getId(), timing);
-                conversations.touch(ownerId, conversationId);
+                conversationMapper.touch(ownerId, conversationId);
                 return new PreparedMessages(user, assistant, trace);
               });
       return launch(
@@ -417,20 +418,21 @@ public class ConversationService {
     Object lock = conversationLocks.computeIfAbsent(conversationId, ignored -> new Object());
     synchronized (lock) {
       Conversation conversation = require(ownerId, conversationId);
-      Message duplicate = messages.findByClientRequest(ownerId, conversationId, clientRequestId);
+      Message duplicate =
+          messageMapper.findByClientRequest(ownerId, conversationId, clientRequestId);
       if (duplicate != null) {
-        Message user = messages.find(ownerId, duplicate.getReplyToId());
+        Message user = messageMapper.find(ownerId, duplicate.getReplyToId());
         return replayOrConflict(conversation, user, duplicate, timing.requestId());
       }
       ensureIdle(ownerId, conversationId);
-      Message previous = messages.find(ownerId, assistantMessageId);
+      Message previous = messageMapper.find(ownerId, assistantMessageId);
       if (previous == null
           || !conversationId.equals(previous.getConversationId())
           || !"ASSISTANT".equals(previous.getRole())) {
         throw ApiException.notFound("MESSAGE_NOT_FOUND", "回答不存在");
       }
       if (regenerate) {
-        int lastTurn = messages.nextTurn(ownerId, conversationId) - 1;
+        int lastTurn = messageMapper.nextTurn(ownerId, conversationId) - 1;
         if (!previous.isActive()
             || !"COMPLETED".equals(previous.getStatus())
             || previous.getTurnIndex() != lastTurn) {
@@ -440,23 +442,23 @@ public class ConversationService {
           || "CANCELLED".equals(previous.getStatus()))) {
         throw ApiException.conflict("RETRY_NOT_ALLOWED", "只能重试失败或已停止的回答");
       }
-      Message user = messages.find(ownerId, previous.getReplyToId());
+      Message user = messageMapper.find(ownerId, previous.getReplyToId());
       PreparedAnswer next =
           tx.execute(
               ignored -> {
-                messages.deactivateReplies(ownerId, user.getId());
+                messageMapper.deactivateReplies(ownerId, user.getId());
                 Message value =
                     assistantMessage(
                         conversationId,
                         clientRequestId,
                         user.getTurnIndex(),
-                        messages.nextVariant(ownerId, user.getId()),
+                        messageMapper.nextVariant(ownerId, user.getId()),
                         user.getId());
                 value.setThinkingEnabled(conversation.isThinkingEnabled());
-                messages.insert(value);
+                messageMapper.insert(value);
                 RagRunTrace trace =
                     traces.start(ownerId, conversationId, user.getId(), value.getId(), timing);
-                conversations.touch(ownerId, conversationId);
+                conversationMapper.touch(ownerId, conversationId);
                 return new PreparedAnswer(value, trace);
               });
       return launch(conversation, user, next.assistant(), timing.requestId(), next.trace());
@@ -481,7 +483,7 @@ public class ConversationService {
       return;
     }
 
-    Message stored = messages.find(ownerId, generationId);
+    Message stored = messageMapper.find(ownerId, generationId);
     if (stored == null
         || !conversationId.equals(stored.getConversationId())
         || !"ASSISTANT".equals(stored.getRole())) {
@@ -491,10 +493,11 @@ public class ConversationService {
     tx.executeWithoutResult(
         ignored -> {
           int changed =
-              messages.cancelRunning(ownerId, generationId, conversationId, stored.getContent());
-          attempts.cancelRunning(ownerId, generationId);
+              messageMapper.cancelRunning(
+                  ownerId, generationId, conversationId, stored.getContent());
+          generationAttemptMapper.cancelRunning(ownerId, generationId);
           traces.cancelStored(generationId);
-          if (changed > 0) conversations.touch(ownerId, conversationId);
+          if (changed > 0) conversationMapper.touch(ownerId, conversationId);
         });
   }
 
@@ -524,7 +527,7 @@ public class ConversationService {
    */
   private void ensureIdle(UUID ownerId, UUID conversationId) {
     if (activeByConversation.containsKey(conversationId)
-        || messages.countRunning(ownerId, conversationId) > 0) {
+        || messageMapper.countRunning(ownerId, conversationId) > 0) {
       throw ApiException.conflict("GENERATION_IN_PROGRESS", "该会话正在生成回答");
     }
   }
@@ -619,12 +622,12 @@ public class ConversationService {
           startedPayload(active.conversation, active.user, active.assistant));
       var prepared =
           active.trace.enabled()
-              ? conversationContext.prepare(
+              ? conversationContextService.prepare(
                   active.conversation,
                   active.user.getTurnIndex(),
                   active.user.getContent(),
                   active.trace)
-              : conversationContext.prepare(
+              : conversationContextService.prepare(
                   active.conversation, active.user.getTurnIndex(), active.user.getContent());
       ensureNotCancelled(active);
       String standaloneQuestion = prepared.queryPlan().standaloneQuestion();
@@ -688,7 +691,7 @@ public class ConversationService {
       promptSpan.success(reranked.selectedCandidates().size() + prompt.toolReferenceIds().size());
       // sources 为文档数；evidence_count 仍是进入 Prompt 的原始证据分块数。
       active.trace.evidenceCount(reranked.selectedCandidates().size());
-      messages.prepare(
+      messageMapper.prepare(
           active.ownerId,
           active.assistant.getId(),
           standaloneQuestion,
@@ -730,7 +733,7 @@ public class ConversationService {
    */
   private void answerSystemChat(
       ActiveGeneration active, ConversationContextService.PreparedContext prepared) {
-    messages.prepare(active.ownerId, active.assistant.getId(), null, "[]");
+    messageMapper.prepare(active.ownerId, active.assistant.getId(), null, "[]");
     ensureNotCancelled(active);
     active.assistant.setRetrievalQuery(null);
     active.assistant.setSourcesJson("[]");
@@ -791,7 +794,7 @@ public class ConversationService {
       // 一次性替换已流出的正文，并同步检查点，保证断线读取与最终消息内容一致。
       active.buffer.setLength(0);
       active.buffer.append(content);
-      messages.checkpoint(active.ownerId, active.assistant.getId(), content);
+      messageMapper.checkpoint(active.ownerId, active.assistant.getId(), content);
       active.lastCheckpointLength = content.length() + active.reasoningBuffer.length();
       active.lastCheckpointAt = System.currentTimeMillis();
       send(active.emitter, "reset", event("reason", "CITATION_NORMALIZED"));
@@ -807,7 +810,7 @@ public class ConversationService {
       ensureNotCancelled(active);
       if (active.attemptCounter.get() > 0 && active.reasoningBuffer.length() > 0) {
         active.reasoningBuffer.setLength(0);
-        messages.checkpointReasoning(active.ownerId, active.assistant.getId(), "");
+        messageMapper.checkpointReasoning(active.ownerId, active.assistant.getId(), "");
         active.lastCheckpointLength = active.buffer.length();
         active.lastCheckpointAt = System.currentTimeMillis();
         send(active.emitter, "reset", event("reason", "PROVIDER_FALLBACK"));
@@ -816,7 +819,8 @@ public class ConversationService {
       if (reason != AnswerGenerator.AttemptReason.PRIMARY) active.trace.markDegraded();
       int index = active.attemptCounter.incrementAndGet();
       // 消息状态只在首个候选开始时迁移一次；provider fallback 和引用修复沿用 STREAMING。
-      if (index == 1 && messages.markStreaming(active.ownerId, active.assistant.getId()) == 0) {
+      if (index == 1
+          && messageMapper.markStreaming(active.ownerId, active.assistant.getId()) == 0) {
         throw ApiException.cancelled();
       }
       GenerationAttempt attempt = new GenerationAttempt();
@@ -830,9 +834,9 @@ public class ConversationService {
       attempt.setStatus("STREAMING");
       attempt.setContent("");
       attempt.setReasoningContent("");
-      attempts.insert(attempt);
+      generationAttemptMapper.insert(attempt);
       active.currentAttemptId = attempt.getId();
-      messages.setModelInfo(
+      messageMapper.setModelInfo(
           active.ownerId,
           active.assistant.getId(),
           json.writeValueAsString(
@@ -874,8 +878,9 @@ public class ConversationService {
     /** {@inheritDoc} */
     @Override
     public void completed(AnswerGenerator.ModelTarget target, String content, String finishReason) {
-      attempts.complete(active.ownerId, active.currentAttemptId, content, finishReason);
-      attempts.saveReasoning(
+      generationAttemptMapper.complete(
+          active.ownerId, active.currentAttemptId, content, finishReason);
+      generationAttemptMapper.saveReasoning(
           active.ownerId, active.currentAttemptId, active.reasoningBuffer.toString());
       if (active.currentModelSpan != null) {
         active.currentModelSpan.success(
@@ -892,14 +897,14 @@ public class ConversationService {
         else active.currentModelSpan.failed(error.code());
       }
       if (active.currentAttemptId != null) {
-        attempts.fail(
+        generationAttemptMapper.fail(
             active.ownerId,
             active.currentAttemptId,
             active.control.cancelled() ? "CANCELLED" : "FAILED",
             partialContent,
             error.code(),
             error.getMessage());
-        attempts.saveReasoning(
+        generationAttemptMapper.saveReasoning(
             active.ownerId, active.currentAttemptId, active.reasoningBuffer.toString());
       }
     }
@@ -929,15 +934,15 @@ public class ConversationService {
       if (active.citationSpan != null) active.citationSpan.degraded(0, reasonCode);
       if (active.currentAttemptId != null) {
         // 模型流已经正常结束，引用校验发生在其后，因此需要显式作废 COMPLETED 尝试。
-        attempts.invalidateCompleted(
+        generationAttemptMapper.invalidateCompleted(
             active.ownerId, active.currentAttemptId, reasonCode, "模型返回了非法引用");
       }
       if (!repairScheduled) return;
       // reset 之前同步清空数据库和检查点游标，避免修复流继续沿用首次正文的长度基线。
       active.buffer.setLength(0);
       active.reasoningBuffer.setLength(0);
-      messages.checkpoint(active.ownerId, active.assistant.getId(), "");
-      messages.checkpointReasoning(active.ownerId, active.assistant.getId(), "");
+      messageMapper.checkpoint(active.ownerId, active.assistant.getId(), "");
+      messageMapper.checkpointReasoning(active.ownerId, active.assistant.getId(), "");
       active.lastCheckpointLength = 0;
       active.lastCheckpointAt = System.currentTimeMillis();
       send(active.emitter, "reset", event("reason", reasonCode));
@@ -954,12 +959,13 @@ public class ConversationService {
     int generatedChars = active.buffer.length() + active.reasoningBuffer.length();
     if (generatedChars - active.lastCheckpointLength >= config.getCheckpointChars()
         || now - active.lastCheckpointAt >= config.getCheckpointIntervalMs()) {
-      messages.checkpoint(active.ownerId, active.assistant.getId(), active.buffer.toString());
-      messages.checkpointReasoning(
+      messageMapper.checkpoint(active.ownerId, active.assistant.getId(), active.buffer.toString());
+      messageMapper.checkpointReasoning(
           active.ownerId, active.assistant.getId(), active.reasoningBuffer.toString());
       if (active.currentAttemptId != null) {
-        attempts.checkpoint(active.ownerId, active.currentAttemptId, active.buffer.toString());
-        attempts.checkpointReasoning(
+        generationAttemptMapper.checkpoint(
+            active.ownerId, active.currentAttemptId, active.buffer.toString());
+        generationAttemptMapper.checkpointReasoning(
             active.ownerId, active.currentAttemptId, active.reasoningBuffer.toString());
       }
       active.lastCheckpointLength = generatedChars;
@@ -978,9 +984,9 @@ public class ConversationService {
   private void failCurrentAttempt(
       ActiveGeneration active, String status, String code, String message) {
     if (active.currentAttemptId != null) {
-      attempts.fail(
+      generationAttemptMapper.fail(
           active.ownerId, active.currentAttemptId, status, active.buffer.toString(), code, message);
-      attempts.saveReasoning(
+      generationAttemptMapper.saveReasoning(
           active.ownerId, active.currentAttemptId, active.reasoningBuffer.toString());
     }
   }
@@ -1018,16 +1024,16 @@ public class ConversationService {
       tx.executeWithoutResult(
           ignored -> {
             int changed =
-                messages.complete(
+                messageMapper.complete(
                     active.ownerId,
                     active.generationId,
                     content,
                     json.writeValueAsString(citations),
                     modelInfo);
             if (changed > 0)
-              messages.saveReasoning(
+              messageMapper.saveReasoning(
                   active.ownerId, active.generationId, active.reasoningBuffer.toString());
-            if (changed > 0) conversations.touch(active.ownerId, active.conversation.getId());
+            if (changed > 0) conversationMapper.touch(active.ownerId, active.conversation.getId());
             persistenceSpan.success(changed);
             // Trace 阶段批量写入与回答终态共享事务，任一失败都不会留下互相矛盾的状态。
             traces.finish(active.trace, RagRunStatus.COMPLETED, null);
@@ -1053,13 +1059,13 @@ public class ConversationService {
       tx.executeWithoutResult(
           ignored -> {
             int changed =
-                messages.cancelRunning(
+                messageMapper.cancelRunning(
                     active.ownerId, active.generationId, active.conversation.getId(), content);
             if (changed > 0)
-              messages.saveReasoning(
+              messageMapper.saveReasoning(
                   active.ownerId, active.generationId, active.reasoningBuffer.toString());
-            attempts.cancelRunning(active.ownerId, active.generationId);
-            if (changed > 0) conversations.touch(active.ownerId, active.conversation.getId());
+            generationAttemptMapper.cancelRunning(active.ownerId, active.generationId);
+            if (changed > 0) conversationMapper.touch(active.ownerId, active.conversation.getId());
             persistenceSpan.success(changed);
             traces.finish(active.trace, RagRunStatus.CANCELLED, "GENERATION_CANCELLED");
           });
@@ -1086,13 +1092,13 @@ public class ConversationService {
       tx.executeWithoutResult(
           ignored -> {
             int changed =
-                messages.terminalFailure(
+                messageMapper.terminalFailure(
                     active.ownerId, active.generationId, "FAILED", content, code, message);
             if (changed > 0) {
-              messages.saveReasoning(
+              messageMapper.saveReasoning(
                   active.ownerId, active.generationId, active.reasoningBuffer.toString());
               failCurrentAttempt(active, "FAILED", code, message);
-              conversations.touch(active.ownerId, active.conversation.getId());
+              conversationMapper.touch(active.ownerId, active.conversation.getId());
             }
             persistenceSpan.success(changed);
             traces.finish(active.trace, RagRunStatus.FAILED, code);
@@ -1133,7 +1139,7 @@ public class ConversationService {
    */
   private void finishPersisted(
       ActiveGeneration active, String fallbackEvent, String fallbackCode, String fallbackMessage) {
-    Message stored = messages.find(active.ownerId, active.generationId);
+    Message stored = messageMapper.find(active.ownerId, active.generationId);
     if (stored == null) {
       finish(active, fallbackEvent, terminalEvent(fallbackCode, fallbackMessage, active.requestId));
       return;
@@ -1300,7 +1306,7 @@ public class ConversationService {
    * @return 持久化会话实体
    */
   private Conversation require(UUID ownerId, UUID id) {
-    Conversation value = conversations.find(ownerId, id);
+    Conversation value = conversationMapper.find(ownerId, id);
     if (value == null) throw ApiException.notFound("CONVERSATION_NOT_FOUND", "会话不存在");
     return value;
   }

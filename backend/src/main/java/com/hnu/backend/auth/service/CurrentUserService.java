@@ -12,15 +12,15 @@ import org.springframework.stereotype.Service;
 /** 将 Sa-Token 登录标识解析为每次请求都重新校验的数据库用户。 */
 @Service
 public class CurrentUserService {
-  private final UserMapper users;
+  private final UserMapper userMapper;
 
   /**
    * 创建当前用户解析服务。
    *
-   * @param users 用户数据访问接口
+   * @param userMapper 用户数据访问接口
    */
-  public CurrentUserService(UserMapper users) {
-    this.users = users;
+  public CurrentUserService(UserMapper userMapper) {
+    this.userMapper = userMapper;
   }
 
   /**
@@ -37,7 +37,7 @@ public class CurrentUserService {
       StpUtil.logout();
       throw new ApiException("AUTH_REQUIRED", "请先登录", HttpStatus.UNAUTHORIZED);
     }
-    User user = users.find(id);
+    User user = userMapper.find(id);
     if (user == null) {
       StpUtil.logout();
       throw new ApiException("AUTH_REQUIRED", "请先登录", HttpStatus.UNAUTHORIZED);

@@ -32,19 +32,19 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RequestMapping("/api/knowledge-bases")
 public class KnowledgeBaseController {
-  private final KnowledgeBaseService knowledgeBases;
-  private final CurrentUserService currentUsers;
+  private final KnowledgeBaseService knowledgeBaseService;
+  private final CurrentUserService currentUserService;
 
   /**
    * 创建知识库控制器。
    *
-   * @param knowledgeBases 知识库服务
-   * @param currentUsers 当前用户解析服务
+   * @param knowledgeBaseService 知识库服务
+   * @param currentUserService 当前用户解析服务
    */
   public KnowledgeBaseController(
-      KnowledgeBaseService knowledgeBases, CurrentUserService currentUsers) {
-    this.knowledgeBases = knowledgeBases;
-    this.currentUsers = currentUsers;
+      KnowledgeBaseService knowledgeBaseService, CurrentUserService currentUserService) {
+    this.knowledgeBaseService = knowledgeBaseService;
+    this.currentUserService = currentUserService;
   }
 
   /**
@@ -60,8 +60,8 @@ public class KnowledgeBaseController {
       @RequestParam(defaultValue = "1") @Min(1) int page,
       @RequestParam(defaultValue = "10") @Min(1) @Max(100) int pageSize,
       @RequestParam(required = false) @Size(max = 200) String query) {
-    currentUsers.requireAdmin();
-    return knowledgeBases.list(page, pageSize, query);
+    currentUserService.requireAdmin();
+    return knowledgeBaseService.list(page, pageSize, query);
   }
 
   /**
@@ -69,8 +69,8 @@ public class KnowledgeBaseController {
    */
   @GetMapping("/embedding-models")
   public List<EmbeddingModelResponse> embeddingModels() {
-    currentUsers.requireAdmin();
-    return knowledgeBases.embeddingModels();
+    currentUserService.requireAdmin();
+    return knowledgeBaseService.embeddingModels();
   }
 
   /**
@@ -81,8 +81,8 @@ public class KnowledgeBaseController {
    */
   @GetMapping("/{id}")
   public KnowledgeBaseResponse get(@PathVariable UUID id) {
-    currentUsers.requireAdmin();
-    return knowledgeBases.get(id);
+    currentUserService.requireAdmin();
+    return knowledgeBaseService.get(id);
   }
 
   /**
@@ -93,8 +93,8 @@ public class KnowledgeBaseController {
    */
   @PostMapping
   public KnowledgeBaseResponse create(@Valid @RequestBody KnowledgeBaseRequest request) {
-    return knowledgeBases.create(
-        currentUsers.requireAdmin().getId(), request.name(), request.embeddingModelId());
+    return knowledgeBaseService.create(
+        currentUserService.requireAdmin().getId(), request.name(), request.embeddingModelId());
   }
 
   /**
@@ -107,8 +107,8 @@ public class KnowledgeBaseController {
   @PatchMapping("/{id}")
   public KnowledgeBaseResponse rename(
       @PathVariable UUID id, @Valid @RequestBody KnowledgeBaseRequest request) {
-    currentUsers.requireAdmin();
-    return knowledgeBases.rename(id, request.name());
+    currentUserService.requireAdmin();
+    return knowledgeBaseService.rename(id, request.name());
   }
 
   /**
@@ -119,7 +119,7 @@ public class KnowledgeBaseController {
   @DeleteMapping("/{id}")
   @ResponseStatus(HttpStatus.NO_CONTENT)
   public void delete(@PathVariable UUID id) {
-    currentUsers.requireAdmin();
-    knowledgeBases.delete(id);
+    currentUserService.requireAdmin();
+    knowledgeBaseService.delete(id);
   }
 }

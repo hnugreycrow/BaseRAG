@@ -42,13 +42,13 @@ import org.springframework.boot.test.system.OutputCaptureExtension;
 
 @ExtendWith(OutputCaptureExtension.class)
 class IntentTreeRoutingStageTest {
-  private final IntentTreeService tree =
+  private final IntentTreeService intentTreeService =
       mock(IntentTreeService.class, withSettings().mockMaker("mock-maker-subclass"));
   private final ChatClient chat = mock(ChatClient.class);
   private final McpToolRegistry tools = mock(McpToolRegistry.class);
   private final RagProperties config = new RagProperties();
   private final IntentTreeRoutingStage stage =
-      new IntentTreeRoutingStage(tree, chat, tools, config);
+      new IntentTreeRoutingStage(intentTreeService, chat, tools, config);
 
   @AfterEach
   void tearDown() {
@@ -61,8 +61,8 @@ class IntentTreeRoutingStageTest {
     IntentNode kb = node("制度", IntentNode.Kind.KB, List.of(kbId));
     IntentNode chatNode = node("闲聊", IntentNode.Kind.SYSTEM, List.of());
     IntentNode mcp = mcpNode();
-    when(tree.activeLeaves()).thenReturn(List.of(kb, chatNode, mcp));
-    when(tree.list()).thenReturn(List.of(kb, chatNode, mcp));
+    when(intentTreeService.activeLeaves()).thenReturn(List.of(kb, chatNode, mcp));
+    when(intentTreeService.list()).thenReturn(List.of(kb, chatNode, mcp));
     when(tools.availableReadOnlyTools())
         .thenReturn(
             List.of(
@@ -160,8 +160,8 @@ class IntentTreeRoutingStageTest {
 
   @Test
   void fallbackLogContainsRunIdAndReason(CapturedOutput output) {
-    when(tree.activeLeaves()).thenReturn(List.of());
-    when(tree.list()).thenReturn(List.of());
+    when(intentTreeService.activeLeaves()).thenReturn(List.of());
+    when(intentTreeService.list()).thenReturn(List.of());
     RagRunTrace trace = trace();
 
     RoutingPlan result = stage.execute(QueryPlan.fallback("secret-question"), trace);
@@ -189,7 +189,7 @@ class IntentTreeRoutingStageTest {
             List.of(),
             false,
             0);
-    when(tree.list()).thenReturn(List.of(disabled));
+    when(intentTreeService.list()).thenReturn(List.of(disabled));
     assertFallback(plan, "INTENT_TREE_NO_VALID_LEAVES");
     verify(chat, never()).generate(any(), any());
   }
@@ -279,8 +279,8 @@ class IntentTreeRoutingStageTest {
   }
 
   private void active(IntentNode node) {
-    when(tree.activeLeaves()).thenReturn(List.of(node));
-    when(tree.list()).thenReturn(List.of(node));
+    when(intentTreeService.activeLeaves()).thenReturn(List.of(node));
+    when(intentTreeService.list()).thenReturn(List.of(node));
     when(tools.availableReadOnlyTools()).thenReturn(List.of());
   }
 

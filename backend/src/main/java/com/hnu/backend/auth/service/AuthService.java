@@ -16,44 +16,44 @@ import org.springframework.transaction.support.TransactionTemplate;
 /** 处理登录、会话恢复、注销和用户本人改密。 */
 @Service
 public class AuthService {
-  private final UserMapper users;
+  private final UserMapper userMapper;
   private final AccountPolicy policy;
   private final PasswordEncoder passwords;
   private final LoginRateLimiter limiter;
-  private final CsrfTokenService csrfTokens;
-  private final CurrentUserService currentUsers;
-  private final SessionRevocationService revocations;
+  private final CsrfTokenService csrfTokenService;
+  private final CurrentUserService currentUserService;
+  private final SessionRevocationService sessionRevocationService;
   private final TransactionTemplate tx;
   private final String dummyHash;
 
   /**
    * 创建认证服务。
    *
-   * @param users 用户数据访问接口
+   * @param userMapper 用户数据访问接口
    * @param policy 账号字段策略
    * @param passwords BCrypt 编码器
    * @param limiter 登录失败限流器
-   * @param csrfTokens CSRF nonce 服务
-   * @param currentUsers 当前用户解析服务
-   * @param revocations 会话撤销服务
+   * @param csrfTokenService CSRF nonce 服务
+   * @param currentUserService 当前用户解析服务
+   * @param sessionRevocationService 会话撤销服务
    * @param tx 事务模板
    */
   public AuthService(
-      UserMapper users,
+      UserMapper userMapper,
       AccountPolicy policy,
       PasswordEncoder passwords,
       LoginRateLimiter limiter,
-      CsrfTokenService csrfTokens,
-      CurrentUserService currentUsers,
-      SessionRevocationService revocations,
+      CsrfTokenService csrfTokenService,
+      CurrentUserService currentUserService,
+      SessionRevocationService sessionRevocationService,
       TransactionTemplate tx) {
-    this.users = users;
+    this.userMapper = userMapper;
     this.policy = policy;
     this.passwords = passwords;
     this.limiter = limiter;
-    this.csrfTokens = csrfTokens;
-    this.currentUsers = currentUsers;
-    this.revocations = revocations;
+    this.csrfTokenService = csrfTokenService;
+    this.currentUserService = currentUserService;
+    this.sessionRevocationService = sessionRevocationService;
     this.tx = tx;
     this.dummyHash = passwords.encode("dummy-password-used-for-timing-only");
   }
@@ -70,7 +70,7 @@ public class AuthService {
   public AuthSessionResponse login(String rawUsername, String password, String clientAddress) {
     String username = policy.username(rawUsername);
     limiter.requireAllowed(username, clientAddress);
-    User user = users.findByUsername(username);
+    User user = userMapper.findByUsername(username);
     String expectedHash = user == null ? dummyHash : user.getPasswordHash();
     if (!passwords.matches(password == null ? "" : password, expectedHash)) {
       limiter.recordFailure(username, clientAddress);
@@ -82,7 +82,7 @@ public class AuthService {
     limiter.clear(username, clientAddress);
     user.setLastLoginAt(java.time.OffsetDateTime.now());
     user.setUpdatedAt(java.time.OffsetDateTime.now());
-    users.updateById(user);
+    userMapper.updateById(user);
     loginUser(user.getId());
     return session(user);
   }
@@ -94,7 +94,7 @@ public class AuthService {
    * @throws ApiException 数据库账号已删除或禁用时抛出
    */
   public AuthSessionResponse restore() {
-    return session(currentUsers.require());
+    return session(currentUserService.require());
   }
 
   /** 注销当前浏览器 Token；其他会话保持不变。 */
@@ -111,7 +111,7 @@ public class AuthService {
    * @throws ApiException 旧密码错误或新密码不符合 BCrypt 边界时抛出
    */
   public AuthSessionResponse changePassword(String oldPassword, String newPassword) {
-    User current = currentUsers.require();
+    User current = currentUserService.require();
     if (!passwords.matches(oldPassword == null ? "" : oldPassword, current.getPasswordHash())) {
       throw new ApiException("INVALID_CREDENTIALS", "当前密码错误", HttpStatus.UNAUTHORIZED);
     }
@@ -120,12 +120,12 @@ public class AuthService {
         ignored -> {
           current.setPasswordHash(passwords.encode(validated));
           current.setUpdatedAt(java.time.OffsetDateTime.now());
-          users.updateById(current);
+          userMapper.updateById(current);
           // Redis 撤销失败会抛出异常并回滚密码更新；额外注销比遗留旧会话更安全。
-          revocations.revokeAll(current.getId());
+          sessionRevocationService.revokeAll(current.getId());
         });
     loginUser(current.getId());
-    return session(users.find(current.getId()));
+    return session(userMapper.find(current.getId()));
   }
 
   /**
@@ -144,7 +144,7 @@ public class AuthService {
    * @return 认证状态
    */
   private AuthSessionResponse session(User user) {
-    return new AuthSessionResponse(toResponse(user), csrfTokens.issue());
+    return new AuthSessionResponse(toResponse(user), csrfTokenService.issue());
   }
 
   /**

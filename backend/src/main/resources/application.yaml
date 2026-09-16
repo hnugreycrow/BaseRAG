@@ -145,7 +145,7 @@ rag:
       selected-evidence: 10
 
     routing:
-      confidence-threshold: 0.70
+      confidence-threshold: 0.65
       timeout-ms: 5000
 
     mcp:
@@ -191,6 +191,8 @@ conversation:
   checkpoint-interval-ms: 1000
 
 observability:
+  # 日志是否输出问题原文、改写后的问题、子问题与意图识别结果
+  log-question-content: "${RAG_LOG_QUESTION_CONTENT:true}"
   retention-days: 30
   cleanup-cron: "0 15 3 * * *"
 

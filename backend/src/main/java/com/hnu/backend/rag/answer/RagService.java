@@ -17,7 +17,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class RagService {
   private static final Logger log = LoggerFactory.getLogger(RagService.class);
-  private final RetrievalService retrieval;
+  private final RetrievalService retrievalService;
   private final ContextBuilder contexts;
   private final PromptAssemblyStage prompts;
   private final AnswerStage answers;
@@ -26,19 +26,19 @@ public class RagService {
   /**
    * 创建旧单轮问答兼容服务。
    *
-   * @param retrieval 旧单问题知识检索服务
+   * @param retrievalService 旧单问题知识检索服务
    * @param contexts 来源响应构造器
    * @param prompts 统一提示词组装阶段
    * @param answers 统一最终回答阶段
    * @param config RAG 输入校验配置
    */
   public RagService(
-      RetrievalService retrieval,
+      RetrievalService retrievalService,
       ContextBuilder contexts,
       PromptAssemblyStage prompts,
       AnswerStage answers,
       RagProperties config) {
-    this.retrieval = retrieval;
+    this.retrievalService = retrievalService;
     this.contexts = contexts;
     this.prompts = prompts;
     this.answers = answers;
@@ -77,8 +77,8 @@ public class RagService {
     String normalizedQuestion = question.strip();
     var hits =
         knowledgeBaseIds == null
-            ? retrieval.retrieve(ownerId, normalizedQuestion)
-            : retrieval.retrieve(ownerId, normalizedQuestion, knowledgeBaseIds);
+            ? retrievalService.retrieve(ownerId, normalizedQuestion)
+            : retrievalService.retrieve(ownerId, normalizedQuestion, knowledgeBaseIds);
     var context = contexts.build(hits);
     long retrieved = System.nanoTime();
     AssembledPrompt prompt = prompts.assembleLegacy(normalizedQuestion, context);

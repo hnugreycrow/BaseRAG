@@ -7,15 +7,15 @@ import org.springframework.web.servlet.HandlerInterceptor;
 
 /** 对有副作用的 API 请求执行双重提交之外的 Session nonce 校验。 */
 final class CsrfInterceptor implements HandlerInterceptor {
-  private final CsrfTokenService tokens;
+  private final CsrfTokenService csrfTokenService;
 
   /**
    * 创建 CSRF 拦截器。
    *
-   * @param tokens nonce 服务
+   * @param csrfTokenService nonce 服务
    */
-  CsrfInterceptor(CsrfTokenService tokens) {
-    this.tokens = tokens;
+  CsrfInterceptor(CsrfTokenService csrfTokenService) {
+    this.csrfTokenService = csrfTokenService;
   }
 
   /**
@@ -31,7 +31,7 @@ final class CsrfInterceptor implements HandlerInterceptor {
       HttpServletRequest request, HttpServletResponse response, Object handler) {
     String method = request.getMethod();
     if (!("GET".equals(method) || "HEAD".equals(method) || "OPTIONS".equals(method))) {
-      tokens.requireValid(request.getHeader(CsrfTokenService.HEADER));
+      csrfTokenService.requireValid(request.getHeader(CsrfTokenService.HEADER));
     }
     return true;
   }

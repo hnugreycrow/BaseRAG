@@ -37,7 +37,7 @@ import org.springframework.transaction.annotation.Transactional;
       "rag.storage.bucket=baserag-test"
     })
 class IntentTreeIntegrationTest {
-  @Autowired IntentTreeService tree;
+  @Autowired IntentTreeService intentTreeService;
   @MockitoBean ChatClient chat;
   @MockitoBean EmbeddingClient embedding;
 
@@ -45,11 +45,11 @@ class IntentTreeIntegrationTest {
   @Transactional
   void createsHierarchyAndReadsItThroughMappers() {
     IntentNode root =
-        tree.create(
+        intentTreeService.create(
             new IntentNodeRequest(
                 null, "集成测试分类", "分类节点", List.of("测试问题"), null, null, List.of(), true, 0));
     IntentNode leaf =
-        tree.create(
+        intentTreeService.create(
             new IntentNodeRequest(
                 root.id(),
                 "集成测试闲聊",
@@ -62,16 +62,17 @@ class IntentTreeIntegrationTest {
                 0));
 
     assertTrue(
-        tree.list().stream()
+        intentTreeService.list().stream()
             .anyMatch(node -> node.id().equals(leaf.id()) && node.parentId().equals(root.id())));
-    tree.update(
+    intentTreeService.update(
         leaf.id(),
         new IntentNodeRequest(
             root.id(), "集成测试中间层", "分类", List.of(), null, null, List.of(), true, 0));
     assertTrue(
-        tree.list().stream().anyMatch(node -> node.id().equals(leaf.id()) && node.kind() == null));
+        intentTreeService.list().stream()
+            .anyMatch(node -> node.id().equals(leaf.id()) && node.kind() == null));
     IntentNode nested =
-        tree.create(
+        intentTreeService.create(
             new IntentNodeRequest(
                 leaf.id(),
                 "集成测试三级闲聊",
@@ -84,7 +85,7 @@ class IntentTreeIntegrationTest {
                 0));
     assertEquals(
         nested.id(),
-        tree.activeLeaves().stream()
+        intentTreeService.activeLeaves().stream()
             .filter(node -> node.id().equals(nested.id()))
             .findFirst()
             .orElseThrow()

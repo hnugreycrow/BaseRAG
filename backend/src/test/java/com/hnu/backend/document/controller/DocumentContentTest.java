@@ -19,11 +19,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class DocumentContentTest {
-  private final DocumentService documents = mock(DocumentService.class);
-  private final CurrentUserService users = mock(CurrentUserService.class);
-  private final KnowledgeBaseService knowledgeBases = mock(KnowledgeBaseService.class);
+  private final DocumentService documentService = mock(DocumentService.class);
+  private final CurrentUserService currentUserService = mock(CurrentUserService.class);
+  private final KnowledgeBaseService knowledgeBaseService = mock(KnowledgeBaseService.class);
   private final DocumentController controller =
-      new DocumentController(documents, users, knowledgeBases);
+      new DocumentController(documentService, currentUserService, knowledgeBaseService);
   private final UUID owner = UUID.randomUUID();
   private final UUID kb = UUID.randomUUID();
   private final UUID document = UUID.randomUUID();
@@ -33,11 +33,11 @@ class DocumentContentTest {
   void mvcReturnsRawPdfRangeWithoutJsonEnvelope() throws Exception {
     User user = new User();
     user.setId(owner);
-    when(users.requireAdmin()).thenReturn(user);
+    when(currentUserService.requireAdmin()).thenReturn(user);
     KnowledgeBase managed = new KnowledgeBase();
     managed.setOwnerId(owner);
-    when(knowledgeBases.requireAdminOwned(kb)).thenReturn(managed);
-    when(documents.originalFile(owner, kb, document, version))
+    when(knowledgeBaseService.requireAdminOwned(kb)).thenReturn(managed);
+    when(documentService.originalFile(owner, kb, document, version))
         .thenReturn(
             new DocumentService.OriginalFile(
                 "policy.pdf", "application/pdf", "0123456789".getBytes(StandardCharsets.US_ASCII)));
@@ -64,11 +64,11 @@ class DocumentContentTest {
   void servesPdfAndSingleByteRanges() {
     User user = new User();
     user.setId(owner);
-    when(users.requireAdmin()).thenReturn(user);
+    when(currentUserService.requireAdmin()).thenReturn(user);
     KnowledgeBase managed = new KnowledgeBase();
     managed.setOwnerId(owner);
-    when(knowledgeBases.requireAdminOwned(kb)).thenReturn(managed);
-    when(documents.originalFile(owner, kb, document, version))
+    when(knowledgeBaseService.requireAdminOwned(kb)).thenReturn(managed);
+    when(documentService.originalFile(owner, kb, document, version))
         .thenReturn(
             new DocumentService.OriginalFile(
                 "手册.pdf", "application/pdf", "0123456789".getBytes(StandardCharsets.US_ASCII)));

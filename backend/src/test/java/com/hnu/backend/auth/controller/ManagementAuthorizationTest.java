@@ -31,24 +31,24 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 class ManagementAuthorizationTest {
   @Test
   void rejectsManagementEndpointsForRegularUser() throws Exception {
-    CurrentUserService users = mock(CurrentUserService.class);
-    when(users.requireAdmin())
+    CurrentUserService currentUserService = mock(CurrentUserService.class);
+    when(currentUserService.requireAdmin())
         .thenThrow(new ApiException("FORBIDDEN", "当前账号无权执行此操作", HttpStatus.FORBIDDEN));
-    KnowledgeBaseService knowledgeBases = mock(KnowledgeBaseService.class);
-    DocumentService documents = mock(DocumentService.class);
-    RagRunQueryService runs = mock(RagRunQueryService.class);
-    AdminUserService adminUsers = mock(AdminUserService.class);
-    IntentTreeService intentTree =
+    KnowledgeBaseService knowledgeBaseService = mock(KnowledgeBaseService.class);
+    DocumentService documentService = mock(DocumentService.class);
+    RagRunQueryService ragRunQueryService = mock(RagRunQueryService.class);
+    AdminUserService adminUserService = mock(AdminUserService.class);
+    IntentTreeService intentTreeService =
         mock(IntentTreeService.class, withSettings().mockMaker("mock-maker-subclass"));
     McpToolRegistry tools = mock(McpToolRegistry.class);
     var mvc =
         MockMvcBuilders.standaloneSetup(
-                new KnowledgeBaseController(knowledgeBases, users),
-                new DocumentController(documents, users, knowledgeBases),
-                new RagRunController(users, runs),
-                new RagEvaluationController(new RagProperties(), users),
-                new AdminUserController(users, adminUsers),
-                new IntentTreeController(intentTree, users, tools))
+                new KnowledgeBaseController(knowledgeBaseService, currentUserService),
+                new DocumentController(documentService, currentUserService, knowledgeBaseService),
+                new RagRunController(currentUserService, ragRunQueryService),
+                new RagEvaluationController(new RagProperties(), currentUserService),
+                new AdminUserController(currentUserService, adminUserService),
+                new IntentTreeController(intentTreeService, currentUserService, tools))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
     UUID kb = UUID.randomUUID();
@@ -77,6 +77,12 @@ class ManagementAuthorizationTest {
     mvc.perform(get("/api/admin/intent-nodes/tools")).andExpect(status().isForbidden());
     mvc.perform(delete("/api/admin/intent-nodes/{id}", UUID.randomUUID()))
         .andExpect(status().isForbidden());
-    verifyNoInteractions(knowledgeBases, documents, runs, adminUsers, intentTree, tools);
+    verifyNoInteractions(
+        knowledgeBaseService,
+        documentService,
+        ragRunQueryService,
+        adminUserService,
+        intentTreeService,
+        tools);
   }
 }

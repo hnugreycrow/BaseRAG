@@ -17,14 +17,14 @@ import org.springframework.web.bind.annotation.RestController;
 @Profile("local")
 @RequestMapping("/api/conversations/{conversationId}/messages/{messageId}/sources")
 public class CitedDocumentController {
-  private final CurrentUserService currentUsers;
-  private final CitedDocumentService citedDocuments;
+  private final CurrentUserService currentUserService;
+  private final CitedDocumentService citedDocumentService;
 
   /** 创建引用原文件接口。 */
   public CitedDocumentController(
-      CurrentUserService currentUsers, CitedDocumentService citedDocuments) {
-    this.currentUsers = currentUsers;
-    this.citedDocuments = citedDocuments;
+      CurrentUserService currentUserService, CitedDocumentService citedDocumentService) {
+    this.currentUserService = currentUserService;
+    this.citedDocumentService = citedDocumentService;
   }
 
   /** 校验引用并返回原文件；PDF 支持浏览器的单段 Range 请求。 */
@@ -35,8 +35,8 @@ public class CitedDocumentController {
       @PathVariable String citationId,
       @RequestHeader(value = HttpHeaders.RANGE, required = false) String range) {
     var file =
-        citedDocuments.originalFile(
-            currentUsers.require().getId(), conversationId, messageId, citationId);
+        citedDocumentService.originalFile(
+            currentUserService.require().getId(), conversationId, messageId, citationId);
     return DocumentController.fileResponse(file, range);
   }
 }

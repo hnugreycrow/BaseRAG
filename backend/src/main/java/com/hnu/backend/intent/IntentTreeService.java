@@ -22,20 +22,20 @@ import tools.jackson.databind.json.JsonMapper;
 @Service
 public class IntentTreeService {
   private static final int MAX_ACTIVE_LEAVES = 32;
-  private final IntentNodeMapper nodes;
-  private final IntentBindingMapper bindings;
-  private final KnowledgeBaseMapper knowledgeBases;
+  private final IntentNodeMapper intentNodeMapper;
+  private final IntentBindingMapper intentBindingMapper;
+  private final KnowledgeBaseMapper knowledgeBaseMapper;
   private final McpToolRegistry tools;
   private final JsonMapper json = JsonMapper.builder().build();
 
   public IntentTreeService(
-      IntentNodeMapper nodes,
-      IntentBindingMapper bindings,
-      KnowledgeBaseMapper knowledgeBases,
+      IntentNodeMapper intentNodeMapper,
+      IntentBindingMapper intentBindingMapper,
+      KnowledgeBaseMapper knowledgeBaseMapper,
       McpToolRegistry tools) {
-    this.nodes = nodes;
-    this.bindings = bindings;
-    this.knowledgeBases = knowledgeBases;
+    this.intentNodeMapper = intentNodeMapper;
+    this.intentBindingMapper = intentBindingMapper;
+    this.knowledgeBaseMapper = knowledgeBaseMapper;
     this.tools = tools;
   }
 
@@ -43,14 +43,14 @@ public class IntentTreeService {
   @Transactional(readOnly = true)
   public List<IntentNode> list() {
     Map<UUID, List<UUID>> linked = new HashMap<>();
-    bindings
+    intentBindingMapper
         .selectList(null)
         .forEach(
             binding ->
                 linked
                     .computeIfAbsent(binding.getNodeId(), ignored -> new ArrayList<>())
                     .add(binding.getKnowledgeBaseId()));
-    return nodes.selectList(null).stream()
+    return intentNodeMapper.selectList(null).stream()
         .map(entity -> fromEntity(entity, linked.getOrDefault(entity.getId(), List.of())))
         .sorted(
             Comparator.comparingInt(IntentNode::sortOrder)
@@ -79,7 +79,7 @@ public class IntentTreeService {
                   case KB ->
                       !node.knowledgeBaseIds().isEmpty()
                           && node.knowledgeBaseIds().stream()
-                              .allMatch(id -> knowledgeBases.findAdminOwned(id) != null);
+                              .allMatch(id -> knowledgeBaseMapper.findAdminOwned(id) != null);
                   case MCP -> node.toolName() != null && toolNames.contains(node.toolName());
                   case SYSTEM -> true;
                 })
@@ -93,7 +93,7 @@ public class IntentTreeService {
     List<IntentNode> all = new ArrayList<>(list());
     all.add(node);
     validate(node, all);
-    nodes.insert(toEntity(node));
+    intentNodeMapper.insert(toEntity(node));
     saveBindings(node);
     return node;
   }
@@ -109,8 +109,8 @@ public class IntentTreeService {
     all.removeIf(node -> node.id().equals(id));
     all.add(replacement);
     validate(replacement, all);
-    nodes.updateById(toEntity(replacement));
-    bindings.delete(
+    intentNodeMapper.updateById(toEntity(replacement));
+    intentBindingMapper.delete(
         new LambdaQueryWrapper<IntentBindingEntity>().eq(IntentBindingEntity::getNodeId, id));
     saveBindings(replacement);
     return replacement;
@@ -126,7 +126,7 @@ public class IntentTreeService {
     if (all.stream().anyMatch(node -> id.equals(node.parentId()))) {
       throw ApiException.conflict("INTENT_NODE_HAS_CHILDREN", "请先删除子节点");
     }
-    nodes.deleteById(id);
+    intentNodeMapper.deleteById(id);
   }
 
   private IntentNode normalized(UUID id, IntentNodeRequest request) {
@@ -202,7 +202,7 @@ public class IntentTreeService {
         throw ApiException.bad("INVALID_INTENT_BINDING", "知识库叶子必须绑定公共知识库");
       }
       for (UUID kbId : node.knowledgeBaseIds()) {
-        if (knowledgeBases.findAdminOwned(kbId) == null) {
+        if (knowledgeBaseMapper.findAdminOwned(kbId) == null) {
           throw ApiException.bad("INVALID_INTENT_BINDING", "绑定的公共知识库不存在");
         }
       }
@@ -226,7 +226,7 @@ public class IntentTreeService {
               binding.setId(UUID.randomUUID());
               binding.setNodeId(node.id());
               binding.setKnowledgeBaseId(kbId);
-              bindings.insert(binding);
+              intentBindingMapper.insert(binding);
             });
   }
 

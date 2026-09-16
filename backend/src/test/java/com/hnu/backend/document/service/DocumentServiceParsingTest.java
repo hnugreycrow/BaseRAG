@@ -43,10 +43,10 @@ import org.springframework.transaction.support.TransactionTemplate;
 class DocumentServiceParsingTest {
   private final UUID owner = UUID.randomUUID();
   private final UUID kbId = UUID.randomUUID();
-  private final KnowledgeBaseService knowledgeBases = mock(KnowledgeBaseService.class);
-  private final DocumentMapper documents = mock(DocumentMapper.class);
-  private final DocumentVersionMapper versions = mock(DocumentVersionMapper.class);
-  private final DocumentChunkMapper chunks = mock(DocumentChunkMapper.class);
+  private final KnowledgeBaseService knowledgeBaseService = mock(KnowledgeBaseService.class);
+  private final DocumentMapper documentMapper = mock(DocumentMapper.class);
+  private final DocumentVersionMapper documentVersionMapper = mock(DocumentVersionMapper.class);
+  private final DocumentChunkMapper documentChunkMapper = mock(DocumentChunkMapper.class);
   private final EmbeddingClient embedding = mock(EmbeddingClient.class);
   private final FileStorage storage = mock(FileStorage.class);
   private final TransactionTemplate tx = mock(TransactionTemplate.class);
@@ -94,13 +94,13 @@ class DocumentServiceParsingTest {
     kb.setEmbeddingProvider("local");
     kb.setEmbeddingModel("embedding");
     kb.setEmbeddingDimensions(2);
-    when(knowledgeBases.ensureModel(owner, kbId)).thenReturn(kb);
+    when(knowledgeBaseService.ensureModel(owner, kbId)).thenReturn(kb);
     var service =
         new DocumentService(
-            knowledgeBases,
-            documents,
-            versions,
-            chunks,
+            knowledgeBaseService,
+            documentMapper,
+            documentVersionMapper,
+            documentChunkMapper,
             new MarkdownChunker(new RagProperties()),
             embedding,
             storage,
@@ -111,7 +111,7 @@ class DocumentServiceParsingTest {
     assertEquals(
         "INVALID_FILE_FORMAT",
         assertThrows(ApiException.class, () -> service.upload(owner, kbId, invalid)).code());
-    verifyNoInteractions(storage, documents, versions);
+    verifyNoInteractions(storage, documentMapper, documentVersionMapper);
   }
 
   private void checkUploadAndChunk(
@@ -126,7 +126,7 @@ class DocumentServiceParsingTest {
     kb.setEmbeddingProvider("local");
     kb.setEmbeddingModel("embedding");
     kb.setEmbeddingDimensions(2);
-    when(knowledgeBases.ensureModel(owner, kbId)).thenReturn(kb);
+    when(knowledgeBaseService.ensureModel(owner, kbId)).thenReturn(kb);
     doAnswer(
             invocation -> {
               Consumer<TransactionStatus> callback = invocation.getArgument(0);
@@ -135,7 +135,7 @@ class DocumentServiceParsingTest {
             })
         .when(tx)
         .executeWithoutResult(any());
-    when(versions.update(any(LambdaUpdateWrapper.class))).thenReturn(1);
+    when(documentVersionMapper.update(any(LambdaUpdateWrapper.class))).thenReturn(1);
     when(embedding.embed(eq("model-id"), eq("local"), eq("embedding"), eq(2), anyList()))
         .thenAnswer(
             invocation -> {
@@ -144,10 +144,10 @@ class DocumentServiceParsingTest {
             });
     var service =
         new DocumentService(
-            knowledgeBases,
-            documents,
-            versions,
-            chunks,
+            knowledgeBaseService,
+            documentMapper,
+            documentVersionMapper,
+            documentChunkMapper,
             new MarkdownChunker(new RagProperties()),
             embedding,
             storage,
@@ -161,8 +161,8 @@ class DocumentServiceParsingTest {
     assertEquals("UPLOADED", uploaded.status());
     var documentCapture = ArgumentCaptor.forClass(Document.class);
     var versionCapture = ArgumentCaptor.forClass(DocumentVersion.class);
-    verify(documents).insert(documentCapture.capture());
-    verify(versions).insert(versionCapture.capture());
+    verify(documentMapper).insert(documentCapture.capture());
+    verify(documentVersionMapper).insert(versionCapture.capture());
     Document document = documentCapture.getValue();
     DocumentVersion version = versionCapture.getValue();
     assertEquals(format, version.getFormat());
@@ -171,14 +171,14 @@ class DocumentServiceParsingTest {
     assertTrue(version.getStorageKey().endsWith(format.equals("PDF") ? ".pdf" : ".docx"));
     verify(storage).put(version.getStorageKey(), bytes, mediaType);
 
-    when(documents.selectById(document.getId())).thenReturn(document);
-    when(versions.selectOne(any())).thenReturn(version);
+    when(documentMapper.selectById(document.getId())).thenReturn(document);
+    when(documentVersionMapper.selectOne(any())).thenReturn(version);
     when(storage.get(version.getStorageKey())).thenReturn(bytes);
     var ready = service.createChunks(owner, kbId, document.getId());
     assertEquals("READY", ready.status());
     assertEquals(version.getId(), document.getActiveVersionId());
     var chunkCapture = ArgumentCaptor.forClass(DocumentChunk.class);
-    verify(chunks, atLeastOnce()).insertVector(chunkCapture.capture());
+    verify(documentChunkMapper, atLeastOnce()).insertVector(chunkCapture.capture());
     assertTrue(
         chunkCapture.getAllValues().stream()
             .allMatch(

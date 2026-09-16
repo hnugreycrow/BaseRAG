@@ -16,18 +16,18 @@ import org.springframework.web.bind.annotation.RestController;
 @Profile("local")
 @RequestMapping("/api/questions")
 public class QuestionController {
-  private final RagService rag;
-  private final CurrentUserService currentUsers;
+  private final RagService ragService;
+  private final CurrentUserService currentUserService;
 
   /**
    * 创建单轮问答控制器。
    *
-   * @param rag 单轮 RAG 服务
-   * @param currentUsers 当前用户解析服务
+   * @param ragService 单轮 RAG 服务
+   * @param currentUserService 当前用户解析服务
    */
-  public QuestionController(RagService rag, CurrentUserService currentUsers) {
-    this.rag = rag;
-    this.currentUsers = currentUsers;
+  public QuestionController(RagService ragService, CurrentUserService currentUserService) {
+    this.ragService = ragService;
+    this.currentUserService = currentUserService;
   }
 
   /**
@@ -38,6 +38,7 @@ public class QuestionController {
    */
   @PostMapping
   public AnswerResponse ask(@Valid @RequestBody QuestionRequest request) {
-    return rag.ask(currentUsers.require().getId(), request.question(), request.knowledgeBaseIds());
+    return ragService.ask(
+        currentUserService.require().getId(), request.question(), request.knowledgeBaseIds());
   }
 }

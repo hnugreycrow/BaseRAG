@@ -76,17 +76,17 @@ import software.amazon.awssdk.services.s3.S3Client;
       "rag.storage.bucket=baserag-test"
     })
 class InfrastructureIntegrationTest {
-  @Autowired KnowledgeBaseMapper kbMapper;
+  @Autowired KnowledgeBaseMapper knowledgeBaseMapper;
   @Autowired UserMapper userMapper;
   @Autowired DocumentMapper documentMapper;
-  @Autowired DocumentVersionMapper versionMapper;
-  @Autowired DocumentChunkMapper chunkMapper;
+  @Autowired DocumentVersionMapper documentVersionMapper;
+  @Autowired DocumentChunkMapper documentChunkMapper;
   @Autowired RetrievalMapper retrievalMapper;
   @Autowired ConversationMapper conversationMapper;
   @Autowired MessageMapper messageMapper;
   @Autowired RagRunMapper ragRunMapper;
   @Autowired RagStageRunMapper ragStageRunMapper;
-  @Autowired DocumentService documents;
+  @Autowired DocumentService documentService;
   @Autowired com.hnu.backend.configuration.RagProperties config;
   @MockitoBean EmbeddingClient embedding;
   @MockitoBean ChatClient chat;
@@ -311,7 +311,7 @@ class InfrastructureIntegrationTest {
     kb.setEmbeddingProvider("siliconflow");
     kb.setEmbeddingModel("Qwen/Qwen3-Embedding-8B");
     kb.setEmbeddingDimensions(2);
-    kbMapper.insert(kb);
+    knowledgeBaseMapper.insert(kb);
     return kb.getId();
   }
 
@@ -361,7 +361,7 @@ class InfrastructureIntegrationTest {
     UUID ownerId = ownerId();
     UUID knowledgeBaseId = kb(ownerId);
     var result =
-        documents.uploadBatch(
+        documentService.uploadBatch(
             ownerId,
             knowledgeBaseId,
             List.of(
@@ -376,10 +376,10 @@ class InfrastructureIntegrationTest {
     UUID firstId = result.results().get(0).documentId();
     UUID secondId = result.results().get(2).documentId();
     assertNotEquals(firstId, secondId);
-    assertEquals("UPLOADED", documents.get(ownerId, knowledgeBaseId, firstId).status());
-    assertEquals("UPLOADED", documents.get(ownerId, knowledgeBaseId, secondId).status());
+    assertEquals("UPLOADED", documentService.get(ownerId, knowledgeBaseId, firstId).status());
+    assertEquals("UPLOADED", documentService.get(ownerId, knowledgeBaseId, secondId).status());
     var savedVersions =
-        versionMapper.selectList(
+        documentVersionMapper.selectList(
             new LambdaQueryWrapper<DocumentVersion>()
                 .in(DocumentVersion::getDocumentId, List.of(firstId, secondId)));
     assertEquals(2, savedVersions.size());
@@ -396,12 +396,12 @@ class InfrastructureIntegrationTest {
     UUID ownerId = ownerId();
     UUID knowledgeBaseId = kb();
     var uploaded =
-        documents.upload(
+        documentService.upload(
             ownerId, knowledgeBaseId, file("章节.md", "# 手册\n简介。\n\n## 年假\n年假五天。\n\n## 报销\n三天内报销。"));
-    var ready = documents.createChunks(ownerId, knowledgeBaseId, uploaded.documentId());
+    var ready = documentService.createChunks(ownerId, knowledgeBaseId, uploaded.documentId());
     assertEquals(1, ready.chunkCount());
     var policy =
-        chunkMapper
+        documentChunkMapper
             .selectList(
                 new LambdaQueryWrapper<DocumentChunk>()
                     .eq(DocumentChunk::getDocumentId, uploaded.documentId())
@@ -446,21 +446,23 @@ class InfrastructureIntegrationTest {
       docxBytes = output.toByteArray();
     }
     var pdf =
-        documents.upload(
+        documentService.upload(
             owner,
             kb,
             new MockMultipartFile("file", "policy.pdf", "application/octet-stream", pdfBytes));
     var docx =
-        documents.upload(
+        documentService.upload(
             owner,
             kb,
             new MockMultipartFile("file", "policy.docx", "application/octet-stream", docxBytes));
-    assertEquals("READY", documents.createChunks(owner, kb, pdf.documentId()).status());
-    assertEquals("READY", documents.createChunks(owner, kb, docx.documentId()).status());
+    assertEquals("READY", documentService.createChunks(owner, kb, pdf.documentId()).status());
+    assertEquals("READY", documentService.createChunks(owner, kb, docx.documentId()).status());
     var pdfVersion =
-        versionMapper.selectById(documentMapper.selectById(pdf.documentId()).getActiveVersionId());
+        documentVersionMapper.selectById(
+            documentMapper.selectById(pdf.documentId()).getActiveVersionId());
     var docxVersion =
-        versionMapper.selectById(documentMapper.selectById(docx.documentId()).getActiveVersionId());
+        documentVersionMapper.selectById(
+            documentMapper.selectById(docx.documentId()).getActiveVersionId());
     assertEquals("PDF", pdfVersion.getFormat());
     assertEquals("DOCX", docxVersion.getFormat());
     var storageConfig = config.getStorage();
@@ -484,26 +486,28 @@ class InfrastructureIntegrationTest {
               .contentType());
     }
     assertArrayEquals(
-        pdfBytes, documents.originalFile(owner, kb, pdf.documentId(), pdfVersion.getId()).bytes());
+        pdfBytes,
+        documentService.originalFile(owner, kb, pdf.documentId(), pdfVersion.getId()).bytes());
     assertArrayEquals(
         docxBytes,
-        documents.originalFile(owner, kb, docx.documentId(), docxVersion.getId()).bytes());
+        documentService.originalFile(owner, kb, docx.documentId(), docxVersion.getId()).bytes());
     UUID foreignOwner = createUser();
     assertEquals(
         org.springframework.http.HttpStatus.NOT_FOUND,
         assertThrows(
                 ApiException.class,
                 () ->
-                    documents.originalFile(foreignOwner, kb, pdf.documentId(), pdfVersion.getId()))
+                    documentService.originalFile(
+                        foreignOwner, kb, pdf.documentId(), pdfVersion.getId()))
             .status());
     var pdfChunk =
-        chunkMapper
+        documentChunkMapper
             .selectList(
                 new LambdaQueryWrapper<DocumentChunk>()
                     .eq(DocumentChunk::getDocumentId, pdf.documentId()))
             .getFirst();
     var docxChunk =
-        chunkMapper
+        documentChunkMapper
             .selectList(
                 new LambdaQueryWrapper<DocumentChunk>()
                     .eq(DocumentChunk::getDocumentId, docx.documentId()))
@@ -538,15 +542,15 @@ class InfrastructureIntegrationTest {
     UUID kb = kb();
     UUID ownerId = ownerId();
     String original = "# 年假\n员工年假为五天。";
-    var imported = documents.upload(ownerId, kb, file("手册.md", original));
+    var imported = documentService.upload(ownerId, kb, file("手册.md", original));
     assertEquals("UPLOADED", imported.status());
     assertEquals(0, imported.chunkCount());
-    imported = documents.createChunks(ownerId, kb, imported.documentId());
+    imported = documentService.createChunks(ownerId, kb, imported.documentId());
     assertEquals("READY", imported.status());
     UUID importedDocumentId = imported.documentId();
     var document = documentMapper.selectById(importedDocumentId);
     assertNotNull(document.getActiveVersionId());
-    var version = versionMapper.selectById(document.getActiveVersionId());
+    var version = documentVersionMapper.selectById(document.getActiveVersionId());
     assertTrue(
         version.getStorageKey().startsWith("users/" + ownerId + "/knowledge-bases/" + kb + "/"));
     var hits =
@@ -590,12 +594,12 @@ class InfrastructureIntegrationTest {
   void ranksByCosineAndNeverReturnsOtherKnowledgeBases() {
     UUID ownerId = ownerId();
     UUID first = kb(), other = kb();
-    var holiday = documents.upload(ownerId, first, file("年假.md", "# 年假\n五天。"));
-    documents.createChunks(ownerId, first, holiday.documentId());
-    var expense = documents.upload(ownerId, first, file("报销.md", "# 报销\n三天内提交。"));
-    documents.createChunks(ownerId, first, expense.documentId());
-    var secret = documents.upload(ownerId, other, file("其他库.md", "# 机密\n不可跨库检索。"));
-    documents.createChunks(ownerId, other, secret.documentId());
+    var holiday = documentService.upload(ownerId, first, file("年假.md", "# 年假\n五天。"));
+    documentService.createChunks(ownerId, first, holiday.documentId());
+    var expense = documentService.upload(ownerId, first, file("报销.md", "# 报销\n三天内提交。"));
+    documentService.createChunks(ownerId, first, expense.documentId());
+    var secret = documentService.upload(ownerId, other, file("其他库.md", "# 机密\n不可跨库检索。"));
+    documentService.createChunks(ownerId, other, secret.documentId());
     var hits =
         retrievalMapper.search(
             ownerId,
@@ -637,12 +641,12 @@ class InfrastructureIntegrationTest {
     UUID firstKb = kb(firstAdmin);
     UUID secondKb = kb(secondAdmin);
     UUID privateKb = kb(privateOwner);
-    var first = documents.upload(firstAdmin, firstKb, file("first.md", "# 公共\n管理员一。"));
-    var second = documents.upload(secondAdmin, secondKb, file("second.md", "# 公共\n管理员二。"));
-    var hidden = documents.upload(privateOwner, privateKb, file("private.md", "# 私有\n不应公开。"));
-    documents.createChunks(firstAdmin, firstKb, first.documentId());
-    documents.createChunks(secondAdmin, secondKb, second.documentId());
-    documents.createChunks(privateOwner, privateKb, hidden.documentId());
+    var first = documentService.upload(firstAdmin, firstKb, file("first.md", "# 公共\n管理员一。"));
+    var second = documentService.upload(secondAdmin, secondKb, file("second.md", "# 公共\n管理员二。"));
+    var hidden = documentService.upload(privateOwner, privateKb, file("private.md", "# 私有\n不应公开。"));
+    documentService.createChunks(firstAdmin, firstKb, first.documentId());
+    documentService.createChunks(secondAdmin, secondKb, second.documentId());
+    documentService.createChunks(privateOwner, privateKb, hidden.documentId());
 
     var hits =
         retrievalMapper.searchAll(
@@ -662,10 +666,10 @@ class InfrastructureIntegrationTest {
                 2,
                 20)
             .isEmpty());
-    assertNotNull(kbMapper.findAdminOwned(secondKb));
-    assertNull(kbMapper.findAdminOwned(privateKb));
+    assertNotNull(knowledgeBaseMapper.findAdminOwned(secondKb));
+    assertNull(knowledgeBaseMapper.findAdminOwned(privateKb));
     assertTrue(
-        kbMapper.selectWithDocumentCount(null, 20, 0).stream()
+        knowledgeBaseMapper.selectWithDocumentCount(null, 20, 0).stream()
             .anyMatch(item -> item.getId().equals(secondKb)));
   }
 
@@ -674,12 +678,14 @@ class InfrastructureIntegrationTest {
     UUID ownerId = ownerId();
     UUID otherOwnerId = createUser();
     UUID otherKnowledgeBaseId = kb(otherOwnerId);
-    var secret = documents.upload(otherOwnerId, otherKnowledgeBaseId, file("私有.md", "# 私有\n不可泄露。"));
-    documents.createChunks(otherOwnerId, otherKnowledgeBaseId, secret.documentId());
+    var secret =
+        documentService.upload(otherOwnerId, otherKnowledgeBaseId, file("私有.md", "# 私有\n不可泄露。"));
+    documentService.createChunks(otherOwnerId, otherKnowledgeBaseId, secret.documentId());
 
     ApiException hidden =
         assertThrows(
-            ApiException.class, () -> documents.list(ownerId, otherKnowledgeBaseId, 1, 10, null));
+            ApiException.class,
+            () -> documentService.list(ownerId, otherKnowledgeBaseId, 1, 10, null));
     assertEquals("KNOWLEDGE_BASE_NOT_FOUND", hidden.code());
     assertTrue(
         retrievalMapper
@@ -706,16 +712,16 @@ class InfrastructureIntegrationTest {
     UUID ownerId = ownerId();
     when(embedding.embed(anyString(), anyString(), anyString(), anyInt(), anyList()))
         .thenThrow(ApiException.upstream("MODEL_TIMEOUT", "test"));
-    var uploaded = documents.upload(ownerId, kb, file("失败.md", "# 测试\n不应可检索。"));
+    var uploaded = documentService.upload(ownerId, kb, file("失败.md", "# 测试\n不应可检索。"));
     assertThrows(
-        ApiException.class, () -> documents.createChunks(ownerId, kb, uploaded.documentId()));
-    var docs = documents.list(ownerId, kb, 1, 10, null).items();
+        ApiException.class, () -> documentService.createChunks(ownerId, kb, uploaded.documentId()));
+    var docs = documentService.list(ownerId, kb, 1, 10, null).items();
     assertEquals(1, docs.size());
     assertEquals("FAILED", docs.getFirst().status());
     assertNull(documentMapper.selectById(docs.getFirst().id()).getActiveVersionId());
     assertEquals(
         0,
-        chunkMapper.selectCount(
+        documentChunkMapper.selectCount(
             new LambdaQueryWrapper<DocumentChunk>()
                 .eq(DocumentChunk::getDocumentId, docs.getFirst().id())));
     assertTrue(
@@ -728,10 +734,11 @@ class InfrastructureIntegrationTest {
   void uploadDoesNotInvokeEmbeddingBeforeManualChunking() {
     UUID kb = kb();
     UUID ownerId = ownerId();
-    var uploaded = documents.upload(ownerId, kb, file("待处理.md", "# 资料\n原内容。"));
-    assertEquals("UPLOADED", documents.list(ownerId, kb, 1, 10, null).items().getFirst().status());
+    var uploaded = documentService.upload(ownerId, kb, file("待处理.md", "# 资料\n原内容。"));
+    assertEquals(
+        "UPLOADED", documentService.list(ownerId, kb, 1, 10, null).items().getFirst().status());
     verify(embedding, never()).embed(anyString(), anyString(), anyString(), anyInt(), anyList());
-    documents.createChunks(ownerId, kb, uploaded.documentId());
+    documentService.createChunks(ownerId, kb, uploaded.documentId());
     verify(embedding)
         .embed(
             eq("qwen-emb-8b"), eq("siliconflow"), eq("Qwen/Qwen3-Embedding-8B"), eq(2), anyList());
@@ -746,15 +753,15 @@ class InfrastructureIntegrationTest {
     when(embedding.embed(anyString(), anyString(), anyString(), anyInt(), anyList()))
         .thenReturn(List.of(new float[] {1, 0}, new float[] {1, 0, 0}));
     String multiChunk = "# 第一节\n" + "第一块内容。".repeat(300) + "\n\n# 第二节\n" + "第二块内容。".repeat(300);
-    var uploaded = documents.upload(ownerId, kb, file("回滚.md", multiChunk));
+    var uploaded = documentService.upload(ownerId, kb, file("回滚.md", multiChunk));
     assertThrows(
-        ApiException.class, () -> documents.createChunks(ownerId, kb, uploaded.documentId()));
-    var doc = documents.list(ownerId, kb, 1, 10, null).items().getFirst();
+        ApiException.class, () -> documentService.createChunks(ownerId, kb, uploaded.documentId()));
+    var doc = documentService.list(ownerId, kb, 1, 10, null).items().getFirst();
     assertEquals("FAILED", doc.status());
     assertNull(documentMapper.selectById(doc.id()).getActiveVersionId());
     assertEquals(
         0,
-        chunkMapper.selectCount(
+        documentChunkMapper.selectCount(
             new LambdaQueryWrapper<DocumentChunk>().eq(DocumentChunk::getDocumentId, doc.id())));
   }
 
@@ -762,19 +769,19 @@ class InfrastructureIntegrationTest {
   void rechunkingReadyDocumentReplacesExistingChunksAndVectors() {
     UUID kb = kb();
     UUID ownerId = ownerId();
-    var uploaded = documents.upload(ownerId, kb, file("重分块.md", "# 资料\n需要重新生成索引。"));
-    documents.createChunks(ownerId, kb, uploaded.documentId());
+    var uploaded = documentService.upload(ownerId, kb, file("重分块.md", "# 资料\n需要重新生成索引。"));
+    documentService.createChunks(ownerId, kb, uploaded.documentId());
     var original =
-        chunkMapper
+        documentChunkMapper
             .selectList(
                 new LambdaQueryWrapper<DocumentChunk>()
                     .eq(DocumentChunk::getDocumentId, uploaded.documentId()))
             .getFirst();
 
-    var rebuilt = documents.createChunks(ownerId, kb, uploaded.documentId());
+    var rebuilt = documentService.createChunks(ownerId, kb, uploaded.documentId());
 
     var replacement =
-        chunkMapper
+        documentChunkMapper
             .selectList(
                 new LambdaQueryWrapper<DocumentChunk>()
                     .eq(DocumentChunk::getDocumentId, uploaded.documentId()))
@@ -783,13 +790,13 @@ class InfrastructureIntegrationTest {
     assertEquals(1, rebuilt.chunkCount());
     assertEquals(
         "structured-block-v6",
-        versionMapper
+        documentVersionMapper
             .selectById(documentMapper.selectById(uploaded.documentId()).getActiveVersionId())
             .getChunkerVersion());
     assertNotEquals(original.getId(), replacement.getId());
     assertEquals(
         1,
-        chunkMapper.selectCount(
+        documentChunkMapper.selectCount(
             new LambdaQueryWrapper<DocumentChunk>()
                 .eq(DocumentChunk::getDocumentId, uploaded.documentId())));
   }
@@ -798,7 +805,7 @@ class InfrastructureIntegrationTest {
   void asyncChunkingReturnsBeforeEmbeddingAndRejectsDuplicateSubmission() throws Exception {
     UUID ownerId = ownerId();
     UUID knowledgeBaseId = kb();
-    var uploaded = documents.upload(ownerId, knowledgeBaseId, file("异步.md", "# 资料\n等待向量化。"));
+    var uploaded = documentService.upload(ownerId, knowledgeBaseId, file("异步.md", "# 资料\n等待向量化。"));
     var started = new java.util.concurrent.CountDownLatch(1);
     var release = new java.util.concurrent.CountDownLatch(1);
     when(embedding.embed(anyString(), anyString(), anyString(), anyInt(), anyList()))
@@ -811,15 +818,16 @@ class InfrastructureIntegrationTest {
               return inputs.stream().map(ignored -> new float[] {1, 0}).toList();
             });
     try {
-      var accepted = documents.enqueueChunks(ownerId, knowledgeBaseId, uploaded.documentId());
+      var accepted = documentService.enqueueChunks(ownerId, knowledgeBaseId, uploaded.documentId());
       assertEquals("PROCESSING", accepted.status());
       assertTrue(started.await(3, java.util.concurrent.TimeUnit.SECONDS));
       assertEquals(
-          "PROCESSING", documents.get(ownerId, knowledgeBaseId, uploaded.documentId()).status());
+          "PROCESSING",
+          documentService.get(ownerId, knowledgeBaseId, uploaded.documentId()).status());
       ApiException duplicate =
           assertThrows(
               ApiException.class,
-              () -> documents.enqueueChunks(ownerId, knowledgeBaseId, uploaded.documentId()));
+              () -> documentService.enqueueChunks(ownerId, knowledgeBaseId, uploaded.documentId()));
       assertEquals("DOCUMENT_PROCESSING", duplicate.code());
     } finally {
       release.countDown();
@@ -834,7 +842,7 @@ class InfrastructureIntegrationTest {
     List<UUID> documentIds = new ArrayList<>();
     for (int i = 0; i < 53; i++) {
       documentIds.add(
-          documents
+          documentService
               .upload(ownerId, knowledgeBaseId, file("queue-" + i + ".md", "# 资料\n任务 " + i))
               .documentId());
     }
@@ -858,27 +866,27 @@ class InfrastructureIntegrationTest {
               }
             });
     try {
-      documents.enqueueChunks(ownerId, knowledgeBaseId, documentIds.get(0));
-      documents.enqueueChunks(ownerId, knowledgeBaseId, documentIds.get(1));
+      documentService.enqueueChunks(ownerId, knowledgeBaseId, documentIds.get(0));
+      documentService.enqueueChunks(ownerId, knowledgeBaseId, documentIds.get(1));
       assertTrue(started.await(3, java.util.concurrent.TimeUnit.SECONDS));
       List<UUID> mixedSelection = new ArrayList<>();
       mixedSelection.add(documentIds.get(0));
       mixedSelection.addAll(documentIds.subList(2, 51));
-      var batch = documents.enqueueBatch(ownerId, knowledgeBaseId, mixedSelection, true);
+      var batch = documentService.enqueueBatch(ownerId, knowledgeBaseId, mixedSelection, true);
       assertEquals(49, batch.acceptedDocumentIds().size());
       assertEquals(List.of(documentIds.get(0)), batch.skippedDocumentIds());
-      documents.enqueueChunks(ownerId, knowledgeBaseId, documentIds.get(51));
+      documentService.enqueueChunks(ownerId, knowledgeBaseId, documentIds.get(51));
       var onlyProcessing =
-          documents.enqueueBatch(ownerId, knowledgeBaseId, List.of(documentIds.get(1)), true);
+          documentService.enqueueBatch(ownerId, knowledgeBaseId, List.of(documentIds.get(1)), true);
       assertTrue(onlyProcessing.acceptedDocumentIds().isEmpty());
       assertEquals(List.of(documentIds.get(1)), onlyProcessing.skippedDocumentIds());
       ApiException overflow =
           assertThrows(
               ApiException.class,
-              () -> documents.enqueueChunks(ownerId, knowledgeBaseId, documentIds.get(52)));
+              () -> documentService.enqueueChunks(ownerId, knowledgeBaseId, documentIds.get(52)));
       assertEquals(org.springframework.http.HttpStatus.TOO_MANY_REQUESTS, overflow.status());
       assertEquals(
-          "UPLOADED", documents.get(ownerId, knowledgeBaseId, documentIds.get(52)).status());
+          "UPLOADED", documentService.get(ownerId, knowledgeBaseId, documentIds.get(52)).status());
       assertEquals(2, maximum.get());
     } finally {
       release.countDown();
@@ -891,24 +899,25 @@ class InfrastructureIntegrationTest {
   void batchAcceptsPendingFailedAndReadyButSkipsProcessing() throws Exception {
     UUID ownerId = ownerId();
     UUID knowledgeBaseId = kb();
-    var pending = documents.upload(ownerId, knowledgeBaseId, file("待办.md", "# 待办\n尚未处理。"));
-    var failed = documents.upload(ownerId, knowledgeBaseId, file("失败重试.md", "# 重试\n需要处理。"));
-    var ready = documents.upload(ownerId, knowledgeBaseId, file("就绪.md", "# 就绪\n已有索引。"));
-    var processing = documents.upload(ownerId, knowledgeBaseId, file("处理中.md", "# 处理中\n当前任务。"));
-    documents.createChunks(ownerId, knowledgeBaseId, ready.documentId());
+    var pending = documentService.upload(ownerId, knowledgeBaseId, file("待办.md", "# 待办\n尚未处理。"));
+    var failed = documentService.upload(ownerId, knowledgeBaseId, file("失败重试.md", "# 重试\n需要处理。"));
+    var ready = documentService.upload(ownerId, knowledgeBaseId, file("就绪.md", "# 就绪\n已有索引。"));
+    var processing =
+        documentService.upload(ownerId, knowledgeBaseId, file("处理中.md", "# 处理中\n当前任务。"));
+    documentService.createChunks(ownerId, knowledgeBaseId, ready.documentId());
     UUID oldChunk =
-        chunkMapper
+        documentChunkMapper
             .selectList(
                 new LambdaQueryWrapper<DocumentChunk>()
                     .eq(DocumentChunk::getDocumentId, ready.documentId()))
             .getFirst()
             .getId();
-    versionMapper.update(
+    documentVersionMapper.update(
         new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<
                 com.hnu.backend.document.entity.DocumentVersion>()
             .eq(com.hnu.backend.document.entity.DocumentVersion::getDocumentId, failed.documentId())
             .set(com.hnu.backend.document.entity.DocumentVersion::getStatus, "FAILED"));
-    versionMapper.update(
+    documentVersionMapper.update(
         new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<
                 com.hnu.backend.document.entity.DocumentVersion>()
             .eq(
@@ -917,7 +926,7 @@ class InfrastructureIntegrationTest {
             .set(com.hnu.backend.document.entity.DocumentVersion::getStatus, "PROCESSING"));
 
     var result =
-        documents.enqueueBatch(
+        documentService.enqueueBatch(
             ownerId,
             knowledgeBaseId,
             List.of(
@@ -935,15 +944,16 @@ class InfrastructureIntegrationTest {
     awaitDocumentStatus(ownerId, knowledgeBaseId, ready.documentId(), "READY");
     assertNotEquals(
         oldChunk,
-        chunkMapper
+        documentChunkMapper
             .selectList(
                 new LambdaQueryWrapper<DocumentChunk>()
                     .eq(DocumentChunk::getDocumentId, ready.documentId()))
             .getFirst()
             .getId());
     assertEquals(
-        "PROCESSING", documents.get(ownerId, knowledgeBaseId, processing.documentId()).status());
-    documents.markInterruptedTasks();
+        "PROCESSING",
+        documentService.get(ownerId, knowledgeBaseId, processing.documentId()).status());
+    documentService.markInterruptedTasks();
   }
 
   @Test
@@ -951,27 +961,28 @@ class InfrastructureIntegrationTest {
     UUID ownerId = ownerId();
     UUID knowledgeBaseId = kb();
     UUID otherKnowledgeBaseId = kb();
-    var pending = documents.upload(ownerId, knowledgeBaseId, file("本库.md", "# 本库\n未处理。"));
-    var foreign = documents.upload(ownerId, otherKnowledgeBaseId, file("其他库.md", "# 其他库\n未处理。"));
+    var pending = documentService.upload(ownerId, knowledgeBaseId, file("本库.md", "# 本库\n未处理。"));
+    var foreign =
+        documentService.upload(ownerId, otherKnowledgeBaseId, file("其他库.md", "# 其他库\n未处理。"));
     ApiException rejected =
         assertThrows(
             ApiException.class,
             () ->
-                documents.enqueueBatch(
+                documentService.enqueueBatch(
                     ownerId,
                     knowledgeBaseId,
                     List.of(pending.documentId(), foreign.documentId()),
                     true));
     assertEquals("DOCUMENT_NOT_FOUND", rejected.code());
     assertEquals(
-        "UPLOADED", documents.get(ownerId, knowledgeBaseId, pending.documentId()).status());
+        "UPLOADED", documentService.get(ownerId, knowledgeBaseId, pending.documentId()).status());
   }
 
   @Test
   void concurrentBatchSubmissionsClaimDocumentOnlyOnce() throws Exception {
     UUID ownerId = ownerId();
     UUID knowledgeBaseId = kb();
-    var uploaded = documents.upload(ownerId, knowledgeBaseId, file("竞态.md", "# 竞态\n只处理一次。"));
+    var uploaded = documentService.upload(ownerId, knowledgeBaseId, file("竞态.md", "# 竞态\n只处理一次。"));
     var release = new java.util.concurrent.CountDownLatch(1);
     when(embedding.embed(anyString(), anyString(), anyString(), anyInt(), anyList()))
         .thenAnswer(
@@ -987,14 +998,14 @@ class InfrastructureIntegrationTest {
           executor.submit(
               () -> {
                 start.await();
-                return documents.enqueueBatch(
+                return documentService.enqueueBatch(
                     ownerId, knowledgeBaseId, List.of(uploaded.documentId()), true);
               });
       var second =
           executor.submit(
               () -> {
                 start.await();
-                return documents.enqueueBatch(
+                return documentService.enqueueBatch(
                     ownerId, knowledgeBaseId, List.of(uploaded.documentId()), true);
               });
       try {
@@ -1017,10 +1028,11 @@ class InfrastructureIntegrationTest {
   void rechunkingKeepsOldEvidenceSearchableUntilAtomicSwap() throws Exception {
     UUID ownerId = ownerId();
     UUID knowledgeBaseId = kb();
-    var uploaded = documents.upload(ownerId, knowledgeBaseId, file("重建异步.md", "# 资料\n旧索引可检索。"));
-    documents.createChunks(ownerId, knowledgeBaseId, uploaded.documentId());
+    var uploaded =
+        documentService.upload(ownerId, knowledgeBaseId, file("重建异步.md", "# 资料\n旧索引可检索。"));
+    documentService.createChunks(ownerId, knowledgeBaseId, uploaded.documentId());
     UUID oldChunk =
-        chunkMapper
+        documentChunkMapper
             .selectList(
                 new LambdaQueryWrapper<DocumentChunk>()
                     .eq(DocumentChunk::getDocumentId, uploaded.documentId()))
@@ -1038,10 +1050,11 @@ class InfrastructureIntegrationTest {
               return inputs.stream().map(ignored -> new float[] {1, 0}).toList();
             });
     try {
-      documents.enqueueChunks(ownerId, knowledgeBaseId, uploaded.documentId());
+      documentService.enqueueChunks(ownerId, knowledgeBaseId, uploaded.documentId());
       assertTrue(started.await(3, java.util.concurrent.TimeUnit.SECONDS));
       assertEquals(
-          "PROCESSING", documents.get(ownerId, knowledgeBaseId, uploaded.documentId()).status());
+          "PROCESSING",
+          documentService.get(ownerId, knowledgeBaseId, uploaded.documentId()).status());
       assertEquals(
           oldChunk,
           retrievalMapper
@@ -1061,7 +1074,7 @@ class InfrastructureIntegrationTest {
     }
     awaitDocumentStatus(ownerId, knowledgeBaseId, uploaded.documentId(), "READY");
     UUID replacement =
-        chunkMapper
+        documentChunkMapper
             .selectList(
                 new LambdaQueryWrapper<DocumentChunk>()
                     .eq(DocumentChunk::getDocumentId, uploaded.documentId()))
@@ -1074,15 +1087,15 @@ class InfrastructureIntegrationTest {
   void interruptedTasksBecomeRetryableWithoutAutomaticReplay() {
     UUID ownerId = ownerId();
     UUID knowledgeBaseId = kb();
-    var fresh = documents.upload(ownerId, knowledgeBaseId, file("中断首次.md", "# 首次\n重试。"));
-    var rebuilt = documents.upload(ownerId, knowledgeBaseId, file("中断重建.md", "# 重建\n旧索引。"));
-    documents.createChunks(ownerId, knowledgeBaseId, rebuilt.documentId());
-    versionMapper.update(
+    var fresh = documentService.upload(ownerId, knowledgeBaseId, file("中断首次.md", "# 首次\n重试。"));
+    var rebuilt = documentService.upload(ownerId, knowledgeBaseId, file("中断重建.md", "# 重建\n旧索引。"));
+    documentService.createChunks(ownerId, knowledgeBaseId, rebuilt.documentId());
+    documentVersionMapper.update(
         new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<
                 com.hnu.backend.document.entity.DocumentVersion>()
             .eq(com.hnu.backend.document.entity.DocumentVersion::getDocumentId, fresh.documentId())
             .set(com.hnu.backend.document.entity.DocumentVersion::getStatus, "PROCESSING"));
-    versionMapper.update(
+    documentVersionMapper.update(
         new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<
                 com.hnu.backend.document.entity.DocumentVersion>()
             .eq(
@@ -1090,18 +1103,21 @@ class InfrastructureIntegrationTest {
                 rebuilt.documentId())
             .set(com.hnu.backend.document.entity.DocumentVersion::getStatus, "PROCESSING"));
 
-    documents.markInterruptedTasks();
+    documentService.markInterruptedTasks();
 
-    assertEquals("FAILED", documents.get(ownerId, knowledgeBaseId, fresh.documentId()).status());
-    assertEquals("READY", documents.get(ownerId, knowledgeBaseId, rebuilt.documentId()).status());
+    assertEquals(
+        "FAILED", documentService.get(ownerId, knowledgeBaseId, fresh.documentId()).status());
+    assertEquals(
+        "READY", documentService.get(ownerId, knowledgeBaseId, rebuilt.documentId()).status());
     assertEquals(
         "IMPORT_INTERRUPTED",
-        documents.get(ownerId, knowledgeBaseId, fresh.documentId()).errorCode());
+        documentService.get(ownerId, knowledgeBaseId, fresh.documentId()).errorCode());
     assertEquals(
         "IMPORT_INTERRUPTED",
-        documents.get(ownerId, knowledgeBaseId, rebuilt.documentId()).errorCode());
-    documents.createChunks(ownerId, knowledgeBaseId, fresh.documentId());
-    assertEquals("READY", documents.get(ownerId, knowledgeBaseId, fresh.documentId()).status());
+        documentService.get(ownerId, knowledgeBaseId, rebuilt.documentId()).errorCode());
+    documentService.createChunks(ownerId, knowledgeBaseId, fresh.documentId());
+    assertEquals(
+        "READY", documentService.get(ownerId, knowledgeBaseId, fresh.documentId()).status());
   }
 
   private void awaitDocumentStatus(
@@ -1109,7 +1125,8 @@ class InfrastructureIntegrationTest {
       throws InterruptedException {
     long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
     while (System.nanoTime() < deadline) {
-      if (expected.equals(documents.get(ownerId, knowledgeBaseId, documentId).status())) return;
+      if (expected.equals(documentService.get(ownerId, knowledgeBaseId, documentId).status()))
+        return;
       Thread.sleep(25);
     }
     fail("Document did not reach status " + expected);
@@ -1122,12 +1139,13 @@ class InfrastructureIntegrationTest {
     assertThrows(
         ApiException.class,
         () ->
-            documents.upload(
+            documentService.upload(
                 ownerId,
                 kb,
                 new MockMultipartFile(
                     "file", "bad.md", "text/markdown", new byte[] {(byte) 0xc3, 0x28})));
-    assertThrows(ApiException.class, () -> documents.upload(ownerId, kb, file("空.md", " \n")));
-    assertTrue(documents.list(ownerId, kb, 1, 10, null).items().isEmpty());
+    assertThrows(
+        ApiException.class, () -> documentService.upload(ownerId, kb, file("空.md", " \n")));
+    assertTrue(documentService.list(ownerId, kb, 1, 10, null).items().isEmpty());
   }
 }

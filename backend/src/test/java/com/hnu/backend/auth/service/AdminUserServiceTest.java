@@ -24,12 +24,14 @@ import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 
 class AdminUserServiceTest {
-  private final UserMapper users = mock(UserMapper.class);
+  private final UserMapper userMapper = mock(UserMapper.class);
   private final PasswordEncoder passwords = mock(PasswordEncoder.class);
-  private final SessionRevocationService revocations = mock(SessionRevocationService.class);
+  private final SessionRevocationService sessionRevocationService =
+      mock(SessionRevocationService.class);
   private final TransactionTemplate tx = mock(TransactionTemplate.class);
-  private final AdminUserService service =
-      new AdminUserService(users, new AccountPolicy(), passwords, revocations, tx);
+  private final AdminUserService adminUserService =
+      new AdminUserService(
+          userMapper, new AccountPolicy(), passwords, sessionRevocationService, tx);
 
   @BeforeEach
   void runTransactionsImmediately() {
@@ -45,21 +47,21 @@ class AdminUserServiceTest {
   void createsUserWithoutCreatingKnowledgeBase() {
     AtomicReference<User> inserted = new AtomicReference<>();
     when(passwords.encode("StrongPass123!")).thenReturn("bcrypt-hash");
-    when(users.insert(any(User.class)))
+    when(userMapper.insert(any(User.class)))
         .thenAnswer(
             invocation -> {
               inserted.set(invocation.getArgument(0));
               return 1;
             });
-    when(users.find(any(UUID.class))).thenAnswer(ignored -> inserted.get());
+    when(userMapper.find(any(UUID.class))).thenAnswer(ignored -> inserted.get());
 
-    var response = service.create(" New.User ", " 新用户 ", "StrongPass123!", UserRole.USER);
+    var response = adminUserService.create(" New.User ", " 新用户 ", "StrongPass123!", UserRole.USER);
 
     assertEquals("new.user", response.username());
     assertEquals("新用户", response.displayName());
     assertEquals(UserRole.USER, response.role());
     assertEquals("bcrypt-hash", inserted.get().getPasswordHash());
-    verify(users).insert(inserted.get());
+    verify(userMapper).insert(inserted.get());
   }
 
   @Test
@@ -67,10 +69,11 @@ class AdminUserServiceTest {
     UUID actorId = UUID.randomUUID();
 
     ApiException error =
-        assertThrows(ApiException.class, () -> service.setEnabled(actorId, actorId, false));
+        assertThrows(
+            ApiException.class, () -> adminUserService.setEnabled(actorId, actorId, false));
 
     assertEquals("SELF_DISABLE_NOT_ALLOWED", error.code());
-    verifyNoInteractions(users, revocations);
+    verifyNoInteractions(userMapper, sessionRevocationService);
   }
 
   @Test
@@ -78,19 +81,20 @@ class AdminUserServiceTest {
     UUID actorId = UUID.randomUUID();
     UUID targetId = UUID.randomUUID();
     User target = user(targetId, UserRole.ADMIN, true);
-    when(users.find(targetId)).thenReturn(target);
-    when(users.lockEnabledAdmins()).thenReturn(List.of(target));
-    when(users.countEnabledAdmins()).thenReturn(1L);
+    when(userMapper.find(targetId)).thenReturn(target);
+    when(userMapper.lockEnabledAdmins()).thenReturn(List.of(target));
+    when(userMapper.countEnabledAdmins()).thenReturn(1L);
 
     ApiException error =
-        assertThrows(ApiException.class, () -> service.setEnabled(actorId, targetId, false));
+        assertThrows(
+            ApiException.class, () -> adminUserService.setEnabled(actorId, targetId, false));
 
     assertEquals("LAST_ADMIN_REQUIRED", error.code());
-    var order = inOrder(users);
-    order.verify(users).find(targetId);
-    order.verify(users).lockEnabledAdmins();
-    order.verify(users).countEnabledAdmins();
-    verifyNoInteractions(revocations);
+    var order = inOrder(userMapper);
+    order.verify(userMapper).find(targetId);
+    order.verify(userMapper).lockEnabledAdmins();
+    order.verify(userMapper).countEnabledAdmins();
+    verifyNoInteractions(sessionRevocationService);
   }
 
   private User user(UUID id, UserRole role, boolean enabled) {

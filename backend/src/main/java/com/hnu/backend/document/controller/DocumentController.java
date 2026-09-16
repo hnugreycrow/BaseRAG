@@ -47,24 +47,24 @@ import org.springframework.web.multipart.MultipartFile;
 @Validated
 @RequestMapping("/api/knowledge-bases/{knowledgeBaseId}/documents")
 public class DocumentController {
-  private final DocumentService documents;
-  private final CurrentUserService currentUsers;
-  private final KnowledgeBaseService knowledgeBases;
+  private final DocumentService documentService;
+  private final CurrentUserService currentUserService;
+  private final KnowledgeBaseService knowledgeBaseService;
 
   /**
    * 创建文档控制器。
    *
-   * @param documents 文档服务
-   * @param currentUsers 当前用户解析服务
-   * @param knowledgeBases 公共知识库查询服务
+   * @param documentService 文档服务
+   * @param currentUserService 当前用户解析服务
+   * @param knowledgeBaseService 公共知识库查询服务
    */
   public DocumentController(
-      DocumentService documents,
-      CurrentUserService currentUsers,
-      KnowledgeBaseService knowledgeBases) {
-    this.documents = documents;
-    this.currentUsers = currentUsers;
-    this.knowledgeBases = knowledgeBases;
+      DocumentService documentService,
+      CurrentUserService currentUserService,
+      KnowledgeBaseService knowledgeBaseService) {
+    this.documentService = documentService;
+    this.currentUserService = currentUserService;
+    this.knowledgeBaseService = knowledgeBaseService;
   }
 
   /**
@@ -74,22 +74,22 @@ public class DocumentController {
    * @return 知识库创建者标识
    */
   private UUID managedOwner(UUID knowledgeBaseId) {
-    currentUsers.requireAdmin();
-    return knowledgeBases.requireAdminOwned(knowledgeBaseId).getOwnerId();
+    currentUserService.requireAdmin();
+    return knowledgeBaseService.requireAdminOwned(knowledgeBaseId).getOwnerId();
   }
 
   /** 上传原文件；分块和向量化由独立接口显式触发。 */
   @PostMapping
   public DocumentImportResponse upload(
       @PathVariable UUID knowledgeBaseId, @RequestPart("file") MultipartFile file) {
-    return documents.upload(managedOwner(knowledgeBaseId), knowledgeBaseId, file);
+    return documentService.upload(managedOwner(knowledgeBaseId), knowledgeBaseId, file);
   }
 
   /** 批量上传原文件，每个文件独立返回处理结果。 */
   @PostMapping("/batch")
   public DocumentBatchUploadResponse uploadBatch(
       @PathVariable UUID knowledgeBaseId, @RequestPart("files") List<MultipartFile> files) {
-    return documents.uploadBatch(managedOwner(knowledgeBaseId), knowledgeBaseId, files);
+    return documentService.uploadBatch(managedOwner(knowledgeBaseId), knowledgeBaseId, files);
   }
 
   /**
@@ -108,7 +108,7 @@ public class DocumentController {
       @PathVariable UUID versionId,
       @RequestHeader(value = HttpHeaders.RANGE, required = false) String range) {
     var file =
-        documents.originalFile(
+        documentService.originalFile(
             managedOwner(knowledgeBaseId), knowledgeBaseId, documentId, versionId);
     return fileResponse(file, range);
   }
@@ -180,13 +180,14 @@ public class DocumentController {
       @RequestParam(defaultValue = "1") @Min(1) int page,
       @RequestParam(defaultValue = "10") @Min(1) @Max(100) int pageSize,
       @RequestParam(required = false) @Size(max = 200) String query) {
-    return documents.list(managedOwner(knowledgeBaseId), knowledgeBaseId, page, pageSize, query);
+    return documentService.list(
+        managedOwner(knowledgeBaseId), knowledgeBaseId, page, pageSize, query);
   }
 
   /** 查询单篇文档的最新处理状态。 */
   @GetMapping("/{documentId}")
   public DocumentResponse get(@PathVariable UUID knowledgeBaseId, @PathVariable UUID documentId) {
-    return documents.get(managedOwner(knowledgeBaseId), knowledgeBaseId, documentId);
+    return documentService.get(managedOwner(knowledgeBaseId), knowledgeBaseId, documentId);
   }
 
   /** 修改文档显示名称，不改变存储文件与已有版本。 */
@@ -195,7 +196,7 @@ public class DocumentController {
       @PathVariable UUID knowledgeBaseId,
       @PathVariable UUID documentId,
       @Valid @RequestBody DocumentRequest request) {
-    return documents.rename(
+    return documentService.rename(
         managedOwner(knowledgeBaseId), knowledgeBaseId, documentId, request.name());
   }
 
@@ -203,7 +204,7 @@ public class DocumentController {
   @DeleteMapping("/{documentId}")
   @ResponseStatus(HttpStatus.NO_CONTENT)
   public void delete(@PathVariable UUID knowledgeBaseId, @PathVariable UUID documentId) {
-    documents.delete(managedOwner(knowledgeBaseId), knowledgeBaseId, documentId);
+    documentService.delete(managedOwner(knowledgeBaseId), knowledgeBaseId, documentId);
   }
 
   /** 分页查询文档当前生效版本的分块摘要。 */
@@ -214,7 +215,7 @@ public class DocumentController {
       @RequestParam(defaultValue = "1") @Min(1) int page,
       @RequestParam(defaultValue = "10") @Min(1) @Max(100) int pageSize,
       @RequestParam(required = false) @Size(max = 200) String query) {
-    return documents.listChunks(
+    return documentService.listChunks(
         managedOwner(knowledgeBaseId), knowledgeBaseId, documentId, page, pageSize, query);
   }
 
@@ -223,7 +224,8 @@ public class DocumentController {
   @ResponseStatus(HttpStatus.ACCEPTED)
   public DocumentImportResponse createChunks(
       @PathVariable UUID knowledgeBaseId, @PathVariable UUID documentId) {
-    return documents.enqueueChunks(managedOwner(knowledgeBaseId), knowledgeBaseId, documentId);
+    return documentService.enqueueChunks(
+        managedOwner(knowledgeBaseId), knowledgeBaseId, documentId);
   }
 
   /** 一次提交当前页多篇文档，处理中项跳过。 */
@@ -231,7 +233,7 @@ public class DocumentController {
   @ResponseStatus(HttpStatus.ACCEPTED)
   public DocumentChunkBatchResponse createChunkBatch(
       @PathVariable UUID knowledgeBaseId, @Valid @RequestBody DocumentChunkBatchRequest request) {
-    return documents.enqueueBatch(
+    return documentService.enqueueBatch(
         managedOwner(knowledgeBaseId), knowledgeBaseId, request.documentIds(), true);
   }
 
@@ -241,6 +243,7 @@ public class DocumentController {
       @PathVariable UUID knowledgeBaseId,
       @PathVariable UUID documentId,
       @PathVariable UUID chunkId) {
-    return documents.chunk(managedOwner(knowledgeBaseId), knowledgeBaseId, documentId, chunkId);
+    return documentService.chunk(
+        managedOwner(knowledgeBaseId), knowledgeBaseId, documentId, chunkId);
   }
 }

@@ -18,27 +18,27 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 class IntentTreeServiceTest {
-  private final IntentNodeMapper nodes = mock(IntentNodeMapper.class);
-  private final IntentBindingMapper bindings = mock(IntentBindingMapper.class);
-  private final KnowledgeBaseMapper knowledgeBases = mock(KnowledgeBaseMapper.class);
+  private final IntentNodeMapper intentNodeMapper = mock(IntentNodeMapper.class);
+  private final IntentBindingMapper intentBindingMapper = mock(IntentBindingMapper.class);
+  private final KnowledgeBaseMapper knowledgeBaseMapper = mock(KnowledgeBaseMapper.class);
   private final McpToolRegistry tools = mock(McpToolRegistry.class);
-  private final IntentTreeService service =
-      new IntentTreeService(nodes, bindings, knowledgeBases, tools);
+  private final IntentTreeService intentTreeService =
+      new IntentTreeService(intentNodeMapper, intentBindingMapper, knowledgeBaseMapper, tools);
 
   @Test
   void refusesThirtyThirdEnabledLeaf() {
     List<IntentNodeEntity> existing = new ArrayList<>();
     for (int index = 0; index < 32; index++) existing.add(systemEntity());
-    when(nodes.selectList(null)).thenReturn(existing);
-    when(bindings.selectList(null)).thenReturn(List.of());
+    when(intentNodeMapper.selectList(null)).thenReturn(existing);
+    when(intentBindingMapper.selectList(null)).thenReturn(List.of());
     IntentNodeRequest request =
         new IntentNodeRequest(
             null, "另一个系统直答", "", List.of(), IntentNode.Kind.SYSTEM, null, List.of(), true, 0);
 
-    ApiException error = assertThrows(ApiException.class, () -> service.create(request));
+    ApiException error = assertThrows(ApiException.class, () -> intentTreeService.create(request));
 
     assertEquals("INTENT_LEAF_LIMIT", error.code());
-    verify(nodes, never()).insert(any(IntentNodeEntity.class));
+    verify(intentNodeMapper, never()).insert(any(IntentNodeEntity.class));
   }
 
   @Test
@@ -53,11 +53,12 @@ class IntentTreeServiceTest {
     binding.setId(UUID.randomUUID());
     binding.setNodeId(invalidKb.getId());
     binding.setKnowledgeBaseId(kbId);
-    when(nodes.selectList(null)).thenReturn(List.of(validSystem, disabledSystem, invalidKb));
-    when(bindings.selectList(null)).thenReturn(List.of(binding));
+    when(intentNodeMapper.selectList(null))
+        .thenReturn(List.of(validSystem, disabledSystem, invalidKb));
+    when(intentBindingMapper.selectList(null)).thenReturn(List.of(binding));
     when(tools.availableReadOnlyTools()).thenReturn(List.of());
 
-    List<IntentNode> active = service.activeLeaves();
+    List<IntentNode> active = intentTreeService.activeLeaves();
 
     assertEquals(1, active.size());
     assertEquals(validSystem.getId(), active.getFirst().id());
@@ -74,8 +75,8 @@ class IntentTreeServiceTest {
     IntentNodeEntity grandchild = systemEntity();
     grandchild.setKind(null);
     grandchild.setParentId(child.getId());
-    when(nodes.selectList(null)).thenReturn(List.of(root, child, grandchild));
-    when(bindings.selectList(null)).thenReturn(List.of());
+    when(intentNodeMapper.selectList(null)).thenReturn(List.of(root, child, grandchild));
+    when(intentBindingMapper.selectList(null)).thenReturn(List.of());
 
     IntentNodeRequest request =
         new IntentNodeRequest(
@@ -89,9 +90,9 @@ class IntentTreeServiceTest {
             true,
             0);
 
-    ApiException error = assertThrows(ApiException.class, () -> service.create(request));
+    ApiException error = assertThrows(ApiException.class, () -> intentTreeService.create(request));
     assertEquals("INTENT_DEPTH_EXCEEDED", error.code());
-    verify(nodes, never()).insert(any(IntentNodeEntity.class));
+    verify(intentNodeMapper, never()).insert(any(IntentNodeEntity.class));
   }
 
   @Test
@@ -101,16 +102,16 @@ class IntentTreeServiceTest {
     IntentNodeEntity child = systemEntity();
     child.setKind(null);
     child.setParentId(root.getId());
-    when(nodes.selectList(null)).thenReturn(List.of(root, child));
-    when(bindings.selectList(null)).thenReturn(List.of());
+    when(intentNodeMapper.selectList(null)).thenReturn(List.of(root, child));
+    when(intentBindingMapper.selectList(null)).thenReturn(List.of());
 
     IntentNodeRequest request =
         new IntentNodeRequest(child.getId(), "父节点", "", List.of(), null, null, List.of(), true, 0);
 
     ApiException error =
-        assertThrows(ApiException.class, () -> service.update(root.getId(), request));
+        assertThrows(ApiException.class, () -> intentTreeService.update(root.getId(), request));
     assertEquals("INTENT_CYCLE", error.code());
-    verify(nodes, never()).updateById(any(IntentNodeEntity.class));
+    verify(intentNodeMapper, never()).updateById(any(IntentNodeEntity.class));
   }
 
   private IntentNodeEntity systemEntity() {

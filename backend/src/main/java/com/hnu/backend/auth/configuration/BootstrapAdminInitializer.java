@@ -18,7 +18,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 @Order(Ordered.HIGHEST_PRECEDENCE + 20)
 public class BootstrapAdminInitializer implements ApplicationRunner {
   private final BootstrapAdminProperties properties;
-  private final UserMapper users;
+  private final UserMapper userMapper;
   private final AccountPolicy policy;
   private final PasswordEncoder passwords;
   private final TransactionTemplate tx;
@@ -27,19 +27,19 @@ public class BootstrapAdminInitializer implements ApplicationRunner {
    * 创建首次管理员初始化器。
    *
    * @param properties 环境变量映射
-   * @param users 用户数据访问接口
+   * @param userMapper 用户数据访问接口
    * @param policy 账号字段策略
    * @param passwords BCrypt 编码器
    * @param tx 事务模板
    */
   public BootstrapAdminInitializer(
       BootstrapAdminProperties properties,
-      UserMapper users,
+      UserMapper userMapper,
       AccountPolicy policy,
       PasswordEncoder passwords,
       TransactionTemplate tx) {
     this.properties = properties;
-    this.users = users;
+    this.userMapper = userMapper;
     this.policy = policy;
     this.passwords = passwords;
     this.tx = tx;
@@ -52,7 +52,7 @@ public class BootstrapAdminInitializer implements ApplicationRunner {
    */
   @Override
   public void run(ApplicationArguments args) {
-    if (users.countRealUsers() > 0) return;
+    if (userMapper.countRealUsers() > 0) return;
     try {
       tx.executeWithoutResult(ignored -> initialize());
     } catch (RuntimeException error) {
@@ -64,10 +64,10 @@ public class BootstrapAdminInitializer implements ApplicationRunner {
 
   /** 在锁定迁移占位行的事务中创建管理员并转交历史数据。 */
   private void initialize() {
-    if (users.lockLegacyOwner() == null) {
+    if (userMapper.lockLegacyOwner() == null) {
       throw new IllegalStateException("遗留所有者不存在，数据库迁移状态不完整");
     }
-    if (users.countRealUsers() > 0) return;
+    if (userMapper.countRealUsers() > 0) return;
     String username = policy.username(properties.getUsername());
     String displayName = policy.displayName(properties.getDisplayName());
     String password = policy.password(properties.getPassword());
@@ -78,9 +78,9 @@ public class BootstrapAdminInitializer implements ApplicationRunner {
     admin.setPasswordHash(passwords.encode(password));
     admin.setRole(UserRole.ADMIN);
     admin.setEnabled(true);
-    users.insert(admin);
-    users.transferKnowledgeBases(admin.getId());
-    users.transferConversations(admin.getId());
-    users.deleteLegacyOwner();
+    userMapper.insert(admin);
+    userMapper.transferKnowledgeBases(admin.getId());
+    userMapper.transferConversations(admin.getId());
+    userMapper.deleteLegacyOwner();
   }
 }

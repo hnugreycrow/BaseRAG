@@ -33,18 +33,19 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RequestMapping("/api/admin/users")
 public class AdminUserController {
-  private final CurrentUserService currentUsers;
-  private final AdminUserService users;
+  private final CurrentUserService currentUserService;
+  private final AdminUserService adminUserService;
 
   /**
    * 创建账号管理控制器。
    *
-   * @param currentUsers 当前用户解析服务
-   * @param users 管理员账号服务
+   * @param currentUserService 当前用户解析服务
+   * @param adminUserService 管理员账号服务
    */
-  public AdminUserController(CurrentUserService currentUsers, AdminUserService users) {
-    this.currentUsers = currentUsers;
-    this.users = users;
+  public AdminUserController(
+      CurrentUserService currentUserService, AdminUserService adminUserService) {
+    this.currentUserService = currentUserService;
+    this.adminUserService = adminUserService;
   }
 
   /**
@@ -60,8 +61,8 @@ public class AdminUserController {
       @RequestParam(defaultValue = "1") @Min(1) int page,
       @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize,
       @RequestParam(required = false) @Size(max = 100) String query) {
-    currentUsers.requireAdmin();
-    return users.list(page, pageSize, query);
+    currentUserService.requireAdmin();
+    return adminUserService.list(page, pageSize, query);
   }
 
   /**
@@ -73,8 +74,8 @@ public class AdminUserController {
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
   public UserResponse create(@Valid @RequestBody CreateUserRequest request) {
-    currentUsers.requireAdmin();
-    return users.create(
+    currentUserService.requireAdmin();
+    return adminUserService.create(
         request.username(), request.displayName(), request.password(), request.role());
   }
 
@@ -87,8 +88,8 @@ public class AdminUserController {
    */
   @PatchMapping("/{id}/status")
   public UserResponse status(@PathVariable UUID id, @Valid @RequestBody UserStatusRequest request) {
-    User actor = currentUsers.requireAdmin();
-    return users.setEnabled(actor.getId(), id, request.enabled());
+    User actor = currentUserService.requireAdmin();
+    return adminUserService.setEnabled(actor.getId(), id, request.enabled());
   }
 
   /**
@@ -101,7 +102,7 @@ public class AdminUserController {
   @ResponseStatus(HttpStatus.NO_CONTENT)
   public void resetPassword(
       @PathVariable UUID id, @Valid @RequestBody ResetPasswordRequest request) {
-    currentUsers.requireAdmin();
-    users.resetPassword(id, request.password());
+    currentUserService.requireAdmin();
+    adminUserService.resetPassword(id, request.password());
   }
 }

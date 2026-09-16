@@ -17,31 +17,31 @@ import org.springframework.transaction.support.TransactionTemplate;
 /** 管理员账号管理规则，包括账号创建、密码重置和防止管理员锁死。 */
 @Service
 public class AdminUserService {
-  private final UserMapper users;
+  private final UserMapper userMapper;
   private final AccountPolicy policy;
   private final PasswordEncoder passwords;
-  private final SessionRevocationService revocations;
+  private final SessionRevocationService sessionRevocationService;
   private final TransactionTemplate tx;
 
   /**
    * 创建管理员账号服务。
    *
-   * @param users 用户数据访问接口
+   * @param userMapper 用户数据访问接口
    * @param policy 账号字段策略
    * @param passwords BCrypt 编码器
-   * @param revocations 会话撤销服务
+   * @param sessionRevocationService 会话撤销服务
    * @param tx 事务模板
    */
   public AdminUserService(
-      UserMapper users,
+      UserMapper userMapper,
       AccountPolicy policy,
       PasswordEncoder passwords,
-      SessionRevocationService revocations,
+      SessionRevocationService sessionRevocationService,
       TransactionTemplate tx) {
-    this.users = users;
+    this.userMapper = userMapper;
     this.policy = policy;
     this.passwords = passwords;
-    this.revocations = revocations;
+    this.sessionRevocationService = sessionRevocationService;
     this.tx = tx;
   }
 
@@ -59,9 +59,9 @@ public class AdminUserService {
       throw ApiException.bad("INVALID_PAGE", "页码应大于 0，每页数量应为 1 到 100");
     }
     String query = rawQuery == null || rawQuery.isBlank() ? null : rawQuery.strip();
-    long total = users.count(query);
+    long total = userMapper.count(query);
     List<UserResponse> items =
-        users.list(query, pageSize, (long) (page - 1) * pageSize).stream()
+        userMapper.list(query, pageSize, (long) (page - 1) * pageSize).stream()
             .map(AuthService::toResponse)
             .toList();
     return PageResponse.of(items, total, page, pageSize);
@@ -87,10 +87,10 @@ public class AdminUserService {
           tx.execute(
               ignored -> {
                 User user = newUser(username, displayName, password, role);
-                users.insert(user);
+                userMapper.insert(user);
                 return user;
               });
-      return AuthService.toResponse(users.find(created.getId()));
+      return AuthService.toResponse(userMapper.find(created.getId()));
     } catch (DataIntegrityViolationException error) {
       throw ApiException.conflict("USERNAME_EXISTS", "用户名已存在");
     }
@@ -115,16 +115,16 @@ public class AdminUserService {
               User target = require(targetId);
               if (!enabled && target.isEnabled() && target.getRole() == UserRole.ADMIN) {
                 // 行锁使两个管理员无法并发禁用彼此后同时通过“最后一个管理员”检查。
-                users.lockEnabledAdmins();
-                if (users.countEnabledAdmins() <= 1) {
+                userMapper.lockEnabledAdmins();
+                if (userMapper.countEnabledAdmins() <= 1) {
                   throw ApiException.conflict("LAST_ADMIN_REQUIRED", "不能禁用最后一个启用的管理员");
                 }
               }
               target.setEnabled(enabled);
               target.setUpdatedAt(OffsetDateTime.now());
-              users.updateById(target);
+              userMapper.updateById(target);
               // Redis 撤销失败会向上传播，使数据库事务回滚，禁止保留无法撤销的旧会话。
-              if (!enabled) revocations.revokeAll(targetId);
+              if (!enabled) sessionRevocationService.revokeAll(targetId);
               return target;
             });
     return AuthService.toResponse(updated);
@@ -144,8 +144,8 @@ public class AdminUserService {
         ignored -> {
           target.setPasswordHash(passwords.encode(password));
           target.setUpdatedAt(OffsetDateTime.now());
-          users.updateById(target);
-          revocations.revokeAll(targetId);
+          userMapper.updateById(target);
+          sessionRevocationService.revokeAll(targetId);
         });
   }
 
@@ -176,7 +176,7 @@ public class AdminUserService {
    * @return 用户实体
    */
   private User require(UUID id) {
-    User user = users.find(id);
+    User user = userMapper.find(id);
     if (user == null) throw ApiException.notFound("USER_NOT_FOUND", "用户不存在");
     return user;
   }

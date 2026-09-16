@@ -25,7 +25,7 @@ class ConversationContextServiceTest {
   private final MemoryProvider memories = mock(MemoryProvider.class);
   private final QueryPlanningStage planning = mock(QueryPlanningStage.class);
   private final IntentTreeRoutingStage routing = mock(IntentTreeRoutingStage.class);
-  private final ConversationContextService service =
+  private final ConversationContextService conversationContextService =
       new ConversationContextService(new MemoryStage(memories), planning, routing);
 
   @Test
@@ -44,7 +44,7 @@ class ConversationContextServiceTest {
     when(planning.execute(memory, "它有什么要求？")).thenReturn(plan);
     when(routing.execute(plan, RagRunTrace.noop())).thenReturn(routes);
 
-    var prepared = service.prepare(conversation, 6, "它有什么要求？");
+    var prepared = conversationContextService.prepare(conversation, 6, "它有什么要求？");
 
     assertEquals(plan, prepared.queryPlan());
     assertEquals(routes, prepared.routingPlan());
@@ -64,7 +64,7 @@ class ConversationContextServiceTest {
     when(planning.execute(memory, "原问题")).thenReturn(plan);
     when(routing.execute(plan, RagRunTrace.noop())).thenReturn(routes);
 
-    var prepared = service.prepare(conversation, 1, "原问题");
+    var prepared = conversationContextService.prepare(conversation, 1, "原问题");
 
     assertEquals(plan, prepared.queryPlan());
     assertEquals(routes, prepared.routingPlan());

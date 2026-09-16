@@ -25,18 +25,18 @@ import org.springframework.stereotype.Service;
 /** 执行用户隔离的问答运行查询和统计。 */
 @Service
 public class RagRunQueryService {
-  private final RagRunMapper runs;
-  private final RagStageRunMapper stages;
+  private final RagRunMapper ragRunMapper;
+  private final RagStageRunMapper ragStageRunMapper;
 
   /**
    * 创建观测查询服务。
    *
-   * @param runs 运行查询接口
-   * @param stages 阶段查询接口
+   * @param ragRunMapper 运行查询接口
+   * @param ragStageRunMapper 阶段查询接口
    */
-  public RagRunQueryService(RagRunMapper runs, RagStageRunMapper stages) {
-    this.runs = runs;
-    this.stages = stages;
+  public RagRunQueryService(RagRunMapper ragRunMapper, RagStageRunMapper ragStageRunMapper) {
+    this.ragRunMapper = ragRunMapper;
+    this.ragStageRunMapper = ragStageRunMapper;
   }
 
   /**
@@ -66,9 +66,9 @@ public class RagRunQueryService {
     validate(from, to, page, pageSize);
     RagRunFilter filter = filter(actor, from, to, status, model, executionMode, userId);
     boolean includeUser = actor.getRole() == UserRole.ADMIN;
-    long total = runs.count(filter);
+    long total = ragRunMapper.count(filter);
     List<RagRunResponses.Summary> items =
-        runs.list(filter, pageSize, (long) (page - 1) * pageSize).stream()
+        ragRunMapper.list(filter, pageSize, (long) (page - 1) * pageSize).stream()
             .map(value -> summary(value, includeUser))
             .toList();
     return PageResponse.of(items, total, page, pageSize);
@@ -83,9 +83,9 @@ public class RagRunQueryService {
    */
   public RagRunResponses.Detail get(User actor, UUID id) {
     UUID ownerScope = actor.getRole() == UserRole.ADMIN ? null : actor.getId();
-    RagRunViewRow run = runs.findView(id, ownerScope);
+    RagRunViewRow run = ragRunMapper.findView(id, ownerScope);
     if (run == null) throw ApiException.notFound("RAG_RUN_NOT_FOUND", "问答运行记录不存在");
-    List<RagStageRun> storedStages = stages.listByRun(id);
+    List<RagStageRun> storedStages = ragStageRunMapper.listByRun(id);
     List<RagRunResponses.Stage> stageResponses = storedStages.stream().map(this::stage).toList();
     LinkedHashSet<String> reasons = new LinkedHashSet<>();
     storedStages.stream()
@@ -119,7 +119,7 @@ public class RagRunQueryService {
       UUID userId) {
     validate(from, to, 1, 20);
     RagRunSummaryRow row =
-        runs.summary(filter(actor, from, to, status, model, executionMode, userId));
+        ragRunMapper.summary(filter(actor, from, to, status, model, executionMode, userId));
     long terminal = row == null ? 0 : row.getTerminalCount();
     return new RagRunResponses.Aggregate(
         row == null ? 0 : row.getRequestCount(),

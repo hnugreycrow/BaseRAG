@@ -37,7 +37,7 @@ import tools.jackson.databind.json.JsonMapper;
 @Component
 public class IntentTreeRoutingStage {
   private static final Logger log = LoggerFactory.getLogger(IntentTreeRoutingStage.class);
-  private final IntentTreeService tree;
+  private final IntentTreeService intentTreeService;
   private final ChatClient chat;
   private final McpToolRegistry tools;
   private final RagProperties config;
@@ -45,8 +45,11 @@ public class IntentTreeRoutingStage {
   private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
   public IntentTreeRoutingStage(
-      IntentTreeService tree, ChatClient chat, McpToolRegistry tools, RagProperties config) {
-    this.tree = tree;
+      IntentTreeService intentTreeService,
+      ChatClient chat,
+      McpToolRegistry tools,
+      RagProperties config) {
+    this.intentTreeService = intentTreeService;
     this.chat = chat;
     this.tools = tools;
     this.config = config;
@@ -61,9 +64,12 @@ public class IntentTreeRoutingStage {
       throw ApiException.cancelled();
     }
     try {
-      List<IntentNode> leaves = tree.activeLeaves();
+      List<IntentNode> leaves = intentTreeService.activeLeaves();
       if (leaves.isEmpty()) {
-        String reason = tree.list().isEmpty() ? "INTENT_TREE_EMPTY" : "INTENT_TREE_NO_VALID_LEAVES";
+        String reason =
+            intentTreeService.list().isEmpty()
+                ? "INTENT_TREE_EMPTY"
+                : "INTENT_TREE_NO_VALID_LEAVES";
         return knowledgeFallback(plan, span, trace, reason);
       }
       if (leaves.size() > 32) {
@@ -71,7 +77,7 @@ public class IntentTreeRoutingStage {
       }
       Map<UUID, IntentNode> byId = new HashMap<>();
       leaves.forEach(node -> byId.put(node.id(), node));
-      Map<UUID, String> paths = paths(tree.list());
+      Map<UUID, String> paths = paths(intentTreeService.list());
       List<McpToolDefinition> availableTools = tools.availableReadOnlyTools();
       Map<String, Object> input = new LinkedHashMap<>();
       input.put("standaloneQuestion", plan.standaloneQuestion());

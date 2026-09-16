@@ -25,14 +25,14 @@ class BootstrapAdminInitializerTest {
     properties.setUsername(" Admin.User ");
     properties.setDisplayName(" 首次管理员 ");
     properties.setPassword("StrongPass123!");
-    UserMapper users = mock(UserMapper.class);
+    UserMapper userMapper = mock(UserMapper.class);
     PasswordEncoder passwords = mock(PasswordEncoder.class);
     TransactionTemplate tx = mock(TransactionTemplate.class);
     AtomicReference<User> inserted = new AtomicReference<>();
-    when(users.countRealUsers()).thenReturn(0L);
-    when(users.lockLegacyOwner()).thenReturn(new User());
+    when(userMapper.countRealUsers()).thenReturn(0L);
+    when(userMapper.lockLegacyOwner()).thenReturn(new User());
     when(passwords.encode("StrongPass123!")).thenReturn("bcrypt-hash");
-    when(users.insert(any(User.class)))
+    when(userMapper.insert(any(User.class)))
         .thenAnswer(
             invocation -> {
               inserted.set(invocation.getArgument(0));
@@ -47,7 +47,7 @@ class BootstrapAdminInitializerTest {
         .when(tx)
         .executeWithoutResult(any());
     BootstrapAdminInitializer initializer =
-        new BootstrapAdminInitializer(properties, users, new AccountPolicy(), passwords, tx);
+        new BootstrapAdminInitializer(properties, userMapper, new AccountPolicy(), passwords, tx);
 
     initializer.run(mock(ApplicationArguments.class));
 
@@ -56,8 +56,8 @@ class BootstrapAdminInitializerTest {
     assertEquals("首次管理员", admin.getDisplayName());
     assertEquals(UserRole.ADMIN, admin.getRole());
     assertEquals("bcrypt-hash", admin.getPasswordHash());
-    verify(users).transferKnowledgeBases(admin.getId());
-    verify(users).transferConversations(admin.getId());
-    verify(users).deleteLegacyOwner();
+    verify(userMapper).transferKnowledgeBases(admin.getId());
+    verify(userMapper).transferConversations(admin.getId());
+    verify(userMapper).deleteLegacyOwner();
   }
 }

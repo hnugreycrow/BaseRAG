@@ -18,14 +18,14 @@ class CsrfTokenServiceTest {
   @Test
   void issuesNonceIntoCurrentTokenSessionAndValidatesExactValue() {
     SaSession session = mock(SaSession.class);
-    CsrfTokenService service = new CsrfTokenService();
+    CsrfTokenService csrfTokenService = new CsrfTokenService();
 
     try (var stp = mockStatic(StpUtil.class)) {
       stp.when(StpUtil::getTokenSession).thenReturn(session);
-      String nonce = service.issue();
+      String nonce = csrfTokenService.issue();
       when(session.get("baserag.csrf")).thenReturn(nonce);
 
-      service.requireValid(nonce);
+      csrfTokenService.requireValid(nonce);
 
       assertEquals(43, nonce.length());
       verify(session).set(eq("baserag.csrf"), anyString());
@@ -36,16 +36,16 @@ class CsrfTokenServiceTest {
   void rejectsMissingOrMismatchedNonce() {
     SaSession session = mock(SaSession.class);
     when(session.get("baserag.csrf")).thenReturn("expected");
-    CsrfTokenService service = new CsrfTokenService();
+    CsrfTokenService csrfTokenService = new CsrfTokenService();
 
     try (var stp = mockStatic(StpUtil.class)) {
       stp.when(StpUtil::getTokenSession).thenReturn(session);
       assertEquals(
           "CSRF_INVALID",
-          assertThrows(ApiException.class, () -> service.requireValid(null)).code());
+          assertThrows(ApiException.class, () -> csrfTokenService.requireValid(null)).code());
       assertEquals(
           "CSRF_INVALID",
-          assertThrows(ApiException.class, () -> service.requireValid("wrong")).code());
+          assertThrows(ApiException.class, () -> csrfTokenService.requireValid("wrong")).code());
     }
   }
 }

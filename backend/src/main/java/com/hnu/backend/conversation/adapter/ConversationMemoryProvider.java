@@ -28,8 +28,8 @@ import tools.jackson.databind.json.JsonMapper;
 @Component
 public class ConversationMemoryProvider implements MemoryProvider {
   private static final Logger log = LoggerFactory.getLogger(ConversationMemoryProvider.class);
-  private final ConversationMapper conversations;
-  private final MessageMapper messages;
+  private final ConversationMapper conversationMapper;
+  private final MessageMapper messageMapper;
   private final ConversationProperties config;
   private final ChatClient chat;
   private final JsonMapper json = JsonMapper.builder().build();
@@ -37,18 +37,18 @@ public class ConversationMemoryProvider implements MemoryProvider {
   /**
    * 创建会话记忆适配器。
    *
-   * @param conversations 会话及其摘要游标持久化接口
-   * @param messages 会话消息读取接口
+   * @param conversationMapper 会话及其摘要游标持久化接口
+   * @param messageMapper 会话消息读取接口
    * @param config 会话窗口和摘要批次配置
    * @param chat 用于生成简短增量摘要的模型客户端
    */
   public ConversationMemoryProvider(
-      ConversationMapper conversations,
-      MessageMapper messages,
+      ConversationMapper conversationMapper,
+      MessageMapper messageMapper,
       ConversationProperties config,
       ChatClient chat) {
-    this.conversations = conversations;
-    this.messages = messages;
+    this.conversationMapper = conversationMapper;
+    this.messageMapper = messageMapper;
     this.config = config;
     this.chat = chat;
   }
@@ -69,7 +69,7 @@ public class ConversationMemoryProvider implements MemoryProvider {
   /** {@inheritDoc} */
   @Override
   public RagMemory load(UUID ownerId, UUID conversationId, int beforeTurn, RagRunTrace trace) {
-    Conversation conversation = conversations.find(ownerId, conversationId);
+    Conversation conversation = conversationMapper.find(ownerId, conversationId);
     if (conversation == null) throw new IllegalArgumentException("conversation does not exist");
     List<MemoryTurn> turns = completeTurns(ownerId, conversationId, beforeTurn);
     conversation = refreshSummaryIfNeeded(conversation, turns, trace);
@@ -144,7 +144,7 @@ public class ConversationMemoryProvider implements MemoryProvider {
       span.model(generation.id(), generation.provider(), generation.model());
       String candidate = validateSummary(generation.content());
       int updated =
-          conversations.updateSummary(
+          conversationMapper.updateSummary(
               conversation.getOwnerId(),
               conversation.getId(),
               candidate,
@@ -152,11 +152,12 @@ public class ConversationMemoryProvider implements MemoryProvider {
               conversation.getSummaryRevision());
       if (updated == 1) {
         Conversation refreshed =
-            conversations.find(conversation.getOwnerId(), conversation.getId());
+            conversationMapper.find(conversation.getOwnerId(), conversation.getId());
         span.success(1);
         return refreshed == null ? conversation : refreshed;
       }
-      Conversation winner = conversations.find(conversation.getOwnerId(), conversation.getId());
+      Conversation winner =
+          conversationMapper.find(conversation.getOwnerId(), conversation.getId());
       span.success(1);
       return winner == null ? conversation : winner;
     } catch (RuntimeException e) {
@@ -216,7 +217,7 @@ public class ConversationMemoryProvider implements MemoryProvider {
    * @return 按轮次升序排列的完整对话轮次
    */
   private List<MemoryTurn> completeTurns(UUID ownerId, UUID conversationId, int beforeTurn) {
-    List<Message> all = messages.list(ownerId, conversationId);
+    List<Message> all = messageMapper.list(ownerId, conversationId);
     Map<Integer, Message> users = new LinkedHashMap<>();
     all.stream()
         .filter(message -> "USER".equals(message.getRole()))

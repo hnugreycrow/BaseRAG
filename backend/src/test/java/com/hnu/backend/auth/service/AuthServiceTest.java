@@ -23,31 +23,39 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.support.TransactionTemplate;
 
 class AuthServiceTest {
-  private final UserMapper users = mock(UserMapper.class);
+  private final UserMapper userMapper = mock(UserMapper.class);
   private final PasswordEncoder passwords = mock(PasswordEncoder.class);
   private final LoginRateLimiter limiter = mock(LoginRateLimiter.class);
-  private final CsrfTokenService csrf = mock(CsrfTokenService.class);
-  private final CurrentUserService currentUsers = mock(CurrentUserService.class);
-  private final SessionRevocationService revocations = mock(SessionRevocationService.class);
+  private final CsrfTokenService csrfTokenService = mock(CsrfTokenService.class);
+  private final CurrentUserService currentUserService = mock(CurrentUserService.class);
+  private final SessionRevocationService sessionRevocationService =
+      mock(SessionRevocationService.class);
   private final TransactionTemplate tx = mock(TransactionTemplate.class);
-  private AuthService service;
+  private AuthService authService;
 
   @BeforeEach
   void setUp() {
     when(passwords.encode("dummy-password-used-for-timing-only")).thenReturn("dummy-hash");
-    service =
+    authService =
         new AuthService(
-            users, new AccountPolicy(), passwords, limiter, csrf, currentUsers, revocations, tx);
+            userMapper,
+            new AccountPolicy(),
+            passwords,
+            limiter,
+            csrfTokenService,
+            currentUserService,
+            sessionRevocationService,
+            tx);
   }
 
   @Test
   void unknownUserRunsDummyBcryptAndRecordsFailure() {
-    when(users.findByUsername("alice")).thenReturn(null);
+    when(userMapper.findByUsername("alice")).thenReturn(null);
     when(passwords.matches("wrong-password", "dummy-hash")).thenReturn(false);
 
     ApiException error =
         assertThrows(
-            ApiException.class, () -> service.login(" Alice ", "wrong-password", "127.0.0.1"));
+            ApiException.class, () -> authService.login(" Alice ", "wrong-password", "127.0.0.1"));
 
     assertEquals("INVALID_CREDENTIALS", error.code());
     verify(passwords).matches("wrong-password", "dummy-hash");
@@ -57,13 +65,14 @@ class AuthServiceTest {
   @Test
   void disabledAccountDoesNotCreateSession() {
     User user = user(false);
-    when(users.findByUsername("alice")).thenReturn(user);
+    when(userMapper.findByUsername("alice")).thenReturn(user);
     when(passwords.matches("correct-password", user.getPasswordHash())).thenReturn(true);
 
     try (var stp = mockStatic(StpUtil.class)) {
       ApiException error =
           assertThrows(
-              ApiException.class, () -> service.login("alice", "correct-password", "127.0.0.1"));
+              ApiException.class,
+              () -> authService.login("alice", "correct-password", "127.0.0.1"));
       assertEquals("ACCOUNT_DISABLED", error.code());
       stp.verify(
           () -> StpUtil.login(eq(user.getId().toString()), any(SaLoginParameter.class)), never());
@@ -73,17 +82,17 @@ class AuthServiceTest {
   @Test
   void successfulLoginClearsLimiterAndCreatesIndependentBrowserSession() {
     User user = user(true);
-    when(users.findByUsername("alice")).thenReturn(user);
+    when(userMapper.findByUsername("alice")).thenReturn(user);
     when(passwords.matches("correct-password", user.getPasswordHash())).thenReturn(true);
-    when(csrf.issue()).thenReturn("nonce");
+    when(csrfTokenService.issue()).thenReturn("nonce");
 
     try (var stp = mockStatic(StpUtil.class)) {
-      var result = service.login("Alice", "correct-password", "127.0.0.1");
+      var result = authService.login("Alice", "correct-password", "127.0.0.1");
 
       assertEquals(user.getId(), result.user().id());
       assertEquals("nonce", result.csrfToken());
       verify(limiter).clear("alice", "127.0.0.1");
-      verify(users).updateById(user);
+      verify(userMapper).updateById(user);
       stp.verify(() -> StpUtil.login(eq(user.getId().toString()), any(SaLoginParameter.class)));
     }
   }

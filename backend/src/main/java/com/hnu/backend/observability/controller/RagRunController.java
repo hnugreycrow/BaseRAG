@@ -27,18 +27,19 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RequestMapping("/api/observability/rag-runs")
 public class RagRunController {
-  private final CurrentUserService currentUsers;
-  private final RagRunQueryService queries;
+  private final CurrentUserService currentUserService;
+  private final RagRunQueryService ragRunQueryService;
 
   /**
    * 创建问答观测控制器。
    *
-   * @param currentUsers 当前用户解析服务
-   * @param queries 安全查询服务
+   * @param currentUserService 当前用户解析服务
+   * @param ragRunQueryService 安全查询服务
    */
-  public RagRunController(CurrentUserService currentUsers, RagRunQueryService queries) {
-    this.currentUsers = currentUsers;
-    this.queries = queries;
+  public RagRunController(
+      CurrentUserService currentUserService, RagRunQueryService ragRunQueryService) {
+    this.currentUserService = currentUserService;
+    this.ragRunQueryService = ragRunQueryService;
   }
 
   /**
@@ -66,8 +67,9 @@ public class RagRunController {
       @RequestParam(required = false) UUID userId,
       @RequestParam(defaultValue = "1") @Min(1) int page,
       @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize) {
-    User actor = currentUsers.requireAdmin();
-    return queries.list(actor, from, to, status, model, executionMode, userId, page, pageSize);
+    User actor = currentUserService.requireAdmin();
+    return ragRunQueryService.list(
+        actor, from, to, status, model, executionMode, userId, page, pageSize);
   }
 
   /**
@@ -78,7 +80,7 @@ public class RagRunController {
    */
   @GetMapping("/{id}")
   public RagRunResponses.Detail get(@PathVariable UUID id) {
-    return queries.get(currentUsers.requireAdmin(), id);
+    return ragRunQueryService.get(currentUserService.requireAdmin(), id);
   }
 
   /**
@@ -102,7 +104,7 @@ public class RagRunController {
       @RequestParam(required = false) @Size(max = 200) String model,
       @RequestParam(required = false) RagExecutionMode executionMode,
       @RequestParam(required = false) UUID userId) {
-    return queries.summary(
-        currentUsers.requireAdmin(), from, to, status, model, executionMode, userId);
+    return ragRunQueryService.summary(
+        currentUserService.requireAdmin(), from, to, status, model, executionMode, userId);
   }
 }

@@ -13,24 +13,24 @@ import org.springframework.stereotype.Service;
 @Profile("local")
 public class RagTraceCleanupService {
   private static final Logger log = LoggerFactory.getLogger(RagTraceCleanupService.class);
-  private final RagRunMapper runs;
+  private final RagRunMapper ragRunMapper;
   private final ObservabilityProperties config;
 
   /**
    * 创建清理服务。
    *
-   * @param runs 运行数据接口
+   * @param ragRunMapper 运行数据接口
    * @param config 保留配置
    */
-  public RagTraceCleanupService(RagRunMapper runs, ObservabilityProperties config) {
-    this.runs = runs;
+  public RagTraceCleanupService(RagRunMapper ragRunMapper, ObservabilityProperties config) {
+    this.ragRunMapper = ragRunMapper;
     this.config = config;
   }
 
   /** 按 UTC 日程删除过期运行和级联阶段记录。 */
   @Scheduled(cron = "${observability.cleanup-cron:0 15 3 * * *}", zone = "UTC")
   public void deleteExpired() {
-    int deleted = runs.deleteExpired(config.getRetentionDays());
+    int deleted = ragRunMapper.deleteExpired(config.getRetentionDays());
     if (deleted > 0) log.info("Deleted expired RAG traces count={}", deleted);
   }
 }

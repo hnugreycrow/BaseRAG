@@ -16,11 +16,11 @@ import org.junit.jupiter.api.Test;
 
 /** 引用原文件必须来自本人会话中已完成回答的实际引用。 */
 class CitedDocumentServiceTest {
-  private final ConversationService conversations = mock(ConversationService.class);
-  private final KnowledgeBaseService knowledgeBases = mock(KnowledgeBaseService.class);
-  private final DocumentService documents = mock(DocumentService.class);
-  private final CitedDocumentService service =
-      new CitedDocumentService(conversations, knowledgeBases, documents);
+  private final ConversationService conversationService = mock(ConversationService.class);
+  private final KnowledgeBaseService knowledgeBaseService = mock(KnowledgeBaseService.class);
+  private final DocumentService documentService = mock(DocumentService.class);
+  private final CitedDocumentService citedDocumentService =
+      new CitedDocumentService(conversationService, knowledgeBaseService, documentService);
   private final UUID userId = UUID.randomUUID();
   private final UUID conversationId = UUID.randomUUID();
   private final UUID messageId = UUID.randomUUID();
@@ -34,14 +34,14 @@ class CitedDocumentServiceTest {
     answer("COMPLETED", List.of("S1"), "S1");
     KnowledgeBase kb = new KnowledgeBase();
     kb.setOwnerId(creatorId);
-    when(knowledgeBases.requireAdminOwned(knowledgeBaseId)).thenReturn(kb);
+    when(knowledgeBaseService.requireAdminOwned(knowledgeBaseId)).thenReturn(kb);
     var file = new DocumentService.OriginalFile("policy.pdf", "application/pdf", new byte[] {1});
-    when(documents.originalFile(creatorId, knowledgeBaseId, documentId, versionId))
+    when(documentService.originalFile(creatorId, knowledgeBaseId, documentId, versionId))
         .thenReturn(file);
 
-    assertEquals(file, service.originalFile(userId, conversationId, messageId, "S1"));
-    verify(conversations).get(userId, conversationId);
-    verify(documents).originalFile(creatorId, knowledgeBaseId, documentId, versionId);
+    assertEquals(file, citedDocumentService.originalFile(userId, conversationId, messageId, "S1"));
+    verify(conversationService).get(userId, conversationId);
+    verify(documentService).originalFile(creatorId, knowledgeBaseId, documentId, versionId);
   }
 
   @Test
@@ -51,15 +51,16 @@ class CitedDocumentServiceTest {
         "CITED_SOURCE_NOT_FOUND",
         assertThrows(
                 ApiException.class,
-                () -> service.originalFile(userId, conversationId, messageId, "S1"))
+                () -> citedDocumentService.originalFile(userId, conversationId, messageId, "S1"))
             .code());
-    verifyNoInteractions(knowledgeBases, documents);
+    verifyNoInteractions(knowledgeBaseService, documentService);
 
-    reset(conversations);
+    reset(conversationService);
     answer("PENDING", List.of("S1"), "S1");
     assertThrows(
-        ApiException.class, () -> service.originalFile(userId, conversationId, messageId, "S1"));
-    verifyNoInteractions(knowledgeBases, documents);
+        ApiException.class,
+        () -> citedDocumentService.originalFile(userId, conversationId, messageId, "S1"));
+    verifyNoInteractions(knowledgeBaseService, documentService);
   }
 
   @Test
@@ -67,15 +68,16 @@ class CitedDocumentServiceTest {
     answer("COMPLETED", List.of("S1"), "S1");
     assertThrows(
         ApiException.class,
-        () -> service.originalFile(userId, conversationId, UUID.randomUUID(), "S1"));
-    verifyNoInteractions(knowledgeBases, documents);
+        () -> citedDocumentService.originalFile(userId, conversationId, UUID.randomUUID(), "S1"));
+    verifyNoInteractions(knowledgeBaseService, documentService);
 
-    reset(conversations);
-    when(conversations.get(userId, conversationId))
+    reset(conversationService);
+    when(conversationService.get(userId, conversationId))
         .thenThrow(ApiException.notFound("CONVERSATION_NOT_FOUND", "会话不存在"));
     assertThrows(
-        ApiException.class, () -> service.originalFile(userId, conversationId, messageId, "S1"));
-    verifyNoInteractions(knowledgeBases, documents);
+        ApiException.class,
+        () -> citedDocumentService.originalFile(userId, conversationId, messageId, "S1"));
+    verifyNoInteractions(knowledgeBaseService, documentService);
   }
 
   private void answer(String status, List<String> citations, String sourceCitation) {
@@ -83,7 +85,7 @@ class CitedDocumentServiceTest {
     var turn = mock(ConversationResponses.Turn.class);
     var message = mock(ConversationResponses.AssistantMessage.class);
     var source = mock(SourceResponse.class);
-    when(conversations.get(userId, conversationId)).thenReturn(detail);
+    when(conversationService.get(userId, conversationId)).thenReturn(detail);
     when(detail.turns()).thenReturn(List.of(turn));
     when(turn.assistantVersions()).thenReturn(List.of(message));
     when(message.id()).thenReturn(messageId);

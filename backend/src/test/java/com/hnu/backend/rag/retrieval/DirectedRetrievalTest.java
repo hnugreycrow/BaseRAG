@@ -23,29 +23,33 @@ class DirectedRetrievalTest {
     UUID selected = UUID.randomUUID();
     UUID other = UUID.randomUUID();
     EmbeddingClient embedding = mock(EmbeddingClient.class);
-    RetrievalMapper mapper = mock(RetrievalMapper.class);
-    KnowledgeBaseMapper knowledgeBases = mock(KnowledgeBaseMapper.class);
+    RetrievalMapper retrievalMapper = mock(RetrievalMapper.class);
+    KnowledgeBaseMapper knowledgeBaseMapper = mock(KnowledgeBaseMapper.class);
     KnowledgeBase selectedBase = new KnowledgeBase();
     selectedBase.setId(selected);
     KnowledgeBase otherBase = new KnowledgeBase();
     otherBase.setId(other);
-    when(knowledgeBases.selectWithDocumentCount(null, Integer.MAX_VALUE, 0))
+    when(knowledgeBaseMapper.selectWithDocumentCount(null, Integer.MAX_VALUE, 0))
         .thenReturn(List.of(selectedBase, otherBase));
     EmbeddingBinding binding = new EmbeddingBinding("model-id", "provider", "model", 2);
-    when(mapper.activeModelBindings(owner)).thenReturn(List.of(binding));
+    when(retrievalMapper.activeModelBindings(owner)).thenReturn(List.of(binding));
     when(embedding.embed("model-id", "provider", "model", 2, List.of("问题")))
         .thenReturn(List.of(new float[] {1, 0}));
-    when(mapper.searchIn(
+    when(retrievalMapper.searchIn(
             owner, List.of(selected), "[1.0, 0.0]", "model-id", "provider", "model", 2, 3))
         .thenReturn(List.of());
-    when(mapper.searchIn(
+    when(retrievalMapper.searchIn(
             owner, List.of(other), "[1.0, 0.0]", "model-id", "provider", "model", 2, 1))
         .thenReturn(List.of());
-    RetrievalService service =
+    RetrievalService retrievalService =
         new RetrievalService(
-            embedding, mapper, knowledgeBases, new RagProperties(), new CandidateMerge());
+            embedding,
+            retrievalMapper,
+            knowledgeBaseMapper,
+            new RagProperties(),
+            new CandidateMerge());
 
-    service.retrieveDirectedCandidates(
+    retrievalService.retrieveDirectedCandidates(
         owner,
         "Q1",
         "问题",
@@ -55,9 +59,9 @@ class DirectedRetrievalTest {
         RagRunTrace.noop());
 
     verify(embedding, times(1)).embed("model-id", "provider", "model", 2, List.of("问题"));
-    verify(mapper)
+    verify(retrievalMapper)
         .searchIn(owner, List.of(selected), "[1.0, 0.0]", "model-id", "provider", "model", 2, 3);
-    verify(mapper)
+    verify(retrievalMapper)
         .searchIn(owner, List.of(other), "[1.0, 0.0]", "model-id", "provider", "model", 2, 1);
   }
 }

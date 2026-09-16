@@ -29,8 +29,8 @@ import org.springframework.stereotype.Service;
 public class RetrievalService {
   private static final long CANCELLATION_POLL_MS = 50;
   private final EmbeddingClient embedding;
-  private final RetrievalMapper retrieval;
-  private final KnowledgeBaseMapper knowledgeBases;
+  private final RetrievalMapper retrievalMapper;
+  private final KnowledgeBaseMapper knowledgeBaseMapper;
   private final RagProperties config;
   private final CandidateMerge candidateMerge;
   private final ExecutorService searchExecutor = Executors.newVirtualThreadPerTaskExecutor();
@@ -39,20 +39,20 @@ public class RetrievalService {
    * 创建多模型向量检索服务。
    *
    * @param embedding 查询向量客户端
-   * @param retrieval 用户隔离的检索映射器
+   * @param retrievalMapper 用户隔离的检索映射器
    * @param config RAG 检索配置
    * @param candidateMerge 跨模型候选合并器
    */
   @Autowired
   public RetrievalService(
       EmbeddingClient embedding,
-      RetrievalMapper retrieval,
-      KnowledgeBaseMapper knowledgeBases,
+      RetrievalMapper retrievalMapper,
+      KnowledgeBaseMapper knowledgeBaseMapper,
       RagProperties config,
       CandidateMerge candidateMerge) {
     this.embedding = embedding;
-    this.retrieval = retrieval;
-    this.knowledgeBases = knowledgeBases;
+    this.retrievalMapper = retrievalMapper;
+    this.knowledgeBaseMapper = knowledgeBaseMapper;
     this.config = config;
     this.candidateMerge = candidateMerge;
   }
@@ -60,10 +60,10 @@ public class RetrievalService {
   /** 保留不启动 Spring 容器的检索单元测试构造方式。 */
   public RetrievalService(
       EmbeddingClient embedding,
-      RetrievalMapper retrieval,
+      RetrievalMapper retrievalMapper,
       RagProperties config,
       CandidateMerge candidateMerge) {
-    this(embedding, retrieval, null, config, candidateMerge);
+    this(embedding, retrievalMapper, null, config, candidateMerge);
   }
 
   @PreDestroy
@@ -168,8 +168,8 @@ public class RetrievalService {
     List<EvidenceCandidate> candidates = new ArrayList<>();
     var bindings =
         scope == null
-            ? retrieval.activeModelBindings(ownerId)
-            : retrieval.activeModelBindingsIn(ownerId, scope);
+            ? retrievalMapper.activeModelBindings(ownerId)
+            : retrievalMapper.activeModelBindingsIn(ownerId, scope);
     if (bindings.isEmpty()) {
       skipVectorStages(trace, subQuestionId, "NO_EMBEDDING_BINDINGS");
       return List.of();
@@ -265,7 +265,7 @@ public class RetrievalService {
     }
     List<UUID> primary = primaryKnowledgeBaseIds.stream().distinct().toList();
     List<UUID> supplementalScope =
-        knowledgeBases.selectWithDocumentCount(null, Integer.MAX_VALUE, 0).stream()
+        knowledgeBaseMapper.selectWithDocumentCount(null, Integer.MAX_VALUE, 0).stream()
             .map(KnowledgeBase::getId)
             .filter(id -> !primary.contains(id))
             .toList();
@@ -275,7 +275,7 @@ public class RetrievalService {
             : 0;
     int primaryLimit = budget.recallBudget() - supplementLimit;
     List<EvidenceCandidate> candidates = new ArrayList<>();
-    var modelBindings = retrieval.activeModelBindings(ownerId);
+    var modelBindings = retrievalMapper.activeModelBindings(ownerId);
     if (modelBindings.isEmpty()) {
       skipVectorStages(trace, subQuestionId, "NO_EMBEDDING_BINDINGS");
       return List.of();
@@ -385,7 +385,7 @@ public class RetrievalService {
         searchExecutor.submit(
             () ->
                 scope == null
-                    ? retrieval.searchAll(
+                    ? retrievalMapper.searchAll(
                         ownerId,
                         literal,
                         binding.modelId(),
@@ -393,7 +393,7 @@ public class RetrievalService {
                         binding.model(),
                         binding.dimensions(),
                         recallBudget)
-                    : retrieval.searchIn(
+                    : retrievalMapper.searchIn(
                         ownerId,
                         scope,
                         literal,

@@ -27,16 +27,17 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class RagRunControllerTest {
-  private final CurrentUserService currentUsers = mock(CurrentUserService.class);
-  private final RagRunQueryService queries = mock(RagRunQueryService.class);
+  private final CurrentUserService currentUserService = mock(CurrentUserService.class);
+  private final RagRunQueryService ragRunQueryService = mock(RagRunQueryService.class);
   private final User actor = user();
   private MockMvc mvc;
 
   @BeforeEach
   void setUp() {
-    when(currentUsers.requireAdmin()).thenReturn(actor);
+    when(currentUserService.requireAdmin()).thenReturn(actor);
     mvc =
-        MockMvcBuilders.standaloneSetup(new RagRunController(currentUsers, queries))
+        MockMvcBuilders.standaloneSetup(
+                new RagRunController(currentUserService, ragRunQueryService))
             .setControllerAdvice(new ApiResponseAdvice(), new GlobalExceptionHandler())
             .addFilters(new RequestIdFilter())
             .build();
@@ -47,7 +48,7 @@ class RagRunControllerTest {
     OffsetDateTime from = OffsetDateTime.parse("2026-09-01T00:00:00Z");
     OffsetDateTime to = OffsetDateTime.parse("2026-10-01T00:00:00Z");
     UUID userId = UUID.randomUUID();
-    when(queries.list(
+    when(ragRunQueryService.list(
             actor,
             from,
             to,
@@ -73,7 +74,7 @@ class RagRunControllerTest {
         .andExpect(jsonPath("$.data.page").value(2))
         .andExpect(jsonPath("$.data.pageSize").value(10));
 
-    verify(queries)
+    verify(ragRunQueryService)
         .list(
             actor,
             from,
@@ -96,13 +97,14 @@ class RagRunControllerTest {
             new RagRunResponses.Percentiles(null, null),
             new RagRunResponses.Percentiles(null, null),
             new RagRunResponses.Percentiles(null, null));
-    when(queries.summary(actor, null, null, null, null, null, null)).thenReturn(aggregate);
+    when(ragRunQueryService.summary(actor, null, null, null, null, null, null))
+        .thenReturn(aggregate);
 
     mvc.perform(get("/api/observability/rag-runs/summary"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.requestCount").value(0));
 
-    verify(queries).summary(actor, null, null, null, null, null, null);
+    verify(ragRunQueryService).summary(actor, null, null, null, null, null, null);
   }
 
   @Test
@@ -133,7 +135,7 @@ class RagRunControllerTest {
             null,
             null,
             null);
-    when(queries.get(actor, runId))
+    when(ragRunQueryService.get(actor, runId))
         .thenReturn(new RagRunResponses.Detail(summary, List.of(), List.of()));
 
     mvc.perform(get("/api/observability/rag-runs/{id}", runId))

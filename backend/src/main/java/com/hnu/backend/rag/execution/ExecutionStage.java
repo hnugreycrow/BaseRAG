@@ -35,7 +35,7 @@ public class ExecutionStage {
   private static final Logger log = LoggerFactory.getLogger(ExecutionStage.class);
   private static final long CANCELLATION_POLL_MS = 50;
 
-  private final RetrievalService retrieval;
+  private final RetrievalService retrievalService;
   private final McpToolExecutor tools;
   private final CandidateMerge candidateMerge;
   private final RagProperties config;
@@ -44,17 +44,17 @@ public class ExecutionStage {
   /**
    * 创建子问题执行阶段。
    *
-   * @param retrieval 用户隔离的检索服务
+   * @param retrievalService 用户隔离的检索服务
    * @param tools MCP 工具执行器
    * @param candidateMerge 候选合并器
    * @param config RAG 预算配置
    */
   public ExecutionStage(
-      RetrievalService retrieval,
+      RetrievalService retrievalService,
       McpToolExecutor tools,
       CandidateMerge candidateMerge,
       RagProperties config) {
-    this.retrieval = retrieval;
+    this.retrievalService = retrievalService;
     this.tools = tools;
     this.candidateMerge = candidateMerge;
     this.config = config;
@@ -237,7 +237,7 @@ public class ExecutionStage {
       if (route.intent() == IntentType.KNOWLEDGE_RETRIEVAL) {
         List<EvidenceCandidate> candidates =
             route.knowledgeBaseIds() != null
-                ? retrieval.retrieveDirectedCandidates(
+                ? retrievalService.retrieveDirectedCandidates(
                     ownerId,
                     question.id(),
                     question.question(),
@@ -246,7 +246,7 @@ public class ExecutionStage {
                     cancellationToken,
                     trace)
                 : trace.enabled()
-                    ? retrieval.retrieveCandidates(
+                    ? retrievalService.retrieveCandidates(
                         ownerId,
                         question.id(),
                         question.question(),
@@ -254,7 +254,7 @@ public class ExecutionStage {
                         snapshot.forSubQuestion(question.id()),
                         cancellationToken,
                         trace)
-                    : retrieval.retrieveCandidates(
+                    : retrievalService.retrieveCandidates(
                         ownerId,
                         question.id(),
                         question.question(),

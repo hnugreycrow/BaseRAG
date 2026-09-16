@@ -15,21 +15,21 @@ class KnowledgeBaseServiceTest {
   @Test
   void hidesAliyunCandidateUntilItsApiKeyIsConfigured() {
     AiProperties ai = models("");
-    KnowledgeBaseService service = service(ai);
+    KnowledgeBaseService knowledgeBaseService = service(ai);
     assertEquals(
         java.util.List.of("qwen-emb-8b"),
-        service.embeddingModels().stream().map(model -> model.id()).toList());
+        knowledgeBaseService.embeddingModels().stream().map(model -> model.id()).toList());
 
     ai.getProviders().get("bailian").setApiKey("test-only");
     assertEquals(
         java.util.List.of("qwen-emb-8b", "bailian-qwen3.7-embedding"),
-        service.embeddingModels().stream().map(model -> model.id()).toList());
+        knowledgeBaseService.embeddingModels().stream().map(model -> model.id()).toList());
   }
 
   @Test
   void sameNameAndDimensionsDoNotPermitChangedProviderOrConfigId() {
     AiProperties ai = models("test-only");
-    KnowledgeBaseService service = service(ai);
+    KnowledgeBaseService knowledgeBaseService = service(ai);
     KnowledgeBase kb = new KnowledgeBase();
     kb.setEmbeddingModelId("qwen-emb-8b");
     kb.setEmbeddingProvider("siliconflow");
@@ -40,24 +40,30 @@ class KnowledgeBaseServiceTest {
         assertThrows(
             ApiException.class,
             () ->
-                service.checkModel(kb, "bailian-qwen3.7-embedding", "bailian", "same-model", 1536));
+                knowledgeBaseService.checkModel(
+                    kb, "bailian-qwen3.7-embedding", "bailian", "same-model", 1536));
     assertEquals("EMBEDDING_MODEL_CHANGED", changed.code());
     ApiException removed =
         assertThrows(
             ApiException.class,
-            () -> service.checkModel(kb, "removed", "siliconflow", "same-model", 1536));
+            () ->
+                knowledgeBaseService.checkModel(kb, "removed", "siliconflow", "same-model", 1536));
     assertEquals("EMBEDDING_MODEL_CHANGED", removed.code());
     ai.getEmbedding().getCandidates().getFirst().setProvider("bailian");
     ApiException overwritten =
         assertThrows(
             ApiException.class,
-            () -> service.checkModel(kb, "qwen-emb-8b", "siliconflow", "same-model", 1536));
+            () ->
+                knowledgeBaseService.checkModel(
+                    kb, "qwen-emb-8b", "siliconflow", "same-model", 1536));
     assertEquals("EMBEDDING_BINDING_CHANGED", overwritten.code());
     ai.getEmbedding().getCandidates().removeFirst();
     ApiException unavailable =
         assertThrows(
             ApiException.class,
-            () -> service.checkModel(kb, "qwen-emb-8b", "siliconflow", "same-model", 1536));
+            () ->
+                knowledgeBaseService.checkModel(
+                    kb, "qwen-emb-8b", "siliconflow", "same-model", 1536));
     assertEquals("EMBEDDING_MODEL_UNAVAILABLE", unavailable.code());
   }
 

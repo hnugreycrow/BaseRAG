@@ -29,19 +29,19 @@ import tools.jackson.databind.json.JsonMapper;
 class ConversationMemoryProviderTest {
   private static final String VALID_SUMMARY = "用户咨询了制度修订（当时已回答）。待确认：负责人。";
 
-  private final ConversationMapper conversations = mock(ConversationMapper.class);
-  private final MessageMapper messages = mock(MessageMapper.class);
+  private final ConversationMapper conversationMapper = mock(ConversationMapper.class);
+  private final MessageMapper messageMapper = mock(MessageMapper.class);
   private final ChatClient chat = mock(ChatClient.class);
   private final ConversationProperties config = new ConversationProperties();
   private final ConversationMemoryProvider provider =
-      new ConversationMemoryProvider(conversations, messages, config, chat);
+      new ConversationMemoryProvider(conversationMapper, messageMapper, config, chat);
 
   @Test
   void keepsEightRawTurnsBeforeSummaryStarts() {
     Conversation conversation = conversation();
-    when(conversations.find(conversation.getOwnerId(), conversation.getId()))
+    when(conversationMapper.find(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(conversation);
-    when(messages.list(conversation.getOwnerId(), conversation.getId()))
+    when(messageMapper.list(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(turns(conversation.getId(), 8));
 
     var memory = provider.load(conversation.getOwnerId(), conversation.getId(), 9);
@@ -61,12 +61,12 @@ class ConversationMemoryProviderTest {
     updated.setSummaryText(VALID_SUMMARY);
     updated.setSummarizedThroughTurn(5);
     updated.setSummaryRevision(1);
-    when(conversations.find(conversation.getOwnerId(), conversation.getId()))
+    when(conversationMapper.find(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(conversation, updated);
-    when(messages.list(conversation.getOwnerId(), conversation.getId()))
+    when(messageMapper.list(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(turns(conversation.getId(), 9));
     when(chat.generate(anyString(), anyString())).thenReturn(generation(VALID_SUMMARY));
-    when(conversations.updateSummary(
+    when(conversationMapper.updateSummary(
             eq(conversation.getOwnerId()), eq(conversation.getId()), anyString(), eq(5), eq(0)))
         .thenReturn(1);
 
@@ -76,7 +76,7 @@ class ConversationMemoryProviderTest {
     assertEquals(1, memory.summaryRevision());
     assertTrue(memory.unsummarizedTurns().isEmpty());
     assertEquals(List.of(2, 3, 4, 5, 6, 7, 8, 9), indexes(memory.recentTurns()));
-    verify(conversations)
+    verify(conversationMapper)
         .updateSummary(
             eq(conversation.getOwnerId()), eq(conversation.getId()), anyString(), eq(5), eq(0));
     ArgumentCaptor<String> system = ArgumentCaptor.forClass(String.class);
@@ -101,12 +101,12 @@ class ConversationMemoryProviderTest {
     updated.setSummaryText(VALID_SUMMARY);
     updated.setSummarizedThroughTurn(9);
     updated.setSummaryRevision(2);
-    when(conversations.find(conversation.getOwnerId(), conversation.getId()))
+    when(conversationMapper.find(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(conversation, conversation, updated);
-    when(messages.list(conversation.getOwnerId(), conversation.getId()))
+    when(messageMapper.list(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(turns(conversation.getId(), 12), turns(conversation.getId(), 13));
     when(chat.generate(anyString(), anyString())).thenReturn(generation(VALID_SUMMARY));
-    when(conversations.updateSummary(
+    when(conversationMapper.updateSummary(
             eq(conversation.getOwnerId()), eq(conversation.getId()), anyString(), eq(9), eq(1)))
         .thenReturn(1);
 
@@ -137,12 +137,12 @@ class ConversationMemoryProviderTest {
     updated.setSummaryText(VALID_SUMMARY);
     updated.setSummarizedThroughTurn(5);
     updated.setSummaryRevision(1);
-    when(conversations.find(conversation.getOwnerId(), conversation.getId()))
+    when(conversationMapper.find(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(conversation, updated);
-    when(messages.list(conversation.getOwnerId(), conversation.getId()))
+    when(messageMapper.list(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(turns(conversation.getId(), 16));
     when(chat.generate(anyString(), anyString())).thenReturn(generation(VALID_SUMMARY));
-    when(conversations.updateSummary(
+    when(conversationMapper.updateSummary(
             eq(conversation.getOwnerId()), eq(conversation.getId()), anyString(), eq(5), eq(0)))
         .thenReturn(1);
 
@@ -168,12 +168,12 @@ class ConversationMemoryProviderTest {
     updated.setSummaryText(VALID_SUMMARY);
     updated.setSummarizedThroughTurn(12);
     updated.setSummaryRevision(4);
-    when(conversations.find(conversation.getOwnerId(), conversation.getId()))
+    when(conversationMapper.find(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(conversation, updated);
-    when(messages.list(conversation.getOwnerId(), conversation.getId()))
+    when(messageMapper.list(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(turns(conversation.getId(), 16));
     when(chat.generate(anyString(), anyString())).thenReturn(generation(VALID_SUMMARY));
-    when(conversations.updateSummary(
+    when(conversationMapper.updateSummary(
             eq(conversation.getOwnerId()), eq(conversation.getId()), anyString(), eq(12), eq(3)))
         .thenReturn(1);
 
@@ -195,9 +195,9 @@ class ConversationMemoryProviderTest {
   @Test
   void keepsOldCursorAndRawTurnsWhenSummaryGenerationFails() {
     Conversation conversation = conversation();
-    when(conversations.find(conversation.getOwnerId(), conversation.getId()))
+    when(conversationMapper.find(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(conversation);
-    when(messages.list(conversation.getOwnerId(), conversation.getId()))
+    when(messageMapper.list(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(turns(conversation.getId(), 12));
     when(chat.generate(anyString(), anyString())).thenThrow(new RuntimeException("unavailable"));
 
@@ -205,7 +205,7 @@ class ConversationMemoryProviderTest {
 
     assertEquals(0, memory.summaryRevision());
     assertEquals(List.of(1, 2, 3, 4), indexes(memory.unsummarizedTurns()));
-    verify(conversations, never())
+    verify(conversationMapper, never())
         .updateSummary(
             eq(conversation.getOwnerId()), eq(conversation.getId()), anyString(), eq(5), eq(0));
   }
@@ -213,9 +213,9 @@ class ConversationMemoryProviderTest {
   @Test
   void rejectsInvalidPlainTextWithoutAdvancingCursor() {
     Conversation conversation = conversation();
-    when(conversations.find(conversation.getOwnerId(), conversation.getId()))
+    when(conversationMapper.find(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(conversation);
-    when(messages.list(conversation.getOwnerId(), conversation.getId()))
+    when(messageMapper.list(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(turns(conversation.getId(), 12));
     List<String> invalidCandidates =
         List.of(
@@ -230,14 +230,14 @@ class ConversationMemoryProviderTest {
             "话题".repeat(401));
 
     for (String candidate : invalidCandidates) {
-      clearInvocations(conversations, messages, chat);
+      clearInvocations(conversationMapper, messageMapper, chat);
       when(chat.generate(anyString(), anyString())).thenReturn(generation(candidate));
 
       var memory = provider.load(conversation.getOwnerId(), conversation.getId(), 13);
 
       assertEquals(List.of(1, 2, 3, 4), indexes(memory.unsummarizedTurns()));
     }
-    verify(conversations, never())
+    verify(conversationMapper, never())
         .updateSummary(
             eq(conversation.getOwnerId()), eq(conversation.getId()), anyString(), eq(5), eq(0));
   }
@@ -245,12 +245,12 @@ class ConversationMemoryProviderTest {
   @Test
   void keepsOldCursorWhenSummaryPersistenceFails() {
     Conversation conversation = conversation();
-    when(conversations.find(conversation.getOwnerId(), conversation.getId()))
+    when(conversationMapper.find(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(conversation);
-    when(messages.list(conversation.getOwnerId(), conversation.getId()))
+    when(messageMapper.list(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(turns(conversation.getId(), 12));
     when(chat.generate(anyString(), anyString())).thenReturn(generation(VALID_SUMMARY));
-    when(conversations.updateSummary(
+    when(conversationMapper.updateSummary(
             eq(conversation.getOwnerId()), eq(conversation.getId()), anyString(), eq(5), eq(0)))
         .thenThrow(new RuntimeException("database unavailable"));
 
@@ -269,12 +269,12 @@ class ConversationMemoryProviderTest {
     winner.setSummaryText(VALID_SUMMARY);
     winner.setSummarizedThroughTurn(5);
     winner.setSummaryRevision(1);
-    when(conversations.find(conversation.getOwnerId(), conversation.getId()))
+    when(conversationMapper.find(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(conversation, winner);
-    when(messages.list(conversation.getOwnerId(), conversation.getId()))
+    when(messageMapper.list(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(turns(conversation.getId(), 12));
     when(chat.generate(anyString(), anyString())).thenReturn(generation(VALID_SUMMARY));
-    when(conversations.updateSummary(
+    when(conversationMapper.updateSummary(
             eq(conversation.getOwnerId()), eq(conversation.getId()), anyString(), eq(5), eq(0)))
         .thenReturn(0);
 
@@ -289,16 +289,16 @@ class ConversationMemoryProviderTest {
   void rejectsOverlongSummaryWithoutAdvancingCursor() {
     Conversation conversation = conversation();
     String largeSummary = "制度".repeat(2500);
-    when(conversations.find(conversation.getOwnerId(), conversation.getId()))
+    when(conversationMapper.find(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(conversation);
-    when(messages.list(conversation.getOwnerId(), conversation.getId()))
+    when(messageMapper.list(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(turns(conversation.getId(), 9));
     when(chat.generate(anyString(), anyString())).thenReturn(generation(largeSummary));
 
     var memory = provider.load(conversation.getOwnerId(), conversation.getId(), 10);
 
     assertEquals(0, memory.summaryRevision());
-    verify(conversations, never())
+    verify(conversationMapper, never())
         .updateSummary(
             eq(conversation.getOwnerId()), eq(conversation.getId()), anyString(), eq(5), eq(0));
   }
@@ -311,12 +311,12 @@ class ConversationMemoryProviderTest {
     updated.setSummaryText(summary);
     updated.setSummarizedThroughTurn(5);
     updated.setSummaryRevision(1);
-    when(conversations.find(conversation.getOwnerId(), conversation.getId()))
+    when(conversationMapper.find(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(conversation, updated);
-    when(messages.list(conversation.getOwnerId(), conversation.getId()))
+    when(messageMapper.list(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(turns(conversation.getId(), 9));
     when(chat.generate(anyString(), anyString())).thenReturn(generation(summary));
-    when(conversations.updateSummary(
+    when(conversationMapper.updateSummary(
             eq(conversation.getOwnerId()), eq(conversation.getId()), eq(summary), eq(5), eq(0)))
         .thenReturn(1);
 
@@ -334,12 +334,12 @@ class ConversationMemoryProviderTest {
     updated.setSummaryText("");
     updated.setSummarizedThroughTurn(5);
     updated.setSummaryRevision(1);
-    when(conversations.find(conversation.getOwnerId(), conversation.getId()))
+    when(conversationMapper.find(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(conversation, updated);
-    when(messages.list(conversation.getOwnerId(), conversation.getId()))
+    when(messageMapper.list(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(turns(conversation.getId(), 9));
     when(chat.generate(anyString(), anyString())).thenReturn(generation("无"));
-    when(conversations.updateSummary(
+    when(conversationMapper.updateSummary(
             eq(conversation.getOwnerId()), eq(conversation.getId()), eq(""), eq(5), eq(0)))
         .thenReturn(1);
 
@@ -360,9 +360,9 @@ class ConversationMemoryProviderTest {
         .findFirst()
         .orElseThrow()
         .setContent(longAnswer);
-    when(conversations.find(conversation.getOwnerId(), conversation.getId()))
+    when(conversationMapper.find(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(conversation);
-    when(messages.list(conversation.getOwnerId(), conversation.getId())).thenReturn(history);
+    when(messageMapper.list(conversation.getOwnerId(), conversation.getId())).thenReturn(history);
 
     var memory = provider.load(conversation.getOwnerId(), conversation.getId(), 9);
 
@@ -400,11 +400,11 @@ class ConversationMemoryProviderTest {
         .findFirst()
         .orElseThrow()
         .setContent("HNU负责审批，仅是助手曾回答的历史陈述");
-    when(conversations.find(conversation.getOwnerId(), conversation.getId()))
+    when(conversationMapper.find(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(conversation, updated);
-    when(messages.list(conversation.getOwnerId(), conversation.getId())).thenReturn(history);
+    when(messageMapper.list(conversation.getOwnerId(), conversation.getId())).thenReturn(history);
     when(chat.generate(anyString(), anyString())).thenReturn(generation(updated.getSummaryText()));
-    when(conversations.updateSummary(
+    when(conversationMapper.updateSummary(
             eq(conversation.getOwnerId()), eq(conversation.getId()), anyString(), eq(7), eq(0)))
         .thenReturn(1);
 
@@ -438,9 +438,9 @@ class ConversationMemoryProviderTest {
     conversation.setSummaryText("话题：用户称：制度修订");
     conversation.setSummarizedThroughTurn(5);
     conversation.setSummaryRevision(1);
-    when(conversations.find(conversation.getOwnerId(), conversation.getId()))
+    when(conversationMapper.find(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(conversation);
-    when(messages.list(conversation.getOwnerId(), conversation.getId()))
+    when(messageMapper.list(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(turns(conversation.getId(), 8));
 
     var memory = provider.load(conversation.getOwnerId(), conversation.getId(), 9);
@@ -462,9 +462,9 @@ class ConversationMemoryProviderTest {
     addAssistant(history, conversation.getId(), 5, true, "COMPLETED", "无用户回答");
     addTurn(history, conversation.getId(), 6, true, "COMPLETED", true, "回答6");
     addTurn(history, conversation.getId(), 7, true, "COMPLETED", true, "当前回答");
-    when(conversations.find(conversation.getOwnerId(), conversation.getId()))
+    when(conversationMapper.find(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(conversation);
-    when(messages.list(conversation.getOwnerId(), conversation.getId())).thenReturn(history);
+    when(messageMapper.list(conversation.getOwnerId(), conversation.getId())).thenReturn(history);
 
     var memory = provider.load(conversation.getOwnerId(), conversation.getId(), 7);
 

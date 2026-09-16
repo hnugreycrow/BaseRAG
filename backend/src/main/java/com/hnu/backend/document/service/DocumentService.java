@@ -52,10 +52,10 @@ import org.springframework.web.multipart.MultipartFile;
 @Service
 public class DocumentService {
   private static final Logger log = LoggerFactory.getLogger(DocumentService.class);
-  private final KnowledgeBaseService knowledgeBases;
-  private final DocumentMapper documents;
-  private final DocumentVersionMapper versions;
-  private final DocumentChunkMapper chunks;
+  private final KnowledgeBaseService knowledgeBaseService;
+  private final DocumentMapper documentMapper;
+  private final DocumentVersionMapper documentVersionMapper;
+  private final DocumentChunkMapper documentChunkMapper;
   private final MarkdownChunker chunker;
 
   /** 按版本格式选择解析器，并在上传时验证原文件内容。 */
@@ -79,28 +79,28 @@ public class DocumentService {
   /**
    * 创建文档服务。
    *
-   * @param knowledgeBases 知识库所有权与模型服务
-   * @param documents 文档持久化接口
-   * @param versions 文档版本持久化接口
-   * @param chunks 文档分块持久化接口
+   * @param knowledgeBaseService 知识库所有权与模型服务
+   * @param documentMapper 文档持久化接口
+   * @param documentVersionMapper 文档版本持久化接口
+   * @param documentChunkMapper 文档分块持久化接口
    * @param chunker Markdown 解析和通用结构块打包入口
    * @param embedding 向量模型客户端
    * @param storage 对象存储接口
    * @param tx 事务模板
    */
   public DocumentService(
-      KnowledgeBaseService knowledgeBases,
-      DocumentMapper documents,
-      DocumentVersionMapper versions,
-      DocumentChunkMapper chunks,
+      KnowledgeBaseService knowledgeBaseService,
+      DocumentMapper documentMapper,
+      DocumentVersionMapper documentVersionMapper,
+      DocumentChunkMapper documentChunkMapper,
       MarkdownChunker chunker,
       EmbeddingClient embedding,
       FileStorage storage,
       TransactionTemplate tx) {
-    this.knowledgeBases = knowledgeBases;
-    this.documents = documents;
-    this.versions = versions;
-    this.chunks = chunks;
+    this.knowledgeBaseService = knowledgeBaseService;
+    this.documentMapper = documentMapper;
+    this.documentVersionMapper = documentVersionMapper;
+    this.documentChunkMapper = documentChunkMapper;
     this.chunker = chunker;
     this.parsers = new DocumentParserRegistry(chunker);
     this.embedding = embedding;
@@ -119,7 +119,7 @@ public class DocumentService {
    * @return 状态为 {@code UPLOADED} 的导入结果
    */
   public DocumentImportResponse upload(UUID ownerId, UUID knowledgeBaseId, MultipartFile file) {
-    var knowledgeBase = knowledgeBases.ensureModel(ownerId, knowledgeBaseId);
+    var knowledgeBase = knowledgeBaseService.ensureModel(ownerId, knowledgeBaseId);
     String name = Optional.ofNullable(file.getOriginalFilename()).orElse("");
     name = name.replace('\\', '/');
     name = name.substring(name.lastIndexOf('/') + 1);
@@ -175,15 +175,15 @@ public class DocumentService {
       storage.put(version.getStorageKey(), bytes, version.getMediaType());
       tx.executeWithoutResult(
           status -> {
-            knowledgeBases.lockAndBindModel(
+            knowledgeBaseService.lockAndBindModel(
                 ownerId,
                 knowledgeBaseId,
                 version.getEmbeddingModelId(),
                 version.getEmbeddingProvider(),
                 version.getEmbeddingModel(),
                 version.getEmbeddingDimensions());
-            documents.insert(document);
-            versions.insert(version);
+            documentMapper.insert(document);
+            documentVersionMapper.insert(version);
           });
       log.info("upload documentId={} status=UPLOADED", document.getId());
       return new DocumentImportResponse(document.getId(), "UPLOADED", 0);
@@ -199,7 +199,7 @@ public class DocumentService {
       UUID ownerId, UUID knowledgeBaseId, List<MultipartFile> files) {
     if (files == null || files.isEmpty() || files.size() > 10)
       throw ApiException.bad("INVALID_BATCH_SIZE", "每次请选择 1 至 10 个文件");
-    knowledgeBases.ensureModel(ownerId, knowledgeBaseId);
+    knowledgeBaseService.ensureModel(ownerId, knowledgeBaseId);
     List<DocumentBatchUploadResponse.Item> results = new ArrayList<>(files.size());
     for (int index = 0; index < files.size(); index++) {
       MultipartFile file = files.get(index);
@@ -247,7 +247,7 @@ public class DocumentService {
     long count =
         document.getActiveVersionId() == null
             ? 0
-            : chunks.selectCount(
+            : documentChunkMapper.selectCount(
                 new LambdaQueryWrapper<DocumentChunk>()
                     .eq(DocumentChunk::getVersionId, document.getActiveVersionId()));
     return new DocumentImportResponse(documentId, "PROCESSING", (int) count);
@@ -268,7 +268,7 @@ public class DocumentService {
       result =
           tx.execute(
               status -> {
-                knowledgeBases.requireEntity(ownerId, knowledgeBaseId);
+                knowledgeBaseService.requireEntity(ownerId, knowledgeBaseId);
                 List<DocumentVersion> selectedVersions = new ArrayList<>(documentIds.size());
                 for (UUID documentId : documentIds) {
                   requireDocument(ownerId, knowledgeBaseId, documentId);
@@ -345,25 +345,25 @@ public class DocumentService {
                 allowReady ? List.of("UPLOADED", "FAILED", "READY") : List.of("UPLOADED", "FAILED"))
             .set(DocumentVersion::getStatus, "PROCESSING")
             .set(DocumentVersion::getErrorCode, null);
-    return versions.update(update);
+    return documentVersionMapper.update(update);
   }
 
   /** 未完成任务不在重启后续跑；恢复旧索引或标记首次分块失败。 */
   @EventListener(ApplicationReadyEvent.class)
   public void markInterruptedTasks() {
     List<DocumentVersion> interrupted =
-        versions.selectList(
+        documentVersionMapper.selectList(
             new LambdaQueryWrapper<DocumentVersion>().eq(DocumentVersion::getStatus, "PROCESSING"));
     interrupted.forEach(version -> markInterrupted(version.getDocumentId()));
   }
 
   private void markInterrupted(UUID documentId) {
-    Document document = documents.selectById(documentId);
+    Document document = documentMapper.selectById(documentId);
     if (document == null) return;
     DocumentVersion version = latestVersion(documentId);
     if (!"PROCESSING".equals(version.getStatus())) return;
     boolean rebuilding = Objects.equals(document.getActiveVersionId(), version.getId());
-    versions.update(
+    documentVersionMapper.update(
         new LambdaUpdateWrapper<DocumentVersion>()
             .eq(DocumentVersion::getId, version.getId())
             .eq(DocumentVersion::getStatus, "PROCESSING")
@@ -428,14 +428,14 @@ public class DocumentService {
       tx.executeWithoutResult(
           status -> {
             // 新分块和激活版本在同一事务内切换，查询端不会观察到半成品版本。
-            knowledgeBases.lockAndBindModel(
+            knowledgeBaseService.lockAndBindModel(
                 ownerId,
                 knowledgeBaseId,
                 version.getEmbeddingModelId(),
                 version.getEmbeddingProvider(),
                 version.getEmbeddingModel(),
                 version.getEmbeddingDimensions());
-            chunks.delete(
+            documentChunkMapper.delete(
                 new LambdaQueryWrapper<DocumentChunk>()
                     .eq(DocumentChunk::getDocumentId, document.getId()));
             for (int i = 0; i < pieces.size(); i++) {
@@ -458,13 +458,13 @@ public class DocumentService {
               }
               chunk.setEmbeddingDimensions(version.getEmbeddingDimensions());
               chunk.setVector(EmbeddingClient.literal(vectors.get(i)));
-              chunks.insertVector(chunk);
+              documentChunkMapper.insertVector(chunk);
             }
             version.setStatus("READY");
             version.setChunkerVersion("structured-block-v6");
-            versions.updateById(version);
+            documentVersionMapper.updateById(version);
             document.setActiveVersionId(version.getId());
-            documents.updateById(document);
+            documentMapper.updateById(document);
           });
       log.info("chunk documentId={} chunks={} status=READY", document.getId(), pieces.size());
       return new DocumentImportResponse(document.getId(), "READY", pieces.size());
@@ -476,7 +476,7 @@ public class DocumentService {
               // 重建失败时保留原 READY 状态和旧分块；首次处理失败则标记为 FAILED。
               version.setStatus(rebuilding ? "READY" : "FAILED");
               version.setErrorCode(code);
-              versions.updateById(version);
+              documentVersionMapper.updateById(version);
             });
       } catch (RuntimeException markingFailure) {
         log.error("Could not mark failed chunking documentId={} code={}", document.getId(), code);
@@ -498,12 +498,12 @@ public class DocumentService {
    */
   public PageResponse<DocumentResponse> list(
       UUID ownerId, UUID id, int page, int pageSize, String rawQuery) {
-    knowledgeBases.requireEntity(ownerId, id);
+    knowledgeBaseService.requireEntity(ownerId, id);
     String query = normalizeQuery(rawQuery);
     long rowOffset = offset(page, pageSize);
-    long total = documents.selectCount(documentQuery(id, query));
+    long total = documentMapper.selectCount(documentQuery(id, query));
     List<DocumentResponse> items =
-        documents
+        documentMapper
             .selectList(
                 documentQuery(id, query)
                     .orderByDesc(Document::getCreatedAt)
@@ -534,7 +534,7 @@ public class DocumentService {
     Document document = requireDocument(ownerId, knowledgeBaseId, documentId);
     String name = normalizeDocumentName(rawName);
     document.setName(name);
-    documents.updateById(document);
+    documentMapper.updateById(document);
     return toDocumentResponse(document);
   }
 
@@ -550,21 +550,21 @@ public class DocumentService {
     if ("PROCESSING".equals(latestVersion(documentId).getStatus()))
       throw ApiException.conflict("DOCUMENT_PROCESSING", "文档正在分块，完成后才能删除");
     List<DocumentVersion> storedVersions =
-        versions.selectList(
+        documentVersionMapper.selectList(
             new LambdaQueryWrapper<DocumentVersion>()
                 .eq(DocumentVersion::getDocumentId, documentId));
     tx.executeWithoutResult(
         status -> {
-          documents.update(
+          documentMapper.update(
               new LambdaUpdateWrapper<Document>()
                   .eq(Document::getId, documentId)
                   .set(Document::getActiveVersionId, null));
-          chunks.delete(
+          documentChunkMapper.delete(
               new LambdaQueryWrapper<DocumentChunk>().eq(DocumentChunk::getDocumentId, documentId));
-          versions.delete(
+          documentVersionMapper.delete(
               new LambdaQueryWrapper<DocumentVersion>()
                   .eq(DocumentVersion::getDocumentId, documentId));
-          documents.deleteById(documentId);
+          documentMapper.deleteById(documentId);
         });
     storedVersions.forEach(version -> removeStoredFile(version.getStorageKey()));
   }
@@ -591,9 +591,11 @@ public class DocumentService {
     long rowOffset = offset(page, pageSize);
     if (document.getActiveVersionId() == null) return PageResponse.empty(page, pageSize);
     String query = normalizeQuery(rawQuery);
-    long total = chunks.selectCount(chunkQuery(documentId, document.getActiveVersionId(), query));
+    long total =
+        documentChunkMapper.selectCount(
+            chunkQuery(documentId, document.getActiveVersionId(), query));
     List<DocumentChunkResponse> items =
-        chunks
+        documentChunkMapper
             .selectList(
                 chunkQuery(documentId, document.getActiveVersionId(), query)
                     .orderByAsc(DocumentChunk::getChunkIndex)
@@ -616,7 +618,7 @@ public class DocumentService {
   public DocumentChunkDetailResponse chunk(
       UUID ownerId, UUID knowledgeBaseId, UUID documentId, UUID chunkId) {
     Document document = requireDocument(ownerId, knowledgeBaseId, documentId);
-    DocumentChunk chunk = chunks.selectById(chunkId);
+    DocumentChunk chunk = documentChunkMapper.selectById(chunkId);
     if (chunk == null
         || !chunk.getDocumentId().equals(documentId)
         || !Objects.equals(chunk.getVersionId(), document.getActiveVersionId()))
@@ -648,7 +650,7 @@ public class DocumentService {
   public OriginalFile originalFile(
       UUID ownerId, UUID knowledgeBaseId, UUID documentId, UUID versionId) {
     Document document = requireDocument(ownerId, knowledgeBaseId, documentId);
-    DocumentVersion version = versions.selectById(versionId);
+    DocumentVersion version = documentVersionMapper.selectById(versionId);
     if (version == null
         || !version.getDocumentId().equals(document.getId())
         || !version.getKnowledgeBaseId().equals(knowledgeBaseId))
@@ -671,7 +673,7 @@ public class DocumentService {
     long chunkCount =
         document.getActiveVersionId() == null
             ? 0
-            : chunks.selectCount(
+            : documentChunkMapper.selectCount(
                 new LambdaQueryWrapper<DocumentChunk>()
                     .eq(DocumentChunk::getVersionId, document.getActiveVersionId()));
     return new DocumentResponse(
@@ -739,7 +741,7 @@ public class DocumentService {
 
   private DocumentVersion latestVersion(UUID documentId) {
     DocumentVersion version =
-        versions.selectOne(
+        documentVersionMapper.selectOne(
             new LambdaQueryWrapper<DocumentVersion>()
                 .eq(DocumentVersion::getDocumentId, documentId)
                 .orderByDesc(DocumentVersion::getCreatedAt)
@@ -758,8 +760,8 @@ public class DocumentService {
    * @return 文档实体
    */
   private Document requireDocument(UUID ownerId, UUID knowledgeBaseId, UUID documentId) {
-    knowledgeBases.requireEntity(ownerId, knowledgeBaseId);
-    Document document = documents.selectById(documentId);
+    knowledgeBaseService.requireEntity(ownerId, knowledgeBaseId);
+    Document document = documentMapper.selectById(documentId);
     if (document == null || !document.getKnowledgeBaseId().equals(knowledgeBaseId))
       throw new ApiException("DOCUMENT_NOT_FOUND", "文档不存在", HttpStatus.NOT_FOUND);
     return document;

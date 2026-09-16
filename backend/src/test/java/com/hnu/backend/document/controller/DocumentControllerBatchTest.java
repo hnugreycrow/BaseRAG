@@ -27,9 +27,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class DocumentControllerBatchTest {
-  private final DocumentService documents = mock(DocumentService.class);
-  private final CurrentUserService currentUsers = mock(CurrentUserService.class);
-  private final KnowledgeBaseService knowledgeBases = mock(KnowledgeBaseService.class);
+  private final DocumentService documentService = mock(DocumentService.class);
+  private final CurrentUserService currentUserService = mock(CurrentUserService.class);
+  private final KnowledgeBaseService knowledgeBaseService = mock(KnowledgeBaseService.class);
   private final UUID ownerId = UUID.randomUUID();
   private final UUID knowledgeBaseId = UUID.randomUUID();
   private MockMvc mvc;
@@ -39,13 +39,13 @@ class DocumentControllerBatchTest {
     User user = new User();
     // 操作者与知识库创建者不同，异步任务仍须使用创建者标识。
     user.setId(UUID.randomUUID());
-    when(currentUsers.requireAdmin()).thenReturn(user);
+    when(currentUserService.requireAdmin()).thenReturn(user);
     KnowledgeBase managed = new KnowledgeBase();
     managed.setOwnerId(ownerId);
-    when(knowledgeBases.requireAdminOwned(knowledgeBaseId)).thenReturn(managed);
+    when(knowledgeBaseService.requireAdminOwned(knowledgeBaseId)).thenReturn(managed);
     mvc =
         MockMvcBuilders.standaloneSetup(
-                new DocumentController(documents, currentUsers, knowledgeBases))
+                new DocumentController(documentService, currentUserService, knowledgeBaseService))
             .setControllerAdvice(new ApiResponseAdvice(), new GlobalExceptionHandler())
             .build();
   }
@@ -55,7 +55,7 @@ class DocumentControllerBatchTest {
     var first = file("first.md");
     var second = file("second.markdown");
     UUID documentId = UUID.randomUUID();
-    when(documents.uploadBatch(eq(ownerId), eq(knowledgeBaseId), anyList()))
+    when(documentService.uploadBatch(eq(ownerId), eq(knowledgeBaseId), anyList()))
         .thenReturn(
             new DocumentBatchUploadResponse(
                 List.of(
@@ -72,7 +72,7 @@ class DocumentControllerBatchTest {
         .andExpect(jsonPath("$.data.results[0].documentId").value(documentId.toString()))
         .andExpect(jsonPath("$.data.results[1].errorCode").value("INVALID_FILE"));
 
-    verify(documents)
+    verify(documentService)
         .uploadBatch(
             eq(ownerId),
             eq(knowledgeBaseId),
@@ -86,7 +86,7 @@ class DocumentControllerBatchTest {
   @Test
   void queuesChunksUnderLibraryCreatorAcrossAdministrators() throws Exception {
     UUID documentId = UUID.randomUUID();
-    when(documents.enqueueBatch(ownerId, knowledgeBaseId, List.of(documentId), true))
+    when(documentService.enqueueBatch(ownerId, knowledgeBaseId, List.of(documentId), true))
         .thenReturn(new DocumentChunkBatchResponse(List.of(documentId), List.of()));
 
     mvc.perform(
@@ -95,7 +95,7 @@ class DocumentControllerBatchTest {
                 .content("{\"documentIds\":[\"" + documentId + "\"]}"))
         .andExpect(status().isAccepted())
         .andExpect(jsonPath("$.data.acceptedDocumentIds[0]").value(documentId.toString()));
-    verify(documents).enqueueBatch(ownerId, knowledgeBaseId, List.of(documentId), true);
+    verify(documentService).enqueueBatch(ownerId, knowledgeBaseId, List.of(documentId), true);
   }
 
   @Test
@@ -104,7 +104,7 @@ class DocumentControllerBatchTest {
             multipart("/api/knowledge-bases/{knowledgeBaseId}/documents/batch", knowledgeBaseId))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
-    verifyNoInteractions(documents);
+    verifyNoInteractions(documentService);
   }
 
   private MockMultipartFile file(String name) {
