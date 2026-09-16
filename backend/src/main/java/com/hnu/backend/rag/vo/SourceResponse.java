@@ -1,33 +1,56 @@
 package com.hnu.backend.rag.vo;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
- * 回答所引用的检索来源。
+ * 一次回答中按文档版本聚合的来源快照。
  *
- * @param citationId 回答中使用的引用标识
- * @param knowledgeBaseId 知识库标识
- * @param knowledgeBaseName 知识库名称
- * @param chunkId 文档分块标识
- * @param documentId 文档标识
- * @param versionId 文档版本标识
- * @param documentName 文档名称
- * @param heading 分块所属标题
- * @param lineStart 原文起始行号
- * @param lineEnd 原文结束行号
- * @param similarity 检索相似度
- * @param content 分块正文
+ * @param schemaVersion 来源结构版本；历史分块来源读取后为 1
+ * @param citationId 本轮回答使用的稳定 S 编号
+ * @param knowledgeBaseId 来源知识库
+ * @param knowledgeBaseName 知识库显示名
+ * @param documentId 来源文档
+ * @param versionId 来源文档版本
+ * @param documentName 文档显示名
+ * @param format 当前来源格式
+ * @param content 入选分块按原文顺序拼接后的正文
+ * @param primaryLocation 最高排名分块的原文位置
+ * @param locations 全部入选分块的原文位置
  */
 public record SourceResponse(
+    int schemaVersion,
     String citationId,
     UUID knowledgeBaseId,
     String knowledgeBaseName,
-    UUID chunkId,
     UUID documentId,
     UUID versionId,
     String documentName,
-    String heading,
-    int lineStart,
-    int lineEnd,
-    double similarity,
-    String content) {}
+    String format,
+    String content,
+    Location primaryLocation,
+    List<Location> locations) {
+  /** 冻结位置列表，保证模型证据与持久化快照使用同一映射。 */
+  public SourceResponse {
+    locations = List.copyOf(locations);
+  }
+
+  /**
+   * 来源分块与原文位置的关联。
+   *
+   * @param chunkId 持久化分块标识
+   * @param heading 分块所属标题
+   * @param range 原文通用位置
+   */
+  public record Location(UUID chunkId, String heading, Range range) {}
+
+  /**
+   * 当前 Markdown 来源中的行范围。
+   *
+   * @param unit 位置单位，当前固定为 LINE
+   * @param start 起始行
+   * @param end 结束行
+   * @param label 面向用户的显示文字
+   */
+  public record Range(String unit, int start, int end, String label) {}
+}

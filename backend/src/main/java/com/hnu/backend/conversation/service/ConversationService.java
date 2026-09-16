@@ -24,6 +24,7 @@ import com.hnu.backend.rag.prompt.PromptAssemblyStage;
 import com.hnu.backend.rag.rerank.RerankStage;
 import com.hnu.backend.rag.vo.ModelInfoResponse;
 import com.hnu.backend.rag.vo.SourceResponse;
+import com.hnu.backend.rag.vo.SourceSnapshotDecoder;
 import com.hnu.backend.shared.error.ApiException;
 import com.hnu.backend.shared.web.RequestTiming;
 import jakarta.annotation.PostConstruct;
@@ -684,8 +685,9 @@ public class ConversationService {
               prepared.routingPlan(),
               execution,
               reranked.selectedCandidates());
-      promptSpan.success(prompt.sources().size() + prompt.toolReferenceIds().size());
-      active.trace.evidenceCount(prompt.sources().size());
+      promptSpan.success(reranked.selectedCandidates().size() + prompt.toolReferenceIds().size());
+      // sources 为文档数；evidence_count 仍是进入 Prompt 的原始证据分块数。
+      active.trace.evidenceCount(reranked.selectedCandidates().size());
       messages.prepare(
           active.ownerId,
           active.assistant.getId(),
@@ -780,6 +782,23 @@ public class ConversationService {
      */
     private ConversationAnswerObserver(ActiveGeneration active) {
       this.active = active;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public void normalizedAnswer(String content) {
+      ensureNotCancelled(active);
+      // 一次性替换已流出的正文，并同步检查点，保证断线读取与最终消息内容一致。
+      active.buffer.setLength(0);
+      active.buffer.append(content);
+      messages.checkpoint(active.ownerId, active.assistant.getId(), content);
+      active.lastCheckpointLength = content.length() + active.reasoningBuffer.length();
+      active.lastCheckpointAt = System.currentTimeMillis();
+      send(active.emitter, "reset", event("reason", "CITATION_NORMALIZED"));
+      if (!active.reasoningBuffer.isEmpty()) {
+        send(active.emitter, "reasoning_delta", event("text", active.reasoningBuffer.toString()));
+      }
+      send(active.emitter, "delta", event("text", content));
     }
 
     /** {@inheritDoc} */
@@ -1233,7 +1252,7 @@ public class ConversationService {
    * @return 前端回答版本
    */
   private ConversationResponses.AssistantMessage assistantResponse(Message message) {
-    List<SourceResponse> sources = readArray(message.getSourcesJson(), SourceResponse[].class);
+    List<SourceResponse> sources = new SourceSnapshotDecoder().decode(message.getSourcesJson());
     List<String> citations = readArray(message.getCitationsJson(), String[].class);
     ModelInfoResponse modelInfo =
         message.getModelInfoJson() == null

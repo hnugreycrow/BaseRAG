@@ -66,7 +66,7 @@ class PromptAssemblyStageTest {
     assertTrue(prompt.userPrompt().contains(injection));
     int memoryIndex = prompt.userPrompt().indexOf("\"conversationMemory\"");
     int planIndex = prompt.userPrompt().indexOf("\"questionPlan\"");
-    int evidenceIndex = prompt.userPrompt().indexOf("\"knowledgeEvidence\"");
+    int evidenceIndex = prompt.userPrompt().indexOf("<knowledgeEvidence>");
     int toolsIndex = prompt.userPrompt().indexOf("\"toolObservations\"");
     int targetIndex = prompt.userPrompt().indexOf("\"answerTarget\"");
     assertTrue(
@@ -76,12 +76,16 @@ class PromptAssemblyStageTest {
             && toolsIndex < targetIndex);
     assertEquals(
         "用户原始问题",
-        json.readTree(prompt.userPrompt())
+        json.readTree(afterEvidence(prompt.userPrompt()))
             .path("answerTarget")
             .path("originalQuestion")
             .asString());
     assertEquals(
         List.of("S1"), prompt.sources().stream().map(source -> source.citationId()).toList());
+    assertTrue(prompt.userPrompt().contains("<content ref=\"S1\">\n证据正文："));
+    assertFalse(prompt.userPrompt().contains(evidence.documentId().toString()));
+    assertFalse(prompt.userPrompt().contains(evidence.chunkId().toString()));
+    assertFalse(prompt.userPrompt().contains("文档.md"));
     assertTrue(prompt.shouldGenerate());
   }
 
@@ -103,7 +107,7 @@ class PromptAssemblyStageTest {
 
     AssembledPrompt prompt =
         stage.assemblePipeline(memory, "按最新偏好说明制度修订", plan, routing, execution, List.of());
-    var loaded = json.readTree(prompt.userPrompt()).path("conversationMemory");
+    var loaded = json.readTree(beforeEvidence(prompt.userPrompt())).path("conversationMemory");
 
     assertEquals(1, loaded.path("unsummarizedTurns").size());
     assertEquals(
@@ -135,7 +139,7 @@ class PromptAssemblyStageTest {
     AssembledPrompt prompt =
         stage.assemblePipeline(emptyMemory(), "查询外部状态", plan, routing, execution, List.of());
 
-    var tools = json.readTree(prompt.userPrompt()).path("toolObservations");
+    var tools = json.readTree(afterEvidence(prompt.userPrompt())).path("toolObservations");
     assertEquals(List.of("T1", "T2"), prompt.toolReferenceIds());
     assertEquals("T1", tools.path(0).path("referenceId").asString());
     assertEquals("结果一", tools.path(0).path("content").asString());
@@ -205,14 +209,26 @@ class PromptAssemblyStageTest {
     assertTrue(QueryPlanningPrompts.system().contains("# 输出格式"));
     assertTrue(IntentRoutingPrompts.system().contains("KNOWLEDGE_RETRIEVAL"));
     assertTrue(AnswerPrompts.knowledge().contains("knowledgeEvidence"));
+    assertTrue(AnswerPrompts.knowledge().contains("同一份文档支持"));
+    assertTrue(AnswerPrompts.knowledge().contains("每个知识库事实都必须能明确归属"));
     assertTrue(AnswerPrompts.systemChat().contains("# 回答规则"));
     assertTrue(AnswerPrompts.citationRepair().contains("# 引用修复"));
+    assertTrue(AnswerPrompts.citationRepair().contains("按组引用一次"));
     assertThrows(
         IllegalStateException.class, () -> PromptResourceLoader.load("prompts/does-not-exist.md"));
   }
 
   private RagMemory emptyMemory() {
     return new RagMemory("{}", 0, List.of(), List.of(), 0);
+  }
+
+  private String beforeEvidence(String prompt) {
+    return prompt.substring(0, prompt.indexOf("\n<knowledgeEvidence>"));
+  }
+
+  private String afterEvidence(String prompt) {
+    return prompt.substring(
+        prompt.indexOf("</knowledgeEvidence>\n") + "</knowledgeEvidence>\n".length());
   }
 
   private IntentRoute knowledge(String id) {

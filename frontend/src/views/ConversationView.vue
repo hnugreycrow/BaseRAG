@@ -793,13 +793,13 @@ onBeforeUnmount(() => {
                     <el-icon><CopyDocument /></el-icon>
                   </button>
                   <button
-                    v-if="currentAssistant(turn)?.sources.length"
+                    v-if="currentAssistant(turn)?.citations.length"
                     type="button"
                     class="source-button"
                     @click="openSources(currentAssistant(turn)!)"
                   >
                     <el-icon><Document /></el-icon>
-                    {{ currentAssistant(turn)?.sources.length }} 个来源
+                    {{ currentAssistant(turn)?.citations.length }} 个来源
                   </button>
                   <button
                     v-if="['FAILED', 'CANCELLED'].includes(currentAssistant(turn)?.status || '')"

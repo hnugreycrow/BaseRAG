@@ -15,18 +15,23 @@ export interface ModelInfo {
 }
 
 export interface AnswerSource {
+  schemaVersion: number
   citationId: string
   knowledgeBaseId: string
   knowledgeBaseName: string
-  chunkId: string
   documentId: string
   versionId: string
   documentName: string
-  heading: string | null
-  lineStart: number
-  lineEnd: number
-  similarity: number
+  format: 'MARKDOWN'
   content: string
+  primaryLocation: AnswerSourceLocation
+  locations: AnswerSourceLocation[]
+}
+
+export interface AnswerSourceLocation {
+  chunkId: string
+  heading: string | null
+  range: { unit: 'LINE'; start: number; end: number; label: string }
 }
 
 export type AssistantStatus = 'PENDING' | 'STREAMING' | 'COMPLETED' | 'FAILED' | 'CANCELLED'

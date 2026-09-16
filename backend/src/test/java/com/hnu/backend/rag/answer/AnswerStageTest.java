@@ -58,7 +58,8 @@ class AnswerStageTest {
 
     AnswerResult result = stage.execute(prompt, observer, control);
 
-    assertEquals(generation.content(), result.content());
+    assertEquals("答案，根据工具 T1。 [S1]", result.content());
+    verify(observer).normalizedAnswer(result.content());
     assertEquals(List.of("S1"), result.citations());
     assertEquals(List.of("T1"), result.toolReferences());
     assertEquals(prompt.sources(), result.sources());
@@ -86,7 +87,7 @@ class AnswerStageTest {
 
     AnswerResult result = stage.execute(prompt, observer, control);
 
-    assertEquals("答案 [S1]，工具 T1。", result.content());
+    assertEquals("答案，工具 T1。 [S1]", result.content());
     verify(observer).invalidReferences("INVALID_CITATIONS", true);
     verify(observer, never()).invalidReferences("INVALID_CITATIONS", false);
     ArgumentCaptor<String> system = ArgumentCaptor.forClass(String.class);

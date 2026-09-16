@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 /** 负责阶段七最终回答生成、引用白名单校验、单次修复和取消传播。 */
 @Component
 public class AnswerStage {
-  private static final String INSUFFICIENT_EVIDENCE = "现有资料不足以回答这个问题。请先导入包含相关内容的 Markdown 文档。";
+  private static final String INSUFFICIENT_EVIDENCE = "现有资料不足以回答这个问题。请先导入包含相关内容的文档。";
   private static final String INVALID_CITATIONS = "INVALID_CITATIONS";
 
   private final AnswerGenerator generator;
@@ -89,8 +89,11 @@ public class AnswerStage {
       }
     }
     control.throwIfCancelled();
+    String normalized = Citations.normalize(generation.content());
+    if (!normalized.equals(generation.content())) observer.normalizedAnswer(normalized);
+    control.throwIfCancelled();
     return new AnswerResult(
-        generation.content(),
+        normalized,
         prompt.sources(),
         references.citations(),
         references.toolReferences(),
@@ -149,6 +152,9 @@ public class AnswerStage {
 
   /** 在模型流事件之外接收引用校验失败通知。 */
   public interface Observer extends AnswerGenerator.StreamObserver {
+    /** 回答引用位置改变时通知流式调用方重置并发送规范化后的完整正文。 */
+    default void normalizedAnswer(String content) {}
+
     /** 通知调用方本轮没有证据且未调用最终回答模型。 */
     default void generationSkipped(String reasonCode) {}
 

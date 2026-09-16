@@ -156,19 +156,32 @@ public class PromptAssemblyStage {
       PackedTools tools,
       String originalQuestion,
       boolean shouldGenerate) {
+    LinkedHashMap<String, Object> preface = new LinkedHashMap<>();
+    preface.put("conversationMemory", memory);
+    preface.put("questionPlan", questionPlan);
     LinkedHashMap<String, Object> input = new LinkedHashMap<>();
-    input.put("conversationMemory", memory);
-    input.put("questionPlan", questionPlan);
-    input.put("knowledgeEvidence", sources);
+    // 来源 DTO 仅供 API/审计使用；模型只接收编号与正文，不接收内部 ID 或检索分数。
+    String evidence =
+        sources.stream()
+            .map(
+                source ->
+                    "<content ref=\""
+                        + source.citationId()
+                        + "\">\n"
+                        + source.content()
+                        + "\n</content>")
+            .collect(Collectors.joining("\n\n"));
     input.put("toolObservations", tools.observations());
-    // 原问题固定置于序列化消息末尾，帮助模型在读完长证据后重新聚焦回答目标。
+    // 原问题固定置于消息末尾，帮助模型在读完长证据后重新聚焦回答目标。
     input.put("answerTarget", Map.of("originalQuestion", originalQuestion));
+    String userPrompt =
+        json.writeValueAsString(preface)
+            + "\n<knowledgeEvidence>\n"
+            + evidence
+            + "\n</knowledgeEvidence>\n"
+            + json.writeValueAsString(input);
     return new AssembledPrompt(
-        systemPrompt,
-        json.writeValueAsString(input),
-        sources,
-        tools.referenceIds(),
-        shouldGenerate);
+        systemPrompt, userPrompt, sources, tools.referenceIds(), shouldGenerate);
   }
 
   /**

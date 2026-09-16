@@ -56,6 +56,9 @@ describe('conversation thinking stream', () => {
       onEvent({ type: 'reset', data: { schemaVersion: 1, reason: 'INVALID_CITATIONS' } })
       onEvent({ type: 'reasoning_delta', data: { schemaVersion: 1, text: '新思考' } })
       onEvent({ type: 'delta', data: { schemaVersion: 1, text: '新回答' } })
+      onEvent({ type: 'reset', data: { schemaVersion: 1, reason: 'CITATION_NORMALIZED' } })
+      onEvent({ type: 'reasoning_delta', data: { schemaVersion: 1, text: '新思考' } })
+      onEvent({ type: 'delta', data: { schemaVersion: 1, text: '规范化回答 [S1]' } })
       onEvent({
         type: 'complete',
         data: { schemaVersion: 1, assistantMessage: { ...assistant, status: 'COMPLETED' } },
@@ -64,7 +67,7 @@ describe('conversation thinking stream', () => {
 
     const store = useConversationGenerationStore()
     await store.startAsk('conversation', user, assistant, user.content)
-    expect(store.taskFor('conversation')?.assistant.content).toBe('新回答')
+    expect(store.taskFor('conversation')?.assistant.content).toBe('规范化回答 [S1]')
     expect(store.taskFor('conversation')?.assistant.reasoningContent).toBe('新思考')
     expect(store.taskFor('conversation')?.phase).toBe('completed')
   })

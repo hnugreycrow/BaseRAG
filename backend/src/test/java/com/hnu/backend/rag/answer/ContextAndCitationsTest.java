@@ -34,6 +34,56 @@ public class ContextAndCitationsTest {
     assertEquals(first.getContent(), context.sources().getFirst().content());
     assertTrue(context.text().contains(first.getContent()));
     assertTrue(context.text().contains(second.getContent()));
+    assertTrue(context.text().contains("<content ref=\"S1\">"));
+    assertFalse(context.text().contains(first.getDocumentName()));
+  }
+
+  @Test
+  void groupsSelectedChunksAfterTopKAndKeepsPrimaryRankAndDocumentOrder() {
+    var first = hit("后段");
+    first.setChunkIndex(3);
+    var other = hit("其他文档");
+    var earlier = hit("前段");
+    earlier.setDocumentId(first.getDocumentId());
+    earlier.setVersionId(first.getVersionId());
+    earlier.setChunkIndex(1);
+    var adjacent = hit("相邻");
+    adjacent.setDocumentId(first.getDocumentId());
+    adjacent.setVersionId(first.getVersionId());
+    adjacent.setChunkIndex(2);
+    var context =
+        new ContextBuilder(new RagProperties())
+            .build(List.of(first, other, earlier, adjacent, first));
+    assertEquals(List.of("S1", "S2"), context.sources().stream().map(s -> s.citationId()).toList());
+    var source = context.sources().getFirst();
+    assertEquals(2, source.schemaVersion());
+    assertEquals(first.getChunkId(), source.primaryLocation().chunkId());
+    assertEquals(
+        List.of(earlier.getChunkId(), adjacent.getChunkId(), first.getChunkId()),
+        source.locations().stream().map(s -> s.chunkId()).toList());
+    assertEquals("前段\n相邻\n后段", source.content());
+    assertEquals("LINE", source.locations().getFirst().range().unit());
+    assertEquals("MARKDOWN", source.format());
+    assertEquals(other.getDocumentId(), context.sources().get(1).documentId());
+
+    adjacent.setChunkIndex(7);
+    assertEquals(
+        "前段\n\n—— 中间内容省略 ——\n\n后段\n\n—— 中间内容省略 ——\n\n相邻",
+        new ContextBuilder(new RagProperties())
+            .build(List.of(first, earlier, adjacent))
+            .sources()
+            .getFirst()
+            .content());
+  }
+
+  @Test
+  void keepsDifferentVersionsIndependent() {
+    var first = hit("旧");
+    var next = hit("新");
+    next.setDocumentId(first.getDocumentId());
+    var sources = new ContextBuilder(new RagProperties()).build(List.of(first, next)).sources();
+    assertEquals(2, sources.size());
+    assertEquals(List.of("S1", "S2"), sources.stream().map(s -> s.citationId()).toList());
   }
 
   @Test
@@ -65,5 +115,19 @@ public class ContextAndCitationsTest {
     assertEquals(
         List.of(),
         Citations.validate("T1 加权并不是工具引用。", context.sources(), List.of()).toolReferences());
+  }
+
+  @Test
+  void normalizesParagraphsAndListItemsButLeavesFencedCodeAndToolsAlone() {
+    var answer =
+        "事实 [S1] 和补充 [S1][S2]。\n\n- 第一项 [S1]\n  续行 [S1] 工具 T1。\n- 第二项 [S2]\n\n```md\n[S99] 工具 T99\n```";
+    var context = new ContextBuilder(new RagProperties()).build(List.of(hit("甲"), hit("乙")));
+    assertEquals(
+        List.of("S1", "S2"),
+        Citations.validate(answer, context.sources(), List.of("T1")).citations());
+    assertEquals(
+        "事实  和补充。 [S1][S2]\n\n- 第一项\n  续行  工具 T1。 [S1]\n- 第二项 [S2]\n\n```md\n[S99] 工具 T99\n```",
+        Citations.normalize(answer));
+    assertEquals(Citations.normalize(answer), Citations.normalize(Citations.normalize(answer)));
   }
 }
