@@ -5,7 +5,6 @@ import {
   CopyDocument,
   Document,
   Menu as MenuIcon,
-  Plus,
   Position,
   RefreshRight,
   VideoPause,
@@ -64,6 +63,13 @@ let skipRouteLoadId: string | null = null
 const currentConversationId = computed(() => {
   const value = route.params.conversationId
   return typeof value === 'string' ? value : ''
+})
+
+const conversationTitle = computed(() => {
+  const id = currentConversationId.value
+  if (!id) return '新对话'
+  if (conversation.value?.id === id) return conversation.value.title
+  return conversations.value.find((item) => item.id === id)?.title ?? '加载中…'
 })
 
 const isEmpty = computed(() => !detailLoading.value && !conversation.value?.turns.length)
@@ -560,20 +566,21 @@ onBeforeUnmount(() => {
       class="navigation-drawer"
       aria-label="导航"
     >
-      <AppSidebar @navigate="mobileSidebarOpen = false">
+      <AppSidebar mode="chat" @navigate="mobileSidebarOpen = false">
         <ConversationHistory
           v-model:query="searchQuery"
           :groups="groupedConversations"
           :current-id="currentConversationId"
           :loading="listLoading"
           @new="startNewConversation"
+          @manage="mobileSidebarOpen = false"
           @open="openConversation"
           @rename="editConversation"
           @remove="removeConversation"
         />
       </AppSidebar>
     </el-drawer>
-    <AppSidebar class="chat-sidebar" :collapsed="compactSidebar">
+    <AppSidebar class="chat-sidebar" mode="chat" :collapsed="compactSidebar">
       <ConversationHistory
         v-model:query="searchQuery"
         :groups="groupedConversations"
@@ -596,8 +603,7 @@ onBeforeUnmount(() => {
         >
           <el-icon><MenuIcon /></el-icon>
         </button>
-        <span>知识问答</span>
-        <el-button :icon="Plus" @click="startNewConversation">新对话</el-button>
+        <span class="chat-title" :title="conversationTitle">{{ conversationTitle }}</span>
       </header>
       <div ref="messageViewport" class="message-viewport">
         <div v-if="detailLoading" class="loading-state" aria-label="正在加载会话">

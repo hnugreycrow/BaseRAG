@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChatDotRound, Delete, EditPen, Plus, Search } from '@element-plus/icons-vue'
+import { ChatDotRound, Delete, EditPen, HomeFilled, Plus, Search } from '@element-plus/icons-vue'
 import type { ConversationSummary } from '../../api'
 import { useConversationGenerationStore } from '../../store'
 defineProps<{
@@ -10,6 +10,7 @@ defineProps<{
 const query = defineModel<string>('query', { required: true })
 const emit = defineEmits<{
   new: []
+  manage: []
   open: [id: string]
   rename: [item: ConversationSummary]
   remove: [item: ConversationSummary]
@@ -30,6 +31,11 @@ function taskStatusLabel(conversationId: string) {
     <el-icon><Plus /></el-icon>
     新对话
   </button>
+
+  <RouterLink class="management-link" to="/admin" @click="emit('manage')">
+    <el-icon><HomeFilled /></el-icon>
+    管理后台
+  </RouterLink>
 
   <label class="search-box">
     <el-icon><Search /></el-icon>
@@ -96,6 +102,23 @@ function taskStatusLabel(conversationId: string) {
   background: var(--color-primary-soft);
   border-radius: 8px;
   font-size: 13px;
+}
+.management-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 38px;
+  margin-top: 8px;
+  border-radius: 8px;
+  color: #637086;
+  font-size: 13px;
+}
+.management-link:hover,
+.management-link:focus-visible {
+  color: var(--color-primary);
+  background: #f0f3f8;
 }
 .search-box {
   display: flex;

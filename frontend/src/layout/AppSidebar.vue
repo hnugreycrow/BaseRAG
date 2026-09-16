@@ -4,7 +4,9 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '../store'
 import AccountMenu from '../components/auth/AccountMenu.vue'
-defineProps<{ collapsed?: boolean }>()
+withDefaults(defineProps<{ collapsed?: boolean; mode?: 'chat' | 'admin' }>(), {
+  mode: 'admin',
+})
 const emit = defineEmits<{ navigate: [] }>()
 const route = useRoute()
 const auth = useAuthStore()
@@ -21,13 +23,17 @@ const menuItems = computed(() => [
 ])
 </script>
 <template>
-  <aside class="sidebar" :class="{ 'is-collapsed': collapsed }" aria-label="主导航">
+  <aside
+    class="sidebar"
+    :class="{ 'is-collapsed': collapsed, 'is-chat': mode === 'chat' }"
+    aria-label="主导航"
+  >
     <RouterLink class="brand" to="/chat" aria-label="BaseRAG 首页" @click="emit('navigate')">
       <span class="brand-mark"
         ><el-icon><Collection /></el-icon></span
       ><strong v-if="!collapsed">BaseRAG</strong>
     </RouterLink>
-    <nav class="workspace-nav">
+    <nav v-if="mode === 'admin'" class="workspace-nav">
       <RouterLink
         v-for="item in menuItems"
         :key="item.path"
@@ -114,6 +120,11 @@ const menuItems = computed(() => [
   margin-top: 20px;
   padding-top: 12px;
   border-top: 1px solid var(--color-line);
+}
+.is-chat .sidebar-content {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
 }
 .sidebar-account {
   margin-top: auto;

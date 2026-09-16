@@ -560,8 +560,12 @@
   font-size: 14px;
   color: #637086;
 }
-.chat-topbar > span {
+.chat-title {
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .history-toggle {
   display: none;
