@@ -164,3 +164,41 @@ button {
     animation-iteration-count: 1 !important;
   }
 }
+
+/* Keep app scroll areas visually consistent across the chat, sidebar, and dialogs. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #b8c3d5 transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: #b8c3d5;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: #8d9db6;
+}
+
+*::-webkit-scrollbar-thumb:active {
+  background-color: #6e83a5;
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-button {
+  display: none;
+}
