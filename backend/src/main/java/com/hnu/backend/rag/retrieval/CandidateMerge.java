@@ -85,7 +85,10 @@ public class CandidateMerge {
           representative.lineEnd(),
           new ArrayList<>(sources),
           new ArrayList<>(attributions),
-          score);
+          score,
+          // 候选合并后保留代表分块的来源元数据。
+          representative.format(),
+          representative.sourceUnit());
     }
   }
 }

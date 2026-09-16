@@ -332,7 +332,10 @@ public class RetrievalService {
                 hit.getLineStart(),
                 hit.getLineEnd())),
         List.of(attribution),
-        attribution.fusionContribution());
+        attribution.fusionContribution(),
+        // 历史检索结果缺少新字段时按 Markdown 行号兼容。
+        hit.getFormat() == null ? "MARKDOWN" : hit.getFormat(),
+        hit.getSourceUnit() == null ? "LINE" : hit.getSourceUnit());
   }
 
   private SearchHit toSearchHit(EvidenceCandidate candidate) {
@@ -348,6 +351,8 @@ public class RetrievalService {
     hit.setHeading(candidate.heading());
     hit.setLineStart(candidate.lineStart());
     hit.setLineEnd(candidate.lineEnd());
+    hit.setFormat(candidate.format());
+    hit.setSourceUnit(candidate.sourceUnit());
     hit.setSimilarity(
         candidate.attributions().stream()
             .mapToDouble(RetrievalAttribution::rawSimilarity)

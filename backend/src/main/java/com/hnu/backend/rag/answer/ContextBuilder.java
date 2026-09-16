@@ -38,7 +38,9 @@ public class ContextBuilder {
                         hit.getHeading(),
                         hit.getLineStart(),
                         hit.getLineEnd(),
-                        hit.getContent()))
+                        hit.getContent(),
+                        hit.getFormat(),
+                        hit.getSourceUnit()))
             .toList());
   }
 
@@ -59,7 +61,9 @@ public class ContextBuilder {
                         candidate.heading(),
                         candidate.lineStart(),
                         candidate.lineEnd(),
-                        candidate.content()))
+                        candidate.content(),
+                        candidate.format(),
+                        candidate.sourceUnit()))
             .toList());
   }
 
@@ -103,7 +107,7 @@ public class ContextBuilder {
               primary.documentId(),
               primary.versionId(),
               primary.documentName(),
-              "MARKDOWN",
+              primary.format() == null ? "MARKDOWN" : primary.format(),
               content.toString(),
               location(primary),
               locations));
@@ -114,15 +118,21 @@ public class ContextBuilder {
     return new Context(evidence.toString(), List.copyOf(sources));
   }
 
-  /** 将当前 Markdown 行号转换为通用位置，未来格式可扩展 unit。 */
+  /** 将各格式的原文位置转换为统一来源范围。 */
   private SourceResponse.Location location(Fragment fragment) {
     int start = fragment.lineStart();
     int end = fragment.lineEnd();
-    String label = start == end ? "第 " + start + " 行" : "第 " + start + "–" + end + " 行";
+    // 迁移前的 Markdown 证据没有来源单位，沿用行号解释。
+    String unit = fragment.sourceUnit() == null ? "LINE" : fragment.sourceUnit();
+    String noun =
+        switch (unit) {
+          case "PAGE" -> "页";
+          case "PARAGRAPH" -> "段";
+          default -> "行";
+        };
+    String label = start == end ? "第 " + start + " " + noun : "第 " + start + "–" + end + " " + noun;
     return new SourceResponse.Location(
-        fragment.chunkId(),
-        fragment.heading(),
-        new SourceResponse.Range("LINE", start, end, label));
+        fragment.chunkId(), fragment.heading(), new SourceResponse.Range(unit, start, end, label));
   }
 
   private record DocumentKey(UUID documentId, UUID versionId) {}
@@ -138,5 +148,7 @@ public class ContextBuilder {
       String heading,
       int lineStart,
       int lineEnd,
-      String content) {}
+      String content,
+      String format,
+      String sourceUnit) {}
 }

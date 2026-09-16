@@ -33,11 +33,17 @@ public class SearchHit {
   /** 分块所属标题。 */
   private String heading;
 
-  /** 原文起始行号。 */
+  /** 来源起始位置；按 sourceUnit 解释，旧字段名沿用检索映射。 */
   private int lineStart;
 
-  /** 原文结束行号。 */
+  /** 来源结束位置；按 sourceUnit 解释，旧字段名沿用检索映射。 */
   private int lineEnd;
+
+  /** 来源文档的解析格式，用于引用展示和后续跳转。 */
+  private String format;
+
+  /** 来源位置单位：行、页或段落。 */
+  private String sourceUnit;
 
   /** 查询向量与分块向量的相似度。 */
   private double similarity;

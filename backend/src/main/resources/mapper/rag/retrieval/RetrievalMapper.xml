@@ -44,8 +44,10 @@
                c.chunk_index,
                c.content,
                c.heading,
-               c.line_start,
-               c.line_end,
+               v.format,
+               c.source_unit,
+               c.source_start AS line_start,
+               c.source_end AS line_end,
                1 - (c.embedding <=> CAST(#{vector} AS vector)) AS similarity
         FROM document_chunks c
         JOIN documents d ON d.id = c.document_id
@@ -74,8 +76,10 @@
                c.chunk_index,
                c.content,
                c.heading,
-               c.line_start,
-               c.line_end,
+               v.format,
+               c.source_unit,
+               c.source_start AS line_start,
+               c.source_end AS line_end,
                1 - (c.embedding <=> CAST(#{vector} AS vector)) AS similarity
         FROM document_chunks c
         JOIN documents d ON d.id = c.document_id
@@ -110,8 +114,10 @@
                c.chunk_index,
                c.content,
                c.heading,
-               c.line_start,
-               c.line_end,
+               v.format,
+               c.source_unit,
+               c.source_start AS line_start,
+               c.source_end AS line_end,
                1 - (c.embedding <=> CAST(#{vector} AS vector)) AS similarity
         FROM document_chunks c
         JOIN documents d ON d.id = c.document_id

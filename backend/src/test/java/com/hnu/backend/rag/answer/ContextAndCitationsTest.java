@@ -77,6 +77,27 @@ public class ContextAndCitationsTest {
   }
 
   @Test
+  void preservesPdfAndDocxSourceUnitsInAnswerSnapshots() {
+    var pdf = hit("PDF evidence");
+    pdf.setFormat("PDF");
+    pdf.setSourceUnit("PAGE");
+    pdf.setLineStart(3);
+    pdf.setLineEnd(4);
+    var docx = hit("DOCX evidence");
+    docx.setFormat("DOCX");
+    docx.setSourceUnit("PARAGRAPH");
+    docx.setLineStart(7);
+    docx.setLineEnd(7);
+    var sources = new ContextBuilder(new RagProperties()).build(List.of(pdf, docx)).sources();
+    assertEquals("PDF", sources.get(0).format());
+    assertEquals("PAGE", sources.get(0).primaryLocation().range().unit());
+    assertEquals("第 3–4 页", sources.get(0).primaryLocation().range().label());
+    assertEquals("DOCX", sources.get(1).format());
+    assertEquals("PARAGRAPH", sources.get(1).primaryLocation().range().unit());
+    assertEquals("第 7 段", sources.get(1).primaryLocation().range().label());
+  }
+
+  @Test
   void keepsDifferentVersionsIndependent() {
     var first = hit("旧");
     var next = hit("新");

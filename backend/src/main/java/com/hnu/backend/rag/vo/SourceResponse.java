@@ -45,11 +45,11 @@ public record SourceResponse(
   public record Location(UUID chunkId, String heading, Range range) {}
 
   /**
-   * 当前 Markdown 来源中的行范围。
+   * 各格式来源中的通用位置范围。
    *
-   * @param unit 位置单位，当前固定为 LINE
-   * @param start 起始行
-   * @param end 结束行
+   * @param unit 位置单位：LINE、PAGE 或 PARAGRAPH
+   * @param start 起始位置
+   * @param end 结束位置
    * @param label 面向用户的显示文字
    */
   public record Range(String unit, int start, int end, String label) {}
