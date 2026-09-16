@@ -25,11 +25,12 @@ watch(
   (open) => {
     if (open) name.value = props.currentName
   },
+  { immediate: true },
 )
 
 function submit() {
   const nextName = name.value.trim()
-  if (!nextName || nextName === props.currentName) return
+  if (props.loading || !nextName || nextName === props.currentName) return
   emit('submit', nextName)
 }
 </script>
@@ -38,13 +39,7 @@ function submit() {
   <el-dialog v-model="visible" :title="title" width="min(440px, calc(100vw - 28px))" align-center>
     <el-form label-position="top" @submit.prevent="submit">
       <el-form-item label="名称" required>
-        <el-input
-          v-model="name"
-          :maxlength="maxLength"
-          show-word-limit
-          autofocus
-          @keyup.enter="submit"
-        />
+        <el-input v-model="name" :maxlength="maxLength" show-word-limit autofocus />
       </el-form-item>
     </el-form>
     <template #footer>
