@@ -27,6 +27,15 @@ public class DocumentVersion {
   /** 原始文件在对象存储中的键。 */
   private String storageKey;
 
+  /** 解析格式，用于按版本选择对应解析器。 */
+  private String format;
+
+  /** 原文件的实际 MIME 类型，用于对象写入和下载响应。 */
+  private String mediaType;
+
+  /** 原文件字节数，供下载和预览界面展示。 */
+  private Long fileSizeBytes;
+
   /** 导入处理状态。 */
   private String status;
 

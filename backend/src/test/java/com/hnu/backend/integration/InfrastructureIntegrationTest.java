@@ -29,14 +29,23 @@ import com.hnu.backend.observability.entity.RagRun;
 import com.hnu.backend.observability.entity.RagStageRun;
 import com.hnu.backend.observability.mapper.RagRunMapper;
 import com.hnu.backend.observability.mapper.RagStageRunMapper;
+import com.hnu.backend.rag.answer.ContextBuilder;
 import com.hnu.backend.rag.retrieval.EmbeddingBinding;
 import com.hnu.backend.rag.retrieval.RetrievalMapper;
 import com.hnu.backend.shared.error.ApiException;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.*;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.font.PDType1Font;
+import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
+import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -394,6 +403,122 @@ class InfrastructureIntegrationTest {
     assertTrue(policy.getEmbeddingText().contains("报销"));
     assertEquals(1, policy.getLineStart());
     assertEquals(8, policy.getLineEnd());
+    assertEquals("LINE", policy.getSourceUnit());
+    assertEquals(1, policy.getSourceStart());
+    assertEquals(8, policy.getSourceEnd());
+  }
+
+  @Test
+  void importsPdfAndDocxWithRealStorageAndGenericSources() throws IOException {
+    UUID owner = ownerId();
+    UUID kb = kb(owner);
+    byte[] pdfBytes;
+    try (PDDocument pdf = new PDDocument();
+        ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+      PDPage page = new PDPage();
+      pdf.addPage(page);
+      try (PDPageContentStream content = new PDPageContentStream(pdf, page)) {
+        content.beginText();
+        content.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 12);
+        content.showText("PDF policy");
+        content.endText();
+      }
+      pdf.save(output);
+      pdfBytes = output.toByteArray();
+    }
+    byte[] docxBytes;
+    try (XWPFDocument docx = new XWPFDocument();
+        ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+      docx.createParagraph().createRun().setText("中文 DOCX 规定");
+      docx.write(output);
+      docxBytes = output.toByteArray();
+    }
+    var pdf =
+        documents.upload(
+            owner,
+            kb,
+            new MockMultipartFile("file", "policy.pdf", "application/octet-stream", pdfBytes));
+    var docx =
+        documents.upload(
+            owner,
+            kb,
+            new MockMultipartFile("file", "policy.docx", "application/octet-stream", docxBytes));
+    assertEquals("READY", documents.createChunks(owner, kb, pdf.documentId()).status());
+    assertEquals("READY", documents.createChunks(owner, kb, docx.documentId()).status());
+    var pdfVersion =
+        versionMapper.selectById(documentMapper.selectById(pdf.documentId()).getActiveVersionId());
+    var docxVersion =
+        versionMapper.selectById(documentMapper.selectById(docx.documentId()).getActiveVersionId());
+    assertEquals("PDF", pdfVersion.getFormat());
+    assertEquals("DOCX", docxVersion.getFormat());
+    var storageConfig = config.getStorage();
+    try (S3Client s3 =
+        S3Client.builder()
+            .endpointOverride(URI.create(storageConfig.getEndpoint()))
+            .region(Region.US_EAST_1)
+            .forcePathStyle(true)
+            .credentialsProvider(
+                StaticCredentialsProvider.create(
+                    AwsBasicCredentials.create(
+                        storageConfig.getAccessKey(), storageConfig.getSecretKey())))
+            .build()) {
+      assertEquals(
+          "application/pdf",
+          s3.headObject(b -> b.bucket(storageConfig.getBucket()).key(pdfVersion.getStorageKey()))
+              .contentType());
+      assertEquals(
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          s3.headObject(b -> b.bucket(storageConfig.getBucket()).key(docxVersion.getStorageKey()))
+              .contentType());
+    }
+    assertArrayEquals(
+        pdfBytes, documents.originalFile(owner, kb, pdf.documentId(), pdfVersion.getId()).bytes());
+    assertArrayEquals(
+        docxBytes,
+        documents.originalFile(owner, kb, docx.documentId(), docxVersion.getId()).bytes());
+    UUID foreignOwner = createUser();
+    assertEquals(
+        org.springframework.http.HttpStatus.NOT_FOUND,
+        assertThrows(
+                ApiException.class,
+                () ->
+                    documents.originalFile(foreignOwner, kb, pdf.documentId(), pdfVersion.getId()))
+            .status());
+    var pdfChunk =
+        chunkMapper
+            .selectList(
+                new LambdaQueryWrapper<DocumentChunk>()
+                    .eq(DocumentChunk::getDocumentId, pdf.documentId()))
+            .getFirst();
+    var docxChunk =
+        chunkMapper
+            .selectList(
+                new LambdaQueryWrapper<DocumentChunk>()
+                    .eq(DocumentChunk::getDocumentId, docx.documentId()))
+            .getFirst();
+    assertEquals("PAGE", pdfChunk.getSourceUnit());
+    assertEquals(1, pdfChunk.getSourceStart());
+    assertNull(pdfChunk.getLineStart());
+    assertEquals("PARAGRAPH", docxChunk.getSourceUnit());
+    assertEquals(1, docxChunk.getSourceStart());
+    assertNull(docxChunk.getLineStart());
+    var hits =
+        retrievalMapper.search(
+            owner, kb, "[1,0]", "qwen-emb-8b", "siliconflow", "Qwen/Qwen3-Embedding-8B", 2, 10);
+    assertEquals(2, hits.size());
+    var sources = new ContextBuilder(config).build(hits).sources();
+    assertTrue(
+        sources.stream()
+            .anyMatch(
+                source ->
+                    source.format().equals("PDF")
+                        && source.primaryLocation().range().unit().equals("PAGE")));
+    assertTrue(
+        sources.stream()
+            .anyMatch(
+                source ->
+                    source.format().equals("DOCX")
+                        && source.primaryLocation().range().unit().equals("PARAGRAPH")));
   }
 
   @Test

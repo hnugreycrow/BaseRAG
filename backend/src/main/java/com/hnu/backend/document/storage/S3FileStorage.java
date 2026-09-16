@@ -13,6 +13,7 @@ import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
 
+/** 通过 S3 兼容接口在 RustFS 中保存文档原文件。 */
 @Component
 public class S3FileStorage implements FileStorage {
   private final RagProperties config;
@@ -59,15 +60,13 @@ public class S3FileStorage implements FileStorage {
     return client;
   }
 
+  /** 按服务端确认的 MIME 类型写入原文件，以便后续正确读取或预览。 */
   @Override
-  public void put(String key, byte[] content) {
+  public void put(String key, byte[] content, String mediaType) {
     try {
       readyClient()
           .putObject(
-              b ->
-                  b.bucket(config.getStorage().getBucket())
-                      .key(key)
-                      .contentType("text/markdown; charset=utf-8"),
+              b -> b.bucket(config.getStorage().getBucket()).key(key).contentType(mediaType),
               RequestBody.fromBytes(content));
     } catch (ApiException e) {
       throw e;

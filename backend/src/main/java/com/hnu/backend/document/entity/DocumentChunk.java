@@ -32,14 +32,23 @@ public class DocumentChunk {
   /** 入库时用于向量化的文本，可包含原文之外的章节上下文。 */
   private String embeddingText;
 
-  /** 分块所属的 Markdown 标题路径。 */
+  /** 分块所属的标题路径。 */
   private String heading;
 
-  /** 分块在原文中的起始行号。 */
+  /** 旧版 Markdown 行号字段；PDF 和 DOCX 分块为空。 */
   private Integer lineStart;
 
-  /** 分块在原文中的结束行号。 */
+  /** 旧版 Markdown 结束行号字段；PDF 和 DOCX 分块为空。 */
   private Integer lineEnd;
+
+  /** 来源位置单位：行、页或段落。 */
+  private String sourceUnit;
+
+  /** 分块在原文件中的起始位置，按来源单位计数。 */
+  private Integer sourceStart;
+
+  /** 分块在原文件中的结束位置，按来源单位计数。 */
+  private Integer sourceEnd;
 
   /** 向量维度，用于确保查询向量与存储向量兼容。 */
   private Integer embeddingDimensions;

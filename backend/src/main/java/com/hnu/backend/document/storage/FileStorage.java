@@ -7,8 +7,9 @@ public interface FileStorage {
    *
    * @param key 存储对象键
    * @param content 文件二进制内容
+   * @param mediaType 文件的实际 MIME 类型
    */
-  void put(String key, byte[] content);
+  void put(String key, byte[] content, String mediaType);
 
   /**
    * 读取文件内容。

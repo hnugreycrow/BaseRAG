@@ -15,10 +15,16 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.context.annotation.Profile;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,6 +32,7 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
@@ -53,18 +60,87 @@ public class DocumentController {
     this.currentUsers = currentUsers;
   }
 
-  /** 上传 Markdown 原文件；分块和向量化由独立接口显式触发。 */
+  /** 上传原文件；分块和向量化由独立接口显式触发。 */
   @PostMapping
   public DocumentImportResponse upload(
       @PathVariable UUID knowledgeBaseId, @RequestPart("file") MultipartFile file) {
     return documents.upload(currentUsers.require().getId(), knowledgeBaseId, file);
   }
 
-  /** 批量上传 Markdown 原文件，每个文件独立返回处理结果。 */
+  /** 批量上传原文件，每个文件独立返回处理结果。 */
   @PostMapping("/batch")
   public DocumentBatchUploadResponse uploadBatch(
       @PathVariable UUID knowledgeBaseId, @RequestPart("files") List<MultipartFile> files) {
     return documents.uploadBatch(currentUsers.require().getId(), knowledgeBaseId, files);
+  }
+
+  /**
+   * 按版本返回原文件；PDF 支持浏览器使用单段 HTTP Range 请求预览。
+   *
+   * @param knowledgeBaseId 知识库标识
+   * @param documentId 文档标识
+   * @param versionId 原文件版本标识
+   * @param range 可选的单段字节范围请求头
+   * @return 原文件内容，范围有效时返回部分内容
+   */
+  @GetMapping("/{documentId}/versions/{versionId}/content")
+  public ResponseEntity<byte[]> content(
+      @PathVariable UUID knowledgeBaseId,
+      @PathVariable UUID documentId,
+      @PathVariable UUID versionId,
+      @RequestHeader(value = HttpHeaders.RANGE, required = false) String range) {
+    var file =
+        documents.originalFile(
+            currentUsers.require().getId(), knowledgeBaseId, documentId, versionId);
+    byte[] bytes = file.bytes();
+    boolean pdf = "application/pdf".equals(file.mediaType());
+    var disposition = pdf ? ContentDisposition.inline() : ContentDisposition.attachment();
+    var response =
+        ResponseEntity.ok()
+            .contentType(MediaType.parseMediaType(file.mediaType()))
+            .header(
+                HttpHeaders.CONTENT_DISPOSITION,
+                disposition.filename(file.name(), StandardCharsets.UTF_8).build().toString())
+            .header(HttpHeaders.ACCEPT_RANGES, "bytes");
+    if (range == null) return response.contentLength(bytes.length).body(bytes);
+    // 仅 PDF 支持单段范围；无效范围统一返回 416 和文件总长度。
+    if (!pdf || !range.startsWith("bytes=") || range.indexOf(',') >= 0)
+      return ResponseEntity.status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+          .header(HttpHeaders.CONTENT_RANGE, "bytes */" + bytes.length)
+          .build();
+    try {
+      String spec = range.substring(6);
+      int separator = spec.indexOf('-');
+      if (separator < 0 || spec.indexOf('-', separator + 1) >= 0) throw new NumberFormatException();
+      String first = spec.substring(0, separator);
+      String last = spec.substring(separator + 1);
+      long start;
+      long end;
+      if (first.isEmpty()) {
+        long suffix = Long.parseLong(last);
+        if (suffix <= 0) throw new NumberFormatException();
+        start = Math.max(0, bytes.length - suffix);
+        end = bytes.length - 1L;
+      } else {
+        start = Long.parseLong(first);
+        end = last.isEmpty() ? bytes.length - 1L : Long.parseLong(last);
+      }
+      if (start < 0 || start >= bytes.length || end < start) throw new NumberFormatException();
+      end = Math.min(end, bytes.length - 1L);
+      return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
+          .contentType(MediaType.APPLICATION_PDF)
+          .header(
+              HttpHeaders.CONTENT_DISPOSITION,
+              disposition.filename(file.name(), StandardCharsets.UTF_8).build().toString())
+          .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+          .header(HttpHeaders.CONTENT_RANGE, "bytes " + start + "-" + end + "/" + bytes.length)
+          .contentLength(end - start + 1)
+          .body(Arrays.copyOfRange(bytes, (int) start, (int) end + 1));
+    } catch (NumberFormatException e) {
+      return ResponseEntity.status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+          .header(HttpHeaders.CONTENT_RANGE, "bytes */" + bytes.length)
+          .build();
+    }
   }
 
   /** 分页查询知识库中的文档及其最新处理状态。 */

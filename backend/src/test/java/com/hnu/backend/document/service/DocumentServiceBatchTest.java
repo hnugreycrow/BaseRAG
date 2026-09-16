@@ -106,7 +106,7 @@ class DocumentServiceBatchTest {
       assertEquals(created.get(i).getId(), result.results().get(i).documentId());
       assertEquals("UPLOADED", savedVersions.get(i).getStatus());
     }
-    verify(storage, times(10)).put(any(), any());
+    verify(storage, times(10)).put(any(), any(), any());
   }
 
   @Test
@@ -144,6 +144,21 @@ class DocumentServiceBatchTest {
     assertEquals("FILE_TOO_LARGE", result.results().getFirst().errorCode());
     assertEquals("UPLOADED", result.results().get(1).status());
     verify(documents).insert(any(Document.class));
+  }
+
+  @Test
+  void pdfAndDocxAboveTwentyMebibytesFailBeforeSaving() {
+    var pdf =
+        new MockMultipartFile(
+            "files", "huge.pdf", "application/pdf", new byte[20 * 1024 * 1024 + 1]);
+    var docx =
+        new MockMultipartFile(
+            "files", "huge.docx", "application/octet-stream", new byte[20 * 1024 * 1024 + 1]);
+    var result = service.uploadBatch(ownerId, knowledgeBaseId, List.of(pdf, docx));
+    assertEquals(
+        List.of("FILE_TOO_LARGE", "FILE_TOO_LARGE"),
+        result.results().stream().map(item -> item.errorCode()).toList());
+    verifyNoInteractions(documents, versions, storage);
   }
 
   @Test

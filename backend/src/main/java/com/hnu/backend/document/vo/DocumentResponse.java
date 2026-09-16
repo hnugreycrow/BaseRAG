@@ -12,6 +12,10 @@ import java.util.UUID;
  * @param errorCode 处理失败时的错误码
  * @param chunkCount 当前有效版本的分块数量
  * @param createdAt 创建时间
+ * @param format 原文件格式
+ * @param mediaType 原文件 MIME 类型
+ * @param fileSizeBytes 原文件大小，单位为字节
+ * @param previewAvailable 原文件是否支持在线预览
  */
 public record DocumentResponse(
     UUID id,
@@ -19,4 +23,8 @@ public record DocumentResponse(
     String status,
     String errorCode,
     long chunkCount,
-    OffsetDateTime createdAt) {}
+    OffsetDateTime createdAt,
+    String format,
+    String mediaType,
+    long fileSizeBytes,
+    boolean previewAvailable) {}

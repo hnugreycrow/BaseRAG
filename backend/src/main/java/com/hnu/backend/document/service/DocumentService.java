@@ -8,7 +8,10 @@ import com.hnu.backend.document.entity.DocumentVersion;
 import com.hnu.backend.document.mapper.DocumentChunkMapper;
 import com.hnu.backend.document.mapper.DocumentMapper;
 import com.hnu.backend.document.mapper.DocumentVersionMapper;
+import com.hnu.backend.document.parser.DocumentFormat;
+import com.hnu.backend.document.parser.DocumentParserRegistry;
 import com.hnu.backend.document.parser.MarkdownChunker;
+import com.hnu.backend.document.parser.StructuredChunkPacker;
 import com.hnu.backend.document.storage.FileStorage;
 import com.hnu.backend.document.vo.DocumentBatchUploadResponse;
 import com.hnu.backend.document.vo.DocumentChunkBatchResponse;
@@ -21,16 +24,12 @@ import com.hnu.backend.model.client.EmbeddingClient;
 import com.hnu.backend.shared.error.ApiException;
 import com.hnu.backend.shared.web.PageResponse;
 import jakarta.annotation.PreDestroy;
-import java.nio.ByteBuffer;
-import java.nio.charset.CodingErrorAction;
-import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -49,7 +48,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
-/** 处理 Markdown 文档的上传、分块、向量化及版本数据维护。 */
+/** 处理多格式文档的上传、分块、向量化及版本数据维护。 */
 @Service
 public class DocumentService {
   private static final Logger log = LoggerFactory.getLogger(DocumentService.class);
@@ -58,6 +57,10 @@ public class DocumentService {
   private final DocumentVersionMapper versions;
   private final DocumentChunkMapper chunks;
   private final MarkdownChunker chunker;
+
+  /** 按版本格式选择解析器，并在上传时验证原文件内容。 */
+  private final DocumentParserRegistry parsers;
+
   private final EmbeddingClient embedding;
   private final FileStorage storage;
   private final TransactionTemplate tx;
@@ -80,7 +83,7 @@ public class DocumentService {
    * @param documents 文档持久化接口
    * @param versions 文档版本持久化接口
    * @param chunks 文档分块持久化接口
-   * @param chunker Markdown 分块器
+   * @param chunker Markdown 解析和通用结构块打包入口
    * @param embedding 向量模型客户端
    * @param storage 对象存储接口
    * @param tx 事务模板
@@ -99,13 +102,14 @@ public class DocumentService {
     this.versions = versions;
     this.chunks = chunks;
     this.chunker = chunker;
+    this.parsers = new DocumentParserRegistry(chunker);
     this.embedding = embedding;
     this.storage = storage;
     this.tx = tx;
   }
 
   /**
-   * 校验并保存 Markdown 原文件，同时创建待处理的文档版本。
+   * 校验并保存受支持格式的原文件，同时创建待处理的文档版本。
    *
    * <p>该方法不执行耗时的分块与向量化；若数据库写入失败，会补偿删除已上传的对象。
    *
@@ -119,23 +123,23 @@ public class DocumentService {
     String name = Optional.ofNullable(file.getOriginalFilename()).orElse("");
     name = name.replace('\\', '/');
     name = name.substring(name.lastIndexOf('/') + 1);
-    if (name.isBlank()
-        || name.length() > 255
-        || name.chars().anyMatch(Character::isISOControl)
-        || !(name.toLowerCase(Locale.ROOT).endsWith(".md")
-            || name.toLowerCase(Locale.ROOT).endsWith(".markdown"))) {
-      throw ApiException.bad("INVALID_FILE", "请上传文件名不超过 255 字符的 Markdown 文件");
-    }
+    if (name.isBlank() || name.length() > 255 || name.chars().anyMatch(Character::isISOControl))
+      throw ApiException.bad("INVALID_FILE", "文件名不能超过 255 字符");
+    DocumentFormat format = DocumentFormat.fromName(name);
     if (file.isEmpty()) throw ApiException.bad("EMPTY_DOCUMENT", "文档不能为空");
-    if (file.getSize() > 5L * 1024 * 1024)
-      throw new ApiException("FILE_TOO_LARGE", "文件不能超过 5 MiB", HttpStatus.PAYLOAD_TOO_LARGE);
+    // Markdown 限 5 MiB；PDF 和 DOCX 限 20 MiB，读取前后均检查大小。
+    long limit = (format == DocumentFormat.MARKDOWN ? 5L : 20L) * 1024 * 1024;
+    if (file.getSize() > limit)
+      throw new ApiException("FILE_TOO_LARGE", "文件超过格式大小限制", HttpStatus.PAYLOAD_TOO_LARGE);
     byte[] bytes;
     try {
       bytes = file.getBytes();
     } catch (java.io.IOException e) {
-      throw ApiException.bad("INVALID_UTF8", "无法读取文件，请使用 UTF-8 编码");
+      throw ApiException.bad("INVALID_FILE", "无法读取上传文件");
     }
-    decode(bytes);
+    if (bytes.length > limit)
+      throw new ApiException("FILE_TOO_LARGE", "文件超过格式大小限制", HttpStatus.PAYLOAD_TOO_LARGE);
+    parsers.verify(name, bytes);
 
     Document document = new Document();
     document.setId(UUID.randomUUID());
@@ -155,17 +159,20 @@ public class DocumentService {
             + document.getId()
             + "/"
             + version.getId()
-            + ".md");
+            + format.extension());
+    version.setFormat(format.name());
+    version.setMediaType(format.mediaType());
+    version.setFileSizeBytes((long) bytes.length);
     version.setStatus("UPLOADED");
-    version.setParserVersion("markdown-v1");
-    version.setChunkerVersion("markdown-block-v4");
+    version.setParserVersion(format.parserVersion());
+    version.setChunkerVersion("structured-block-v6");
     version.setEmbeddingModelId(knowledgeBase.getEmbeddingModelId());
     version.setEmbeddingProvider(knowledgeBase.getEmbeddingProvider());
     version.setEmbeddingModel(knowledgeBase.getEmbeddingModel());
     version.setEmbeddingDimensions(knowledgeBase.getEmbeddingDimensions());
 
     try {
-      storage.put(version.getStorageKey(), bytes);
+      storage.put(version.getStorageKey(), bytes, version.getMediaType());
       tx.executeWithoutResult(
           status -> {
             knowledgeBases.lockAndBindModel(
@@ -396,8 +403,13 @@ public class DocumentService {
     version.setStatus("PROCESSING");
     version.setErrorCode(null);
     try {
-      String text = decode(storage.get(version.getStorageKey()));
-      List<MarkdownChunker.Piece> pieces = chunker.split(text);
+      // 迁移前的版本没有格式字段，按原有 Markdown 格式处理。
+      DocumentFormat format =
+          DocumentFormat.valueOf(version.getFormat() == null ? "MARKDOWN" : version.getFormat());
+      byte[] original = storage.get(version.getStorageKey());
+      // 解析器只负责结构和来源；所有格式共用同一分块预算与策略。
+      List<StructuredChunkPacker.Chunk> pieces =
+          chunker.pack(parsers.parser(format).parse(original));
       if (pieces.isEmpty()) throw ApiException.bad("EMPTY_DOCUMENT", "文档没有可用文本");
       if (pieces.size() > 1000)
         throw ApiException.bad("TOO_MANY_CHUNKS", "单份文档最多处理 1000 个片段，请拆分文档");
@@ -412,7 +424,7 @@ public class DocumentService {
               version.getEmbeddingProvider(),
               version.getEmbeddingModel(),
               version.getEmbeddingDimensions(),
-              pieces.stream().map(MarkdownChunker.Piece::embeddingText).toList());
+              pieces.stream().map(StructuredChunkPacker.Chunk::embeddingText).toList());
       tx.executeWithoutResult(
           status -> {
             // 新分块和激活版本在同一事务内切换，查询端不会观察到半成品版本。
@@ -436,8 +448,14 @@ public class DocumentService {
               chunk.setContent(piece.content());
               chunk.setEmbeddingText(piece.embeddingText());
               chunk.setHeading(piece.heading());
-              chunk.setLineStart(piece.lineStart());
-              chunk.setLineEnd(piece.lineEnd());
+              chunk.setSourceUnit(piece.source().unit().name());
+              chunk.setSourceStart(piece.source().start());
+              chunk.setSourceEnd(piece.source().end());
+              if (piece.source().unit()
+                  == com.hnu.backend.document.parser.StructuredBlock.SourceSpan.Unit.LINE) {
+                chunk.setLineStart(piece.source().start());
+                chunk.setLineEnd(piece.source().end());
+              }
               chunk.setEmbeddingDimensions(version.getEmbeddingDimensions());
               chunk.setVector(EmbeddingClient.literal(vectors.get(i)));
               chunks.insertVector(chunk);
@@ -612,8 +630,41 @@ public class DocumentService {
         chunk.getLineStart(),
         chunk.getLineEnd(),
         chunk.getContent().length(),
-        chunk.getContent());
+        chunk.getContent(),
+        chunk.getSourceUnit(),
+        chunk.getSourceStart(),
+        chunk.getSourceEnd());
   }
+
+  /**
+   * 读取指定版本原文件，并严格校验用户、知识库和文档归属。
+   *
+   * @param ownerId 所属用户标识
+   * @param knowledgeBaseId 知识库标识
+   * @param documentId 文档标识
+   * @param versionId 原文件版本标识
+   * @return 带文件名和 MIME 类型的原文件内容
+   */
+  public OriginalFile originalFile(
+      UUID ownerId, UUID knowledgeBaseId, UUID documentId, UUID versionId) {
+    Document document = requireDocument(ownerId, knowledgeBaseId, documentId);
+    DocumentVersion version = versions.selectById(versionId);
+    if (version == null
+        || !version.getDocumentId().equals(document.getId())
+        || !version.getKnowledgeBaseId().equals(knowledgeBaseId))
+      throw new ApiException("DOCUMENT_VERSION_NOT_FOUND", "文档版本不存在", HttpStatus.NOT_FOUND);
+    return new OriginalFile(
+        document.getName(), version.getMediaType(), storage.get(version.getStorageKey()));
+  }
+
+  /**
+   * 已验证归属的原文件。
+   *
+   * @param name 下载时使用的文件名
+   * @param mediaType 文件的实际 MIME 类型
+   * @param bytes 文件字节内容
+   */
+  public record OriginalFile(String name, String mediaType, byte[] bytes) {}
 
   private DocumentResponse toDocumentResponse(Document document) {
     DocumentVersion version = latestVersion(document.getId());
@@ -629,7 +680,11 @@ public class DocumentService {
         version.getStatus(),
         version.getErrorCode(),
         chunkCount,
-        document.getCreatedAt());
+        document.getCreatedAt(),
+        version.getFormat(),
+        version.getMediaType(),
+        version.getFileSizeBytes() == null ? 0 : version.getFileSizeBytes(),
+        true);
   }
 
   private DocumentChunkResponse toChunkResponse(DocumentChunk chunk) {
@@ -642,7 +697,10 @@ public class DocumentService {
         chunk.getLineStart(),
         chunk.getLineEnd(),
         content.length(),
-        preview);
+        preview,
+        chunk.getSourceUnit(),
+        chunk.getSourceStart(),
+        chunk.getSourceEnd());
   }
 
   private LambdaQueryWrapper<Document> documentQuery(UUID knowledgeBaseId, String query) {
@@ -689,26 +747,6 @@ public class DocumentService {
     if (version == null)
       throw new ApiException("DOCUMENT_VERSION_NOT_FOUND", "文档版本不存在", HttpStatus.NOT_FOUND);
     return version;
-  }
-
-  /** 严格按 UTF-8 解码并拒绝空文本、非法字节和二进制空字符。 */
-  private String decode(byte[] bytes) {
-    String text;
-    try {
-      text =
-          StandardCharsets.UTF_8
-              .newDecoder()
-              .onMalformedInput(CodingErrorAction.REPORT)
-              .onUnmappableCharacter(CodingErrorAction.REPORT)
-              .decode(ByteBuffer.wrap(bytes))
-              .toString();
-    } catch (java.nio.charset.CharacterCodingException e) {
-      throw ApiException.bad("INVALID_UTF8", "无法读取文件，请使用 UTF-8 编码");
-    }
-    if (text.startsWith("\uFEFF")) text = text.substring(1);
-    if (text.indexOf('\0') >= 0) throw ApiException.bad("INVALID_FILE", "Markdown 不能包含二进制空字符");
-    if (text.isBlank()) throw ApiException.bad("EMPTY_DOCUMENT", "文档没有可用文本");
-    return text;
   }
 
   /**

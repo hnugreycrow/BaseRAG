@@ -72,6 +72,41 @@ public class MarkdownChunker {
    * @return 按原文顺序排列的非空片段
    */
   public List<Piece> split(String markdown) {
+    List<Piece> result = new ArrayList<>();
+    for (StructuredChunkPacker.Chunk chunk : packer.pack(parse(markdown))) {
+      result.add(
+          new Piece(
+              chunk.content(),
+              chunk.embeddingText(),
+              chunk.heading(),
+              chunk.source().start(),
+              chunk.source().end()));
+    }
+    return result;
+  }
+
+  /** 返回结构块允许的最大字符数，供其他格式解析器限制单块大小。 */
+  public int maxSize() {
+    return maxSize;
+  }
+
+  /**
+   * 使用统一策略打包各格式的结构块。
+   *
+   * @param blocks 按原文顺序排列的结构块
+   * @return 带来源位置的分块
+   */
+  public List<StructuredChunkPacker.Chunk> pack(List<StructuredBlock> blocks) {
+    return packer.pack(blocks);
+  }
+
+  /**
+   * 解析 Markdown 结构并保留标题路径、字符偏移和原文行号。
+   *
+   * @param markdown Markdown 原文
+   * @return 按原文顺序排列的结构块
+   */
+  public List<StructuredBlock> parse(String markdown) {
     String text = markdown.replace("\r\n", "\n").replace('\r', '\n');
     String[] lines = text.split("\n", -1);
     int[] offsets = new int[lines.length];
@@ -157,17 +192,7 @@ public class MarkdownChunker {
               block.piece));
     }
 
-    List<Piece> result = new ArrayList<>();
-    for (StructuredChunkPacker.Chunk chunk : packer.pack(structured)) {
-      result.add(
-          new Piece(
-              chunk.content(),
-              chunk.embeddingText(),
-              chunk.heading(),
-              chunk.source().start(),
-              chunk.source().end()));
-    }
-    return result;
+    return structured;
   }
 
   private static List<Block> structure(List<Block> blocks, String[] lines, int[] offsets) {
