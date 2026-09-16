@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
+import { sourceLabel } from './sourceLabel'
+
 import type { DocumentChunk, DocumentChunkDetail } from '../../api'
 
 const props = defineProps<{
@@ -30,7 +32,7 @@ const visible = computed({
     </template>
 
     <div v-if="chunk" class="chunk-meta">
-      <span>原文 L{{ chunk.lineStart }}–{{ chunk.lineEnd }}</span>
+      <span>原文 {{ sourceLabel(chunk) }}</span>
       <i></i>
       <span>{{ chunk.characterCount }} 字符</span>
     </div>

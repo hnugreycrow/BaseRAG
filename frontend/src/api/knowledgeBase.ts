@@ -31,14 +31,29 @@ export interface KnowledgeDocument {
   errorCode: string | null
   chunkCount: number
   createdAt: string
+  /** 版本原文件的实际格式。 */
+  format?: 'MARKDOWN' | 'PDF' | 'DOCX'
+  /** 原文件 MIME 类型。 */
+  mediaType?: string
+  /** 原文件大小，单位为字节。 */
+  fileSizeBytes?: number
+  /** 是否可在浏览器中预览原文件。 */
+  previewAvailable?: boolean
 }
 
 export interface DocumentChunk {
   id: string
   chunkIndex: number
   heading: string | null
-  lineStart: number
-  lineEnd: number
+  /** 历史 Markdown 行号字段；PDF 和 DOCX 可为空。 */
+  lineStart: number | null
+  lineEnd: number | null
+  /** 来源位置单位：行、页或段落。 */
+  sourceUnit?: 'LINE' | 'PAGE' | 'PARAGRAPH'
+  /** 原文件中的起始位置。 */
+  sourceStart?: number
+  /** 原文件中的结束位置。 */
+  sourceEnd?: number
   characterCount: number
   preview: string
 }

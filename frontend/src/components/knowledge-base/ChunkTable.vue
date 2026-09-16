@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { View } from '@element-plus/icons-vue'
 
+import { sourceLabel } from './sourceLabel'
+
 import type { DocumentChunk } from '../../api'
 
 defineProps<{
@@ -37,8 +39,8 @@ const emit = defineEmits<{
           <span class="preview">{{ row.preview }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="原文行" width="130">
-        <template #default="{ row }">L{{ row.lineStart }}–{{ row.lineEnd }}</template>
+      <el-table-column label="原文位置" width="130">
+        <template #default="{ row }">{{ sourceLabel(row) }}</template>
       </el-table-column>
       <el-table-column label="字符数" width="110">
         <template #default="{ row }">{{ row.characterCount }}</template>
@@ -63,7 +65,7 @@ const emit = defineEmits<{
         </button>
       </h3>
       <p>{{ row.preview }}</p>
-      <p>第 {{ row.lineStart }}–{{ row.lineEnd }} 行 · {{ row.characterCount }} 字符</p>
+      <p>{{ sourceLabel(row) }} · {{ row.characterCount }} 字符</p>
       <el-button text @click="emit('open', row)">查看分块</el-button>
     </article>
     <el-empty

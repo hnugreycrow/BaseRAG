@@ -60,14 +60,16 @@ function handleChange(file: UploadFile, files: UploadFiles) {
   const raw = file.raw
   fileError.value = ''
   if (!raw) return
-  if (!/\.(md|markdown)$/i.test(raw.name)) {
+  if (!/\.(md|markdown|pdf|docx)$/i.test(raw.name)) {
     fileList.value = files.filter((item) => item.uid !== file.uid)
-    fileError.value = '请选择 .md 或 .markdown 格式的 Markdown 文件'
+    fileError.value = '请选择 .md、.markdown、.pdf 或 .docx 文件'
     return
   }
-  if (raw.size > 5 * 1024 * 1024) {
+  // 上传前提示格式对应的单文件大小上限；服务端会再次校验。
+  const limit = /\.(md|markdown)$/i.test(raw.name) ? 5 : 20
+  if (raw.size > limit * 1024 * 1024) {
     fileList.value = files.filter((item) => item.uid !== file.uid)
-    fileError.value = '单个文件不能超过 5 MiB'
+    fileError.value = '单个文件不能超过 ' + limit + ' MiB'
     return
   }
   fileList.value = files
@@ -98,7 +100,7 @@ function submit() {
       v-model:file-list="fileList"
       drag
       action="#"
-      accept=".md,.markdown,text/markdown"
+      accept=".md,.markdown,.pdf,.docx"
       multiple
       :auto-upload="false"
       :disabled="loading"
@@ -108,7 +110,7 @@ function submit() {
     >
       <el-icon class="upload-icon"><UploadFilled /></el-icon>
       <p class="upload-title">拖入文件，或点击选择</p>
-      <p class="upload-help">支持最多 10 个 Markdown 文件，单个最大 5 MiB</p>
+      <p class="upload-help">最多 10 个文件；Markdown 最大 5 MiB，文本型 PDF 和 DOCX 最大 20 MiB</p>
     </el-upload>
     <p v-if="fileError" class="file-error">{{ fileError }}</p>
     <ul v-if="failures.length" class="upload-failures">
