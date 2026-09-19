@@ -36,6 +36,7 @@ public class RagTraceManager {
    * @param conversationId 会话标识
    * @param userMessageId 用户消息标识
    * @param assistantMessageId 回答版本标识
+   * @param question 经过规范化和长度校验的原始问题
    * @param timing HTTP 请求起始信息
    * @return 需要显式传入异步阶段的内存 Trace
    */
@@ -44,6 +45,7 @@ public class RagTraceManager {
       UUID conversationId,
       UUID userMessageId,
       UUID assistantMessageId,
+      String question,
       RequestTiming timing) {
     UUID id = UUID.randomUUID();
     RagRun run = new RagRun();
@@ -53,6 +55,7 @@ public class RagTraceManager {
     run.setConversationId(conversationId);
     run.setUserMessageId(userMessageId);
     run.setAssistantMessageId(assistantMessageId);
+    run.setQuestion(question);
     run.setStatus(RagRunStatus.RUNNING);
     run.setExecutionMode(RagExecutionMode.FULL_PIPELINE);
     run.setStartedAt(timing.startedAt());

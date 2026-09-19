@@ -120,6 +120,7 @@ class RagRunControllerTest {
             null,
             null,
             null,
+            "如何使用知识库？",
             RagRunStatus.COMPLETED,
             RagExecutionMode.SYSTEM_CHAT,
             null,
@@ -144,6 +145,7 @@ class RagRunControllerTest {
         .andExpect(jsonPath("$.data.run.ownerId").doesNotExist())
         .andExpect(jsonPath("$.data.run.username").doesNotExist())
         .andExpect(jsonPath("$.data.run.displayName").doesNotExist())
+        .andExpect(jsonPath("$.data.run.question").value("如何使用知识库？"))
         .andExpect(jsonPath("$.data.run.content").doesNotExist())
         .andExpect(jsonPath("$.data.run.prompt").doesNotExist());
   }

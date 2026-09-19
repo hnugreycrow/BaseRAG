@@ -14,7 +14,7 @@ import {
 import { useAuthStore } from '../../store/auth'
 
 /** 列表页支持的快捷时间范围。 */
-export type TraceRange = '1h' | '24h' | '7d' | 'custom'
+export type TraceRange = 'all' | '1h' | '24h' | '7d' | 'custom'
 
 interface FilterState {
   range: TraceRange
@@ -28,7 +28,7 @@ interface FilterState {
 
 const RUN_STATUSES: RagRunStatus[] = ['RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED', 'INTERRUPTED']
 const EXECUTION_MODES: RagExecutionMode[] = ['FULL_PIPELINE', 'SYSTEM_CHAT', 'FAST_PATH']
-const RANGE_VALUES: TraceRange[] = ['1h', '24h', '7d', 'custom']
+const RANGE_VALUES: TraceRange[] = ['all', '1h', '24h', '7d', 'custom']
 
 function queryString(value: unknown): string {
   return typeof value === 'string' ? value : ''
@@ -52,7 +52,7 @@ function parseFilterState(query: Record<string, unknown>): FilterState {
   const rawMode = queryString(query.executionMode) as RagExecutionMode
 
   return {
-    range: RANGE_VALUES.includes(rawRange) ? rawRange : '24h',
+    range: RANGE_VALUES.includes(rawRange) ? rawRange : 'all',
     customFrom: query.from ? safeLocalInputValue(query.from, from) : localInputValue(from),
     customTo: query.to ? safeLocalInputValue(query.to, now) : localInputValue(now),
     status: RUN_STATUSES.includes(rawStatus) ? rawStatus : '',
@@ -66,8 +66,9 @@ function copyFilters(target: FilterState, source: FilterState) {
   Object.assign(target, source)
 }
 
-function timeWindow(state: FilterState): { from: string; to: string } | null {
+function timeWindow(state: FilterState): Pick<RagRunFilters, 'from' | 'to'> | null {
   const now = new Date()
+  if (state.range === 'all') return {}
   if (state.range === 'custom') {
     const from = new Date(state.customFrom)
     const to = new Date(state.customTo)
@@ -188,9 +189,9 @@ export function useRagRunObservability() {
     await syncRouteAndLoad()
   }
 
-  /** 恢复默认最近 24 小时筛选。 */
+  /** 恢复默认全部时间筛选。 */
   async function resetFilters() {
-    const defaults = parseFilterState({ range: '24h' })
+    const defaults = parseFilterState({ range: 'all' })
     copyFilters(draft, defaults)
     copyFilters(applied, defaults)
     page.value = 1

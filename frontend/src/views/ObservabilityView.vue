@@ -141,6 +141,7 @@ onMounted(() => {
         <label class="filter-field">
           <span>时间范围</span>
           <el-select v-model="draft.range" aria-label="时间范围">
+            <el-option label="全部时间" value="all" />
             <el-option label="最近 1 小时" value="1h" />
             <el-option label="最近 24 小时" value="24h" />
             <el-option label="最近 7 天" value="7d" />
@@ -246,6 +247,13 @@ onMounted(() => {
         <template v-else>
           <div class="desktop-run-table" :class="{ 'is-loading': loading }">
             <el-table :data="runs" table-layout="fixed" row-key="id">
+              <el-table-column label="问题" min-width="220">
+                <template #default="{ row }">
+                  <span class="question-cell" :title="row.question ?? '问题不可用'">
+                    {{ row.question ?? '问题不可用' }}
+                  </span>
+                </template>
+              </el-table-column>
               <el-table-column label="开始时间" width="154">
                 <template #default="{ row }">
                   <span class="data-text">{{ formatDateTime(row.startedAt) }}</span>
@@ -316,6 +324,9 @@ onMounted(() => {
                 </span>
                 <time>{{ formatDateTime(run.startedAt) }}</time>
               </div>
+              <span class="mobile-question" :title="run.question ?? '问题不可用'">
+                {{ run.question ?? '问题不可用' }}
+              </span>
               <strong>{{ executionModeLabel(run.executionMode) }}</strong>
               <span class="mobile-model">{{ run.model ?? '未调用回答模型' }}</span>
               <div class="run-card-metrics">

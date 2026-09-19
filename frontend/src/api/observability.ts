@@ -28,7 +28,7 @@ export type RagStageName =
   | 'CITATION_VALIDATION'
   | 'RESULT_PERSISTENCE'
 
-/** 列表与详情共用的安全运行摘要，不包含问答或证据正文。 */
+/** 列表与详情共用的运行摘要，仅包含原始问题正文，不包含回答或证据正文。 */
 export interface RagRunSummary {
   id: string
   ownerId?: string
@@ -38,6 +38,7 @@ export interface RagRunSummary {
   conversationId?: string
   userMessageId?: string
   assistantMessageId?: string
+  question?: string
   status: RagRunStatus
   executionMode: RagExecutionMode
   modelId?: string

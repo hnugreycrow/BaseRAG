@@ -178,6 +178,7 @@ public class RagRunQueryService {
         value.getConversationId(),
         value.getUserMessageId(),
         value.getAssistantMessageId(),
+        value.getQuestion(),
         value.getStatus(),
         value.getExecutionMode(),
         value.getModelId(),

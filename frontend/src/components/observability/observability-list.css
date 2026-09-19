@@ -314,6 +314,16 @@
   font-size: 13px;
 }
 
+.question-cell {
+  min-width: 0;
+  display: block;
+  overflow: hidden;
+  color: var(--color-ink);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .run-status-cell {
   display: inline-flex;
   flex-direction: column;
@@ -480,6 +490,16 @@
   .run-card > strong {
     color: var(--color-ink);
     font-size: 14px;
+  }
+
+  .mobile-question {
+    display: -webkit-box;
+    overflow: hidden;
+    color: var(--color-ink);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
   }
 
   .run-card-metrics {

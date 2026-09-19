@@ -9,7 +9,7 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 import lombok.Data;
 
-/** 单次会话回答的安全观测摘要，不保存任何问题、回答或提示词正文。 */
+/** 单次会话回答的观测摘要，仅保存原始问题快照，不保存回答或提示词正文。 */
 @Data
 @TableName("rag_runs")
 public class RagRun {
@@ -21,6 +21,7 @@ public class RagRun {
   private UUID conversationId;
   private UUID userMessageId;
   private UUID assistantMessageId;
+  private String question;
   private RagRunStatus status;
   private RagExecutionMode executionMode;
   private String modelId;

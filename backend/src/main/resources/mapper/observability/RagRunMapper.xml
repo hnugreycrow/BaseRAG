@@ -5,7 +5,7 @@
 <mapper namespace="com.hnu.backend.observability.mapper.RagRunMapper">
     <sql id="viewColumns">
         r.id, r.owner_id, u.username, u.display_name, r.request_id,
-        r.conversation_id, r.user_message_id, r.assistant_message_id,
+        r.conversation_id, r.user_message_id, r.assistant_message_id, r.question,
         r.status, r.execution_mode, r.model_id, r.provider, r.model,
         r.candidate_count, r.evidence_count, r.degraded, r.error_code,
         r.started_at, r.first_token_at, r.completed_at, r.total_ms,

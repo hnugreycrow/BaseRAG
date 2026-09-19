@@ -109,6 +109,11 @@ onMounted(loadDetail)
         </div>
       </header>
 
+      <section class="question-panel" aria-labelledby="question-title">
+        <span id="question-title">提问问题</span>
+        <p>{{ detail.run.question ?? '问题不可用' }}</p>
+      </section>
+
       <section class="run-facts" aria-label="运行摘要">
         <div class="fact-primary">
           <span>总耗时</span>

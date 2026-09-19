@@ -92,6 +92,7 @@ class RagRunQueryServiceTest {
     assertEquals(row.getOwnerId(), adminSummary.ownerId());
     assertEquals("alice", adminSummary.username());
     assertEquals("Alice", adminSummary.displayName());
+    assertEquals("如何使用知识库？", adminSummary.question());
   }
 
   @Test
@@ -168,6 +169,7 @@ class RagRunQueryServiceTest {
     row.setOwnerId(ownerId);
     row.setUsername("alice");
     row.setDisplayName("Alice");
+    row.setQuestion("如何使用知识库？");
     row.setRequestId(UUID.randomUUID().toString());
     row.setStatus(RagRunStatus.COMPLETED);
     row.setExecutionMode(RagExecutionMode.FULL_PIPELINE);

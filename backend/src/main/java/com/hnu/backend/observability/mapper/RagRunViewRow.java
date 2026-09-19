@@ -17,6 +17,7 @@ public class RagRunViewRow {
   private UUID conversationId;
   private UUID userMessageId;
   private UUID assistantMessageId;
+  private String question;
   private RagRunStatus status;
   private RagExecutionMode executionMode;
   private String modelId;

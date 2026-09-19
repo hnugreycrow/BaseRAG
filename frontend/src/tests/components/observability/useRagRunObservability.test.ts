@@ -40,7 +40,7 @@ describe('useRagRunObservability', () => {
     vi.clearAllMocks()
   })
 
-  it('defaults to 24 hours and never forwards userId for an ordinary user', async () => {
+  it('defaults to all retained runs and never forwards userId for an ordinary user', async () => {
     const pinia = createPinia()
     const router = createRouter({
       history: createMemoryHistory(),
@@ -72,15 +72,8 @@ describe('useRagRunObservability', () => {
     const wrapper = mount(Harness, { global: { plugins: [pinia, router] } })
     await flushPromises()
 
-    expect(api.listRagRuns).toHaveBeenCalledWith(
-      {
-        from: '2026-09-14T08:00:00.000Z',
-        to: '2026-09-15T08:00:00.000Z',
-      },
-      1,
-      20,
-    )
-    expect(state.draft.range).toBe('24h')
+    expect(api.listRagRuns).toHaveBeenCalledWith({}, 1, 20)
+    expect(state.draft.range).toBe('all')
     wrapper.unmount()
   })
 
@@ -123,11 +116,62 @@ describe('useRagRunObservability', () => {
 
     expect(state.page.value).toBe(1)
     expect(router.currentRoute.value.query).toMatchObject({
-      range: '24h',
+      range: 'all',
       status: 'FAILED',
       userId: 'user-2',
     })
     expect(router.currentRoute.value.query.page).toBeUndefined()
+
+    await state.resetFilters()
+    await flushPromises()
+
+    expect(state.draft.range).toBe('all')
+    expect(router.currentRoute.value.query).toEqual({ range: 'all' })
+    expect(api.listRagRuns).toHaveBeenLastCalledWith({}, 1, 20)
+    wrapper.unmount()
+  })
+
+  it('keeps an explicit 24 hour range from an existing link', async () => {
+    const pinia = createPinia()
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/admin/observability', component: { template: '<div />' } }],
+    })
+    await router.push('/admin/observability?range=24h')
+    await router.isReady()
+    useAuthStore(pinia).applySession({
+      user: {
+        id: 'admin-1',
+        username: 'admin',
+        displayName: '管理员',
+        role: 'ADMIN',
+        enabled: true,
+        lastLoginAt: null,
+        createdAt: '2026-09-01T00:00:00Z',
+        updatedAt: '2026-09-01T00:00:00Z',
+      },
+      csrfToken: 'nonce',
+    })
+
+    let state!: ReturnType<typeof useRagRunObservability>
+    const Harness = defineComponent({
+      setup() {
+        state = useRagRunObservability()
+        return () => h('div')
+      },
+    })
+    const wrapper = mount(Harness, { global: { plugins: [pinia, router] } })
+    await flushPromises()
+
+    expect(state.draft.range).toBe('24h')
+    expect(api.listRagRuns).toHaveBeenCalledWith(
+      {
+        from: '2026-09-14T08:00:00.000Z',
+        to: '2026-09-15T08:00:00.000Z',
+      },
+      1,
+      20,
+    )
     wrapper.unmount()
   })
 })

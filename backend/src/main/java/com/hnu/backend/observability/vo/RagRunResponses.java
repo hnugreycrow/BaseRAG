@@ -9,7 +9,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
-/** 单次问答观测接口使用的安全响应类型。 */
+/** 单次问答观测接口使用的响应类型，仅暴露原始问题正文。 */
 public final class RagRunResponses {
   /** 禁止实例化响应类型容器。 */
   private RagRunResponses() {}
@@ -25,6 +25,7 @@ public final class RagRunResponses {
    * @param conversationId 可选会话标识
    * @param userMessageId 可选用户消息标识
    * @param assistantMessageId 可选回答版本标识
+   * @param question 可选原始问题快照；无法回填的旧记录为空
    * @param status 运行状态
    * @param executionMode 执行模式
    * @param modelId 最终模型配置标识
@@ -51,6 +52,7 @@ public final class RagRunResponses {
       UUID conversationId,
       UUID userMessageId,
       UUID assistantMessageId,
+      String question,
       RagRunStatus status,
       RagExecutionMode executionMode,
       String modelId,

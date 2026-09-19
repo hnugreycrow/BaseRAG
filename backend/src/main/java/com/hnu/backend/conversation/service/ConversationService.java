@@ -324,7 +324,8 @@ public class ConversationService {
                 assistant.setThinkingEnabled(conversation.isThinkingEnabled());
                 messageMapper.insert(assistant);
                 RagRunTrace trace =
-                    traces.start(ownerId, conversationId, user.getId(), assistant.getId(), timing);
+                    traces.start(
+                        ownerId, conversationId, user.getId(), assistant.getId(), question, timing);
                 conversationMapper.touch(ownerId, conversationId);
                 return new PreparedMessages(user, assistant, trace);
               });
@@ -462,7 +463,13 @@ public class ConversationService {
                 value.setThinkingEnabled(conversation.isThinkingEnabled());
                 messageMapper.insert(value);
                 RagRunTrace trace =
-                    traces.start(ownerId, conversationId, user.getId(), value.getId(), timing);
+                    traces.start(
+                        ownerId,
+                        conversationId,
+                        user.getId(),
+                        value.getId(),
+                        user.getContent(),
+                        timing);
                 conversationMapper.touch(ownerId, conversationId);
                 return new PreparedAnswer(value, trace);
               });

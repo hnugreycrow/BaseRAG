@@ -95,7 +95,9 @@ class ConversationServiceCancellationTest {
             config,
             tx,
             traces);
-    lenient().when(traces.start(any(), any(), any(), any(), any())).thenReturn(RagRunTrace.noop());
+    lenient()
+        .when(traces.start(any(), any(), any(), any(), any(), any()))
+        .thenReturn(RagRunTrace.noop());
   }
 
   @AfterEach
