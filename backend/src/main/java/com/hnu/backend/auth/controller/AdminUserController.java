@@ -1,5 +1,6 @@
 package com.hnu.backend.auth.controller;
 
+import cn.dev33.satoken.annotation.SaCheckRole;
 import com.hnu.backend.auth.dto.CreateUserRequest;
 import com.hnu.backend.auth.dto.ResetPasswordRequest;
 import com.hnu.backend.auth.dto.UserStatusRequest;
@@ -32,6 +33,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Profile("local")
 @Validated
 @RequestMapping("/api/admin/users")
+@SaCheckRole("ADMIN")
 public class AdminUserController {
   private final CurrentUserService currentUserService;
   private final AdminUserService adminUserService;
@@ -61,7 +63,6 @@ public class AdminUserController {
       @RequestParam(defaultValue = "1") @Min(1) int page,
       @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize,
       @RequestParam(required = false) @Size(max = 100) String query) {
-    currentUserService.requireAdmin();
     return adminUserService.list(page, pageSize, query);
   }
 
@@ -74,7 +75,6 @@ public class AdminUserController {
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
   public UserResponse create(@Valid @RequestBody CreateUserRequest request) {
-    currentUserService.requireAdmin();
     return adminUserService.create(
         request.username(), request.displayName(), request.password(), request.role());
   }
@@ -88,7 +88,7 @@ public class AdminUserController {
    */
   @PatchMapping("/{id}/status")
   public UserResponse status(@PathVariable UUID id, @Valid @RequestBody UserStatusRequest request) {
-    User actor = currentUserService.requireAdmin();
+    User actor = currentUserService.require();
     return adminUserService.setEnabled(actor.getId(), id, request.enabled());
   }
 
@@ -102,7 +102,6 @@ public class AdminUserController {
   @ResponseStatus(HttpStatus.NO_CONTENT)
   public void resetPassword(
       @PathVariable UUID id, @Valid @RequestBody ResetPasswordRequest request) {
-    currentUserService.requireAdmin();
     adminUserService.resetPassword(id, request.password());
   }
 }

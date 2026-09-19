@@ -1,6 +1,6 @@
 package com.hnu.backend.intent;
 
-import com.hnu.backend.auth.service.CurrentUserService;
+import cn.dev33.satoken.annotation.SaCheckRole;
 import com.hnu.backend.rag.mcp.McpToolRegistry;
 import java.util.List;
 import java.util.UUID;
@@ -20,30 +20,24 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @Profile("local")
 @RequestMapping("/api/admin/intent-nodes")
+@SaCheckRole("ADMIN")
 public class IntentTreeController {
   private final IntentTreeService intentTreeService;
-  private final CurrentUserService currentUserService;
   private final McpToolRegistry tools;
 
-  public IntentTreeController(
-      IntentTreeService intentTreeService,
-      CurrentUserService currentUserService,
-      McpToolRegistry tools) {
+  public IntentTreeController(IntentTreeService intentTreeService, McpToolRegistry tools) {
     this.intentTreeService = intentTreeService;
-    this.currentUserService = currentUserService;
     this.tools = tools;
   }
 
   @GetMapping
   public List<IntentNode> list() {
-    currentUserService.requireAdmin();
     return intentTreeService.list();
   }
 
   /** 返回当前可供管理员绑定的只读工具。 */
   @GetMapping("/tools")
   public List<ToolOption> tools() {
-    currentUserService.requireAdmin();
     return tools.availableReadOnlyTools().stream()
         .map(tool -> new ToolOption(tool.name(), tool.description()))
         .toList();
@@ -53,20 +47,17 @@ public class IntentTreeController {
 
   @PostMapping
   public IntentNode create(@RequestBody IntentNodeRequest request) {
-    currentUserService.requireAdmin();
     return intentTreeService.create(request);
   }
 
   @PutMapping("/{id}")
   public IntentNode update(@PathVariable UUID id, @RequestBody IntentNodeRequest request) {
-    currentUserService.requireAdmin();
     return intentTreeService.update(id, request);
   }
 
   @DeleteMapping("/{id}")
   @ResponseStatus(HttpStatus.NO_CONTENT)
   public void delete(@PathVariable UUID id) {
-    currentUserService.requireAdmin();
     intentTreeService.delete(id);
   }
 }

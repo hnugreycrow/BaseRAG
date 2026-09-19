@@ -7,8 +7,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.hnu.backend.auth.entity.User;
-import com.hnu.backend.auth.service.CurrentUserService;
 import com.hnu.backend.document.service.DocumentService;
 import com.hnu.backend.document.vo.DocumentBatchUploadResponse;
 import com.hnu.backend.document.vo.DocumentChunkBatchResponse;
@@ -28,7 +26,6 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class DocumentControllerBatchTest {
   private final DocumentService documentService = mock(DocumentService.class);
-  private final CurrentUserService currentUserService = mock(CurrentUserService.class);
   private final KnowledgeBaseService knowledgeBaseService = mock(KnowledgeBaseService.class);
   private final UUID ownerId = UUID.randomUUID();
   private final UUID knowledgeBaseId = UUID.randomUUID();
@@ -36,16 +33,12 @@ class DocumentControllerBatchTest {
 
   @BeforeEach
   void setUp() {
-    User user = new User();
-    // 操作者与知识库创建者不同，异步任务仍须使用创建者标识。
-    user.setId(UUID.randomUUID());
-    when(currentUserService.requireAdmin()).thenReturn(user);
     KnowledgeBase managed = new KnowledgeBase();
     managed.setOwnerId(ownerId);
     when(knowledgeBaseService.requireAdminOwned(knowledgeBaseId)).thenReturn(managed);
     mvc =
         MockMvcBuilders.standaloneSetup(
-                new DocumentController(documentService, currentUserService, knowledgeBaseService))
+                new DocumentController(documentService, knowledgeBaseService))
             .setControllerAdvice(new ApiResponseAdvice(), new GlobalExceptionHandler())
             .build();
   }

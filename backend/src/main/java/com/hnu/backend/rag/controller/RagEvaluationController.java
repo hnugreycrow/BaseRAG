@@ -1,6 +1,6 @@
 package com.hnu.backend.rag.controller;
 
-import com.hnu.backend.auth.service.CurrentUserService;
+import cn.dev33.satoken.annotation.SaCheckRole;
 import com.hnu.backend.configuration.RagProperties;
 import com.hnu.backend.rag.vo.RagEvaluationConfigResponse;
 import org.springframework.context.annotation.Profile;
@@ -12,25 +12,22 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @Profile("local")
 @RequestMapping("/api/evaluation")
+@SaCheckRole("ADMIN")
 public class RagEvaluationController {
   private final RagProperties rag;
-  private final CurrentUserService currentUserService;
 
   /**
    * 创建本地评测配置接口。
    *
    * @param rag RAG 配置
-   * @param currentUserService 当前用户校验服务
    */
-  public RagEvaluationController(RagProperties rag, CurrentUserService currentUserService) {
+  public RagEvaluationController(RagProperties rag) {
     this.rag = rag;
-    this.currentUserService = currentUserService;
   }
 
   /** 返回影响分块和检索结果的当前生效参数，不包含任何凭据。 */
   @GetMapping("/config")
   public RagEvaluationConfigResponse config() {
-    currentUserService.requireAdmin();
     return new RagEvaluationConfigResponse(
         rag.getChunkSize(),
         rag.getChunkMinSize(),

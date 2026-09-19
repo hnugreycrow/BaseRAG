@@ -1,5 +1,6 @@
 package com.hnu.backend.observability.controller;
 
+import cn.dev33.satoken.annotation.SaCheckRole;
 import com.hnu.backend.auth.entity.User;
 import com.hnu.backend.auth.service.CurrentUserService;
 import com.hnu.backend.observability.RagExecutionMode;
@@ -26,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Profile("local")
 @Validated
 @RequestMapping("/api/observability/rag-runs")
+@SaCheckRole("ADMIN")
 public class RagRunController {
   private final CurrentUserService currentUserService;
   private final RagRunQueryService ragRunQueryService;
@@ -67,7 +69,7 @@ public class RagRunController {
       @RequestParam(required = false) UUID userId,
       @RequestParam(defaultValue = "1") @Min(1) int page,
       @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize) {
-    User actor = currentUserService.requireAdmin();
+    User actor = currentUserService.require();
     return ragRunQueryService.list(
         actor, from, to, status, model, executionMode, userId, page, pageSize);
   }
@@ -80,7 +82,7 @@ public class RagRunController {
    */
   @GetMapping("/{id}")
   public RagRunResponses.Detail get(@PathVariable UUID id) {
-    return ragRunQueryService.get(currentUserService.requireAdmin(), id);
+    return ragRunQueryService.get(currentUserService.require(), id);
   }
 
   /**
@@ -105,6 +107,6 @@ public class RagRunController {
       @RequestParam(required = false) RagExecutionMode executionMode,
       @RequestParam(required = false) UUID userId) {
     return ragRunQueryService.summary(
-        currentUserService.requireAdmin(), from, to, status, model, executionMode, userId);
+        currentUserService.require(), from, to, status, model, executionMode, userId);
   }
 }

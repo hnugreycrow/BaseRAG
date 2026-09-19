@@ -5,8 +5,6 @@ import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.hnu.backend.auth.entity.User;
-import com.hnu.backend.auth.service.CurrentUserService;
 import com.hnu.backend.document.service.DocumentService;
 import com.hnu.backend.knowledgebase.entity.KnowledgeBase;
 import com.hnu.backend.knowledgebase.service.KnowledgeBaseService;
@@ -20,10 +18,9 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class DocumentContentTest {
   private final DocumentService documentService = mock(DocumentService.class);
-  private final CurrentUserService currentUserService = mock(CurrentUserService.class);
   private final KnowledgeBaseService knowledgeBaseService = mock(KnowledgeBaseService.class);
   private final DocumentController controller =
-      new DocumentController(documentService, currentUserService, knowledgeBaseService);
+      new DocumentController(documentService, knowledgeBaseService);
   private final UUID owner = UUID.randomUUID();
   private final UUID kb = UUID.randomUUID();
   private final UUID document = UUID.randomUUID();
@@ -31,9 +28,6 @@ class DocumentContentTest {
 
   @Test
   void mvcReturnsRawPdfRangeWithoutJsonEnvelope() throws Exception {
-    User user = new User();
-    user.setId(owner);
-    when(currentUserService.requireAdmin()).thenReturn(user);
     KnowledgeBase managed = new KnowledgeBase();
     managed.setOwnerId(owner);
     when(knowledgeBaseService.requireAdminOwned(kb)).thenReturn(managed);
@@ -62,9 +56,6 @@ class DocumentContentTest {
 
   @Test
   void servesPdfAndSingleByteRanges() {
-    User user = new User();
-    user.setId(owner);
-    when(currentUserService.requireAdmin()).thenReturn(user);
     KnowledgeBase managed = new KnowledgeBase();
     managed.setOwnerId(owner);
     when(knowledgeBaseService.requireAdminOwned(kb)).thenReturn(managed);

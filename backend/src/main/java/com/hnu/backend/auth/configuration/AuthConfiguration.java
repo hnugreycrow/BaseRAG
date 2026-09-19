@@ -43,7 +43,7 @@ public class AuthConfiguration implements WebMvcConfigurer {
   @Override
   public void addInterceptors(InterceptorRegistry registry) {
     registry
-        .addInterceptor(new SaInterceptor(handle -> StpUtil.checkLogin()))
+        .addInterceptor(new SaInterceptor(handle -> StpUtil.checkLogin()).isAnnotation(true))
         .addPathPatterns("/api/**")
         .excludePathPatterns("/api/auth/login")
         .order(Ordered.HIGHEST_PRECEDENCE);

@@ -1,9 +1,7 @@
 package com.hnu.backend.rag.controller;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.Mockito.mock;
 
-import com.hnu.backend.auth.service.CurrentUserService;
 import com.hnu.backend.configuration.RagProperties;
 import org.junit.jupiter.api.Test;
 
@@ -29,7 +27,7 @@ class RagEvaluationControllerTest {
     rag.getPipeline().getRouting().setTimeoutMs(4000);
     rag.getPipeline().getMcp().setEnabled(true);
 
-    var result = new RagEvaluationController(rag, mock(CurrentUserService.class)).config();
+    var result = new RagEvaluationController(rag).config();
 
     assertEquals(800, result.chunkSize());
     assertEquals(300, result.chunkMinSize());

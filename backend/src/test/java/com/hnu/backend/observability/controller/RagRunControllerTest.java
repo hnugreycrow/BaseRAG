@@ -34,7 +34,7 @@ class RagRunControllerTest {
 
   @BeforeEach
   void setUp() {
-    when(currentUserService.requireAdmin()).thenReturn(actor);
+    when(currentUserService.require()).thenReturn(actor);
     mvc =
         MockMvcBuilders.standaloneSetup(
                 new RagRunController(currentUserService, ragRunQueryService))

@@ -1,5 +1,6 @@
 package com.hnu.backend.knowledgebase.controller;
 
+import cn.dev33.satoken.annotation.SaCheckRole;
 import com.hnu.backend.auth.service.CurrentUserService;
 import com.hnu.backend.knowledgebase.dto.KnowledgeBaseRequest;
 import com.hnu.backend.knowledgebase.service.KnowledgeBaseService;
@@ -31,6 +32,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Profile("local")
 @Validated
 @RequestMapping("/api/knowledge-bases")
+@SaCheckRole("ADMIN")
 public class KnowledgeBaseController {
   private final KnowledgeBaseService knowledgeBaseService;
   private final CurrentUserService currentUserService;
@@ -60,7 +62,6 @@ public class KnowledgeBaseController {
       @RequestParam(defaultValue = "1") @Min(1) int page,
       @RequestParam(defaultValue = "10") @Min(1) @Max(100) int pageSize,
       @RequestParam(required = false) @Size(max = 200) String query) {
-    currentUserService.requireAdmin();
     return knowledgeBaseService.list(page, pageSize, query);
   }
 
@@ -69,7 +70,6 @@ public class KnowledgeBaseController {
    */
   @GetMapping("/embedding-models")
   public List<EmbeddingModelResponse> embeddingModels() {
-    currentUserService.requireAdmin();
     return knowledgeBaseService.embeddingModels();
   }
 
@@ -81,7 +81,6 @@ public class KnowledgeBaseController {
    */
   @GetMapping("/{id}")
   public KnowledgeBaseResponse get(@PathVariable UUID id) {
-    currentUserService.requireAdmin();
     return knowledgeBaseService.get(id);
   }
 
@@ -94,7 +93,7 @@ public class KnowledgeBaseController {
   @PostMapping
   public KnowledgeBaseResponse create(@Valid @RequestBody KnowledgeBaseRequest request) {
     return knowledgeBaseService.create(
-        currentUserService.requireAdmin().getId(), request.name(), request.embeddingModelId());
+        currentUserService.require().getId(), request.name(), request.embeddingModelId());
   }
 
   /**
@@ -107,7 +106,6 @@ public class KnowledgeBaseController {
   @PatchMapping("/{id}")
   public KnowledgeBaseResponse rename(
       @PathVariable UUID id, @Valid @RequestBody KnowledgeBaseRequest request) {
-    currentUserService.requireAdmin();
     return knowledgeBaseService.rename(id, request.name());
   }
 
@@ -119,7 +117,6 @@ public class KnowledgeBaseController {
   @DeleteMapping("/{id}")
   @ResponseStatus(HttpStatus.NO_CONTENT)
   public void delete(@PathVariable UUID id) {
-    currentUserService.requireAdmin();
     knowledgeBaseService.delete(id);
   }
 }

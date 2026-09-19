@@ -1,6 +1,6 @@
 package com.hnu.backend.document.controller;
 
-import com.hnu.backend.auth.service.CurrentUserService;
+import cn.dev33.satoken.annotation.SaCheckRole;
 import com.hnu.backend.document.dto.DocumentChunkBatchRequest;
 import com.hnu.backend.document.dto.DocumentRequest;
 import com.hnu.backend.document.service.DocumentService;
@@ -46,35 +46,30 @@ import org.springframework.web.multipart.MultipartFile;
 @Profile("local")
 @Validated
 @RequestMapping("/api/knowledge-bases/{knowledgeBaseId}/documents")
+@SaCheckRole("ADMIN")
 public class DocumentController {
   private final DocumentService documentService;
-  private final CurrentUserService currentUserService;
   private final KnowledgeBaseService knowledgeBaseService;
 
   /**
    * 创建文档控制器。
    *
    * @param documentService 文档服务
-   * @param currentUserService 当前用户解析服务
    * @param knowledgeBaseService 公共知识库查询服务
    */
   public DocumentController(
-      DocumentService documentService,
-      CurrentUserService currentUserService,
-      KnowledgeBaseService knowledgeBaseService) {
+      DocumentService documentService, KnowledgeBaseService knowledgeBaseService) {
     this.documentService = documentService;
-    this.currentUserService = currentUserService;
     this.knowledgeBaseService = knowledgeBaseService;
   }
 
   /**
-   * 校验管理员身份并取得知识库创建者，供对象存储与异步任务沿用。
+   * 取得管理员知识库的创建者，供对象存储与异步任务沿用。
    *
    * @param knowledgeBaseId 公共知识库标识
    * @return 知识库创建者标识
    */
   private UUID managedOwner(UUID knowledgeBaseId) {
-    currentUserService.requireAdmin();
     return knowledgeBaseService.requireAdminOwned(knowledgeBaseId).getOwnerId();
   }
 
