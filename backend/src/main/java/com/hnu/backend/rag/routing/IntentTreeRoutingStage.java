@@ -2,19 +2,18 @@ package com.hnu.backend.rag.routing;
 
 import com.hnu.backend.configuration.RagProperties;
 import com.hnu.backend.intent.IntentNode;
-import com.hnu.backend.intent.IntentTreeService;
+import com.hnu.backend.intent.IntentTreeSnapshot;
+import com.hnu.backend.intent.IntentTreeSnapshotProvider;
 import com.hnu.backend.model.client.ChatClient;
 import com.hnu.backend.observability.RagDecisionLog;
 import com.hnu.backend.observability.RagStageName;
 import com.hnu.backend.observability.trace.RagRunTrace;
-import com.hnu.backend.rag.mcp.McpToolDefinition;
 import com.hnu.backend.rag.mcp.McpToolRegistry;
 import com.hnu.backend.rag.planning.QueryPlan;
 import com.hnu.backend.rag.prompt.IntentTreeRoutingPrompts;
 import com.hnu.backend.shared.error.ApiException;
 import jakarta.annotation.PreDestroy;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -37,7 +36,7 @@ import tools.jackson.databind.json.JsonMapper;
 @Component
 public class IntentTreeRoutingStage {
   private static final Logger log = LoggerFactory.getLogger(IntentTreeRoutingStage.class);
-  private final IntentTreeService intentTreeService;
+  private final IntentTreeSnapshotProvider snapshots;
   private final ChatClient chat;
   private final McpToolRegistry tools;
   private final RagProperties config;
@@ -45,11 +44,11 @@ public class IntentTreeRoutingStage {
   private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
   public IntentTreeRoutingStage(
-      IntentTreeService intentTreeService,
+      IntentTreeSnapshotProvider snapshots,
       ChatClient chat,
       McpToolRegistry tools,
       RagProperties config) {
-    this.intentTreeService = intentTreeService;
+    this.snapshots = snapshots;
     this.chat = chat;
     this.tools = tools;
     this.config = config;
@@ -64,29 +63,22 @@ public class IntentTreeRoutingStage {
       throw ApiException.cancelled();
     }
     try {
-      List<IntentNode> leaves = intentTreeService.activeLeaves();
+      IntentTreeSnapshot snapshot = snapshots.snapshot();
+      List<IntentNode> leaves = snapshot.activeLeaves();
       if (leaves.isEmpty()) {
         String reason =
-            intentTreeService.list().isEmpty()
-                ? "INTENT_TREE_EMPTY"
-                : "INTENT_TREE_NO_VALID_LEAVES";
+            snapshot.nodes().isEmpty() ? "INTENT_TREE_EMPTY" : "INTENT_TREE_NO_VALID_LEAVES";
         return knowledgeFallback(plan, span, trace, reason);
       }
       if (leaves.size() > 32) {
         return knowledgeFallback(plan, span, trace, "INTENT_TREE_NO_VALID_LEAVES");
       }
-      Map<UUID, IntentNode> byId = new HashMap<>();
-      leaves.forEach(node -> byId.put(node.id(), node));
-      Map<UUID, String> paths = paths(intentTreeService.list());
-      List<McpToolDefinition> availableTools = tools.availableReadOnlyTools();
+      Map<UUID, IntentNode> byId = snapshot.activeLeavesById();
+      Map<UUID, String> paths = snapshot.paths();
       Map<String, Object> input = new LinkedHashMap<>();
       input.put("standaloneQuestion", plan.standaloneQuestion());
       input.put("subQuestions", plan.subQuestions());
-      input.put(
-          "leaves",
-          leaves.stream()
-              .map(node -> leafPrompt(node, paths.get(node.id()), availableTools))
-              .toList());
+      input.put("leaves", snapshot.promptLeaves());
       Future<ChatClient.Generation> future =
           executor.submit(
               () ->
@@ -283,45 +275,6 @@ public class IntentTreeRoutingStage {
               node.kind() == IntentNode.Kind.KB ? node.knowledgeBaseIds() : null));
     }
     return new RoutingPlan(resolved);
-  }
-
-  private Map<String, Object> leafPrompt(
-      IntentNode node, String path, List<McpToolDefinition> availableTools) {
-    Map<String, Object> value = new LinkedHashMap<>();
-    value.put("id", node.id());
-    value.put("path", path);
-    value.put("type", node.kind());
-    value.put("description", node.description());
-    value.put("examples", node.examples());
-    if (node.kind() == IntentNode.Kind.MCP) {
-      availableTools.stream()
-          .filter(tool -> tool.name().equals(node.toolName()))
-          .findFirst()
-          .ifPresent(
-              tool -> {
-                value.put("toolName", tool.name());
-                value.put("toolDescription", tool.description());
-                value.put("inputSchema", tool.inputSchema());
-              });
-    }
-    return value;
-  }
-
-  private Map<UUID, String> paths(List<IntentNode> nodes) {
-    Map<UUID, IntentNode> byId = new HashMap<>();
-    nodes.forEach(node -> byId.put(node.id(), node));
-    Map<UUID, String> result = new HashMap<>();
-    for (IntentNode node : nodes) {
-      List<String> names = new ArrayList<>();
-      IntentNode current = node;
-      while (current != null) {
-        names.add(current.name());
-        current = current.parentId() == null ? null : byId.get(current.parentId());
-      }
-      java.util.Collections.reverse(names);
-      result.put(node.id(), String.join(" > ", names));
-    }
-    return result;
   }
 
   private static final class LowConfidenceException extends RuntimeException {}

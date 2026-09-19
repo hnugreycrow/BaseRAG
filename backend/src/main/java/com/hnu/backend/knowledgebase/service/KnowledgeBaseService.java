@@ -2,6 +2,7 @@ package com.hnu.backend.knowledgebase.service;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.hnu.backend.document.service.DocumentCleanupService;
+import com.hnu.backend.intent.IntentTreeChangedEvent;
 import com.hnu.backend.knowledgebase.entity.KnowledgeBase;
 import com.hnu.backend.knowledgebase.mapper.KnowledgeBaseMapper;
 import com.hnu.backend.knowledgebase.vo.EmbeddingModelResponse;
@@ -11,6 +12,7 @@ import com.hnu.backend.shared.error.ApiException;
 import com.hnu.backend.shared.web.PageResponse;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -22,6 +24,7 @@ public class KnowledgeBaseService {
   private final DocumentCleanupService documentCleanupService;
   private final TransactionTemplate tx;
   private final AiProperties ai;
+  private final ApplicationEventPublisher events;
 
   /**
    * 创建知识库服务。
@@ -30,16 +33,19 @@ public class KnowledgeBaseService {
    * @param documentCleanupService 关联文档清理服务
    * @param tx 事务模板
    * @param ai 模型配置
+   * @param events 应用事件发布器
    */
   public KnowledgeBaseService(
       KnowledgeBaseMapper knowledgeBaseMapper,
       DocumentCleanupService documentCleanupService,
       TransactionTemplate tx,
-      AiProperties ai) {
+      AiProperties ai,
+      ApplicationEventPublisher events) {
     this.knowledgeBaseMapper = knowledgeBaseMapper;
     this.documentCleanupService = documentCleanupService;
     this.tx = tx;
     this.ai = ai;
+    this.events = events;
   }
 
   /**
@@ -202,6 +208,7 @@ public class KnowledgeBaseService {
           documentCleanupService.deleteRecords(id);
           knowledgeBaseMapper.deleteById(id);
         });
+    events.publishEvent(new IntentTreeChangedEvent());
     documentCleanupService.removeStoredFiles(storageKeys);
   }
 

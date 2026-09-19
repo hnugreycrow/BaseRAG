@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -16,14 +17,17 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.ApplicationEventPublisher;
 
 class IntentTreeServiceTest {
   private final IntentNodeMapper intentNodeMapper = mock(IntentNodeMapper.class);
   private final IntentBindingMapper intentBindingMapper = mock(IntentBindingMapper.class);
   private final KnowledgeBaseMapper knowledgeBaseMapper = mock(KnowledgeBaseMapper.class);
   private final McpToolRegistry tools = mock(McpToolRegistry.class);
+  private final ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
   private final IntentTreeService intentTreeService =
-      new IntentTreeService(intentNodeMapper, intentBindingMapper, knowledgeBaseMapper, tools);
+      new IntentTreeService(
+          intentNodeMapper, intentBindingMapper, knowledgeBaseMapper, tools, events);
 
   @Test
   void refusesThirtyThirdEnabledLeaf() {
@@ -42,20 +46,15 @@ class IntentTreeServiceTest {
   }
 
   @Test
-  void filtersDisabledAndInvalidBindingsBeforeClassification() {
+  void filtersDisabledAndMissingBindingsWithoutQueryingKnowledgeBases() {
     IntentNodeEntity validSystem = systemEntity();
     IntentNodeEntity disabledSystem = systemEntity();
     disabledSystem.setEnabled(false);
     IntentNodeEntity invalidKb = systemEntity();
     invalidKb.setKind("KB");
-    UUID kbId = UUID.randomUUID();
-    IntentBindingEntity binding = new IntentBindingEntity();
-    binding.setId(UUID.randomUUID());
-    binding.setNodeId(invalidKb.getId());
-    binding.setKnowledgeBaseId(kbId);
     when(intentNodeMapper.selectList(null))
         .thenReturn(List.of(validSystem, disabledSystem, invalidKb));
-    when(intentBindingMapper.selectList(null)).thenReturn(List.of(binding));
+    when(intentBindingMapper.selectList(null)).thenReturn(List.of());
     when(tools.availableReadOnlyTools()).thenReturn(List.of());
 
     List<IntentNode> active = intentTreeService.activeLeaves();
@@ -63,6 +62,46 @@ class IntentTreeServiceTest {
     assertEquals(1, active.size());
     assertEquals(validSystem.getId(), active.getFirst().id());
     assertTrue(active.stream().noneMatch(node -> node.id().equals(invalidKb.getId())));
+    verify(intentNodeMapper, times(1)).selectList(null);
+    verify(intentBindingMapper, times(1)).selectList(null);
+    verify(knowledgeBaseMapper, never()).findAdminOwned(any());
+  }
+
+  @Test
+  void publishesInvalidationAfterCreate() {
+    when(intentNodeMapper.selectList(null)).thenReturn(List.of());
+    when(intentBindingMapper.selectList(null)).thenReturn(List.of());
+
+    intentTreeService.create(
+        new IntentNodeRequest(
+            null, "系统直答", "", List.of(), IntentNode.Kind.SYSTEM, null, List.of(), true, 0));
+
+    verify(events).publishEvent(any(IntentTreeChangedEvent.class));
+  }
+
+  @Test
+  void publishesInvalidationAfterUpdate() {
+    IntentNodeEntity existing = systemEntity();
+    when(intentNodeMapper.selectList(null)).thenReturn(List.of(existing));
+    when(intentBindingMapper.selectList(null)).thenReturn(List.of());
+
+    intentTreeService.update(
+        existing.getId(),
+        new IntentNodeRequest(
+            null, "新名称", "", List.of(), IntentNode.Kind.SYSTEM, null, List.of(), true, 0));
+
+    verify(events).publishEvent(any(IntentTreeChangedEvent.class));
+  }
+
+  @Test
+  void publishesInvalidationAfterDelete() {
+    IntentNodeEntity existing = systemEntity();
+    when(intentNodeMapper.selectList(null)).thenReturn(List.of(existing));
+    when(intentBindingMapper.selectList(null)).thenReturn(List.of());
+
+    intentTreeService.delete(existing.getId());
+
+    verify(events).publishEvent(any(IntentTreeChangedEvent.class));
   }
 
   @Test

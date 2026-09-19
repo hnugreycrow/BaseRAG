@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,17 +27,20 @@ public class IntentTreeService {
   private final IntentBindingMapper intentBindingMapper;
   private final KnowledgeBaseMapper knowledgeBaseMapper;
   private final McpToolRegistry tools;
+  private final ApplicationEventPublisher events;
   private final JsonMapper json = JsonMapper.builder().build();
 
   public IntentTreeService(
       IntentNodeMapper intentNodeMapper,
       IntentBindingMapper intentBindingMapper,
       KnowledgeBaseMapper knowledgeBaseMapper,
-      McpToolRegistry tools) {
+      McpToolRegistry tools,
+      ApplicationEventPublisher events) {
     this.intentNodeMapper = intentNodeMapper;
     this.intentBindingMapper = intentBindingMapper;
     this.knowledgeBaseMapper = knowledgeBaseMapper;
     this.tools = tools;
+    this.events = events;
   }
 
   /** 返回全局树的平面节点列表，前端使用 parentId 构建层级。 */
@@ -61,29 +65,7 @@ public class IntentTreeService {
 
   /** 返回当前可执行的启用叶子；配置失效的绑定不会交给模型。 */
   public List<IntentNode> activeLeaves() {
-    List<IntentNode> all = list();
-    Map<UUID, IntentNode> byId = index(all);
-    Set<UUID> parents = new HashSet<>();
-    all.forEach(
-        node -> {
-          if (node.parentId() != null) parents.add(node.parentId());
-        });
-    Set<String> toolNames = new HashSet<>();
-    tools.availableReadOnlyTools().forEach(tool -> toolNames.add(tool.name()));
-    return all.stream()
-        .filter(node -> node.kind() != null && !parents.contains(node.id()))
-        .filter(node -> enabledPath(node, byId))
-        .filter(
-            node ->
-                switch (node.kind()) {
-                  case KB ->
-                      !node.knowledgeBaseIds().isEmpty()
-                          && node.knowledgeBaseIds().stream()
-                              .allMatch(id -> knowledgeBaseMapper.findAdminOwned(id) != null);
-                  case MCP -> node.toolName() != null && toolNames.contains(node.toolName());
-                  case SYSTEM -> true;
-                })
-        .toList();
+    return IntentTreeSnapshot.from(list(), tools.availableReadOnlyTools()).activeLeaves();
   }
 
   /** 新建分类或可执行叶子。 */
@@ -95,6 +77,7 @@ public class IntentTreeService {
     validate(node, all);
     intentNodeMapper.insert(toEntity(node));
     saveBindings(node);
+    events.publishEvent(new IntentTreeChangedEvent());
     return node;
   }
 
@@ -113,6 +96,7 @@ public class IntentTreeService {
     intentBindingMapper.delete(
         new LambdaQueryWrapper<IntentBindingEntity>().eq(IntentBindingEntity::getNodeId, id));
     saveBindings(replacement);
+    events.publishEvent(new IntentTreeChangedEvent());
     return replacement;
   }
 
@@ -127,6 +111,7 @@ public class IntentTreeService {
       throw ApiException.conflict("INTENT_NODE_HAS_CHILDREN", "请先删除子节点");
     }
     intentNodeMapper.deleteById(id);
+    events.publishEvent(new IntentTreeChangedEvent());
   }
 
   private IntentNode normalized(UUID id, IntentNodeRequest request) {

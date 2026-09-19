@@ -17,7 +17,8 @@ import static org.mockito.Mockito.withSettings;
 
 import com.hnu.backend.configuration.RagProperties;
 import com.hnu.backend.intent.IntentNode;
-import com.hnu.backend.intent.IntentTreeService;
+import com.hnu.backend.intent.IntentTreeSnapshot;
+import com.hnu.backend.intent.IntentTreeSnapshotProvider;
 import com.hnu.backend.model.client.ChatClient;
 import com.hnu.backend.observability.RagRunStatus;
 import com.hnu.backend.observability.RagStageStatus;
@@ -42,13 +43,13 @@ import org.springframework.boot.test.system.OutputCaptureExtension;
 
 @ExtendWith(OutputCaptureExtension.class)
 class IntentTreeRoutingStageTest {
-  private final IntentTreeService intentTreeService =
-      mock(IntentTreeService.class, withSettings().mockMaker("mock-maker-subclass"));
+  private final IntentTreeSnapshotProvider snapshots =
+      mock(IntentTreeSnapshotProvider.class, withSettings().mockMaker("mock-maker-subclass"));
   private final ChatClient chat = mock(ChatClient.class);
   private final McpToolRegistry tools = mock(McpToolRegistry.class);
   private final RagProperties config = new RagProperties();
   private final IntentTreeRoutingStage stage =
-      new IntentTreeRoutingStage(intentTreeService, chat, tools, config);
+      new IntentTreeRoutingStage(snapshots, chat, tools, config);
 
   @AfterEach
   void tearDown() {
@@ -61,13 +62,9 @@ class IntentTreeRoutingStageTest {
     IntentNode kb = node("制度", IntentNode.Kind.KB, List.of(kbId));
     IntentNode chatNode = node("闲聊", IntentNode.Kind.SYSTEM, List.of());
     IntentNode mcp = mcpNode();
-    when(intentTreeService.activeLeaves()).thenReturn(List.of(kb, chatNode, mcp));
-    when(intentTreeService.list()).thenReturn(List.of(kb, chatNode, mcp));
-    when(tools.availableReadOnlyTools())
-        .thenReturn(
-            List.of(
-                new McpToolDefinition(
-                    "calendar.read", "查询日程", true, Map.of("type", "object"), Set.of())));
+    McpToolDefinition calendar = calendarTool();
+    when(snapshots.snapshot())
+        .thenReturn(IntentTreeSnapshot.from(List.of(kb, chatNode, mcp), List.of(calendar)));
     when(tools.check("calendar.read", Map.of())).thenReturn(McpToolRegistry.RoutingCheck.ALLOWED);
     QueryPlan plan =
         new QueryPlan(
@@ -160,8 +157,7 @@ class IntentTreeRoutingStageTest {
 
   @Test
   void fallbackLogContainsRunIdAndReason(CapturedOutput output) {
-    when(intentTreeService.activeLeaves()).thenReturn(List.of());
-    when(intentTreeService.list()).thenReturn(List.of());
+    when(snapshots.snapshot()).thenReturn(snapshot(List.of()));
     RagRunTrace trace = trace();
 
     RoutingPlan result = stage.execute(QueryPlan.fallback("secret-question"), trace);
@@ -176,6 +172,7 @@ class IntentTreeRoutingStageTest {
   @Test
   void emptyTreeAndDisabledOrInvalidLeavesSkipClassification() {
     QueryPlan plan = twoQuestions();
+    when(snapshots.snapshot()).thenReturn(snapshot(List.of()));
     assertFallback(plan, "INTENT_TREE_EMPTY");
     IntentNode disabled =
         new IntentNode(
@@ -189,7 +186,7 @@ class IntentTreeRoutingStageTest {
             List.of(),
             false,
             0);
-    when(intentTreeService.list()).thenReturn(List.of(disabled));
+    when(snapshots.snapshot()).thenReturn(snapshot(List.of(disabled)));
     assertFallback(plan, "INTENT_TREE_NO_VALID_LEAVES");
     verify(chat, never()).generate(any(), any());
   }
@@ -289,9 +286,20 @@ class IntentTreeRoutingStageTest {
   }
 
   private void active(IntentNode node) {
-    when(intentTreeService.activeLeaves()).thenReturn(List.of(node));
-    when(intentTreeService.list()).thenReturn(List.of(node));
-    when(tools.availableReadOnlyTools()).thenReturn(List.of());
+    when(snapshots.snapshot()).thenReturn(snapshot(List.of(node)));
+  }
+
+  private IntentTreeSnapshot snapshot(List<IntentNode> nodes) {
+    List<McpToolDefinition> availableTools =
+        nodes.stream()
+            .filter(node -> node.kind() == IntentNode.Kind.MCP)
+            .map(ignored -> calendarTool())
+            .toList();
+    return IntentTreeSnapshot.from(nodes, availableTools);
+  }
+
+  private McpToolDefinition calendarTool() {
+    return new McpToolDefinition("calendar.read", "查询日程", true, Map.of("type", "object"), Set.of());
   }
 
   private void assertFallback(QueryPlan plan, String expectedTraceReason) {
