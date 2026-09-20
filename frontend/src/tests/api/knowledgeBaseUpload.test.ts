@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { request } from '../../api/http'
-import { uploadDocuments } from '../../api/knowledgeBase'
+import { getDocumentPreview, uploadDocuments } from '../../api/knowledgeBase'
 
 vi.mock('../../api/http', () => ({ request: vi.fn() }))
 
@@ -21,5 +21,22 @@ describe('batch document upload request', () => {
     expect(config.timeout).toBe(120_000)
     expect(config.data).toBeInstanceOf(FormData)
     expect((config.data as FormData).getAll('files')).toEqual([first, second])
+  })
+
+  it('loads a current document preview without a version identifier', async () => {
+    vi.mocked(request).mockResolvedValue({
+      name: 'guide.md',
+      format: 'MARKDOWN',
+      mediaType: 'text/markdown',
+      fileSizeBytes: 8,
+      content: '# guide',
+      blocks: [],
+    })
+
+    await getDocumentPreview('kb', 'doc')
+
+    expect(request).toHaveBeenCalledWith({
+      url: '/knowledge-bases/kb/documents/doc/preview',
+    })
   })
 })

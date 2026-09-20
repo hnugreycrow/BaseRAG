@@ -57,6 +57,7 @@ describe('authentication route guard', () => {
     for (const path of [
       '/admin',
       '/admin/knowledge-bases',
+      '/admin/knowledge-bases/kb/documents/doc/preview',
       '/admin/intent-tree',
       '/admin/models',
       '/admin/observability/run-1',
@@ -89,6 +90,7 @@ describe('authentication route guard', () => {
     for (const [path, name] of [
       ['/admin', 'dashboard'],
       ['/admin/knowledge-bases', 'knowledge-bases'],
+      ['/admin/knowledge-bases/kb/documents/doc/preview', 'document-preview'],
       ['/admin/intent-tree', 'intent-tree'],
       ['/admin/models', 'models'],
       ['/admin/observability', 'observability'],

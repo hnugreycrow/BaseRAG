@@ -38,4 +38,36 @@ describe('document table selection', () => {
       wrapper.unmount()
     }
   })
+
+  it('previews every document status without opening chunk management', async () => {
+    const wrapper = mount(DocumentTable, {
+      props: {
+        rows,
+        loading: false,
+        processingIds: new Set<string>(),
+        selectedIds: new Set<string>(),
+      },
+      global: { plugins: [ElementPlus] },
+      attachTo: document.body,
+    })
+    try {
+      await flushPromises()
+      const previewButtons = wrapper
+        .findAll('.desktop-resource-table .el-button')
+        .filter((button) => button.text() === '预览')
+      expect(previewButtons).toHaveLength(4)
+      expect(
+        wrapper
+          .findAll('.mobile-resource-list .el-button')
+          .filter((button) => button.text() === '预览'),
+      ).toHaveLength(4)
+
+      await previewButtons[0]!.trigger('click')
+
+      expect(wrapper.emitted('preview')?.[0]?.[0]).toEqual(rows[0])
+      expect(wrapper.emitted('open')).toBeUndefined()
+    } finally {
+      wrapper.unmount()
+    }
+  })
 })

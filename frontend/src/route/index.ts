@@ -24,6 +24,12 @@ export const router = createRouter({
       meta: { title: '知识问答' },
     },
     {
+      path: '/admin/knowledge-bases/:knowledgeBaseId/documents/:documentId/preview',
+      name: 'document-preview',
+      component: () => import('../views/DocumentPreviewView.vue'),
+      meta: { title: '文档预览', adminOnly: true },
+    },
+    {
       path: '/admin',
       component: AdminLayout,
       meta: { adminOnly: true },

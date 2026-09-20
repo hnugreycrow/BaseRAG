@@ -9,6 +9,7 @@ import com.hnu.backend.document.vo.DocumentChunkBatchResponse;
 import com.hnu.backend.document.vo.DocumentChunkDetailResponse;
 import com.hnu.backend.document.vo.DocumentChunkResponse;
 import com.hnu.backend.document.vo.DocumentImportResponse;
+import com.hnu.backend.document.vo.DocumentPreviewResponse;
 import com.hnu.backend.document.vo.DocumentResponse;
 import com.hnu.backend.knowledgebase.service.KnowledgeBaseService;
 import com.hnu.backend.shared.web.PageResponse;
@@ -106,6 +107,24 @@ public class DocumentController {
         documentService.originalFile(
             managedOwner(knowledgeBaseId), knowledgeBaseId, documentId, versionId);
     return fileResponse(file, range);
+  }
+
+  /** 返回文档当前版本的原文件；PDF 支持浏览器单段 Range 请求。 */
+  @GetMapping("/{documentId}/content")
+  public ResponseEntity<byte[]> currentContent(
+      @PathVariable UUID knowledgeBaseId,
+      @PathVariable UUID documentId,
+      @RequestHeader(value = HttpHeaders.RANGE, required = false) String range) {
+    var file =
+        documentService.originalFile(managedOwner(knowledgeBaseId), knowledgeBaseId, documentId);
+    return fileResponse(file, range);
+  }
+
+  /** 返回文档当前版本的 Markdown、PDF 或 DOCX 在线预览数据。 */
+  @GetMapping("/{documentId}/preview")
+  public DocumentPreviewResponse preview(
+      @PathVariable UUID knowledgeBaseId, @PathVariable UUID documentId) {
+    return documentService.preview(managedOwner(knowledgeBaseId), knowledgeBaseId, documentId);
   }
 
   /**

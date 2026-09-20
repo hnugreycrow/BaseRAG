@@ -23,6 +23,7 @@ export interface KnowledgeBase {
 }
 
 export type DocumentStatus = 'UPLOADED' | 'PROCESSING' | 'READY' | 'FAILED'
+export type DocumentFormat = 'MARKDOWN' | 'PDF' | 'DOCX'
 
 export interface KnowledgeDocument {
   id: string
@@ -32,13 +33,31 @@ export interface KnowledgeDocument {
   chunkCount: number
   createdAt: string
   /** 版本原文件的实际格式。 */
-  format?: 'MARKDOWN' | 'PDF' | 'DOCX'
+  format?: DocumentFormat
   /** 原文件 MIME 类型。 */
   mediaType?: string
   /** 原文件大小，单位为字节。 */
   fileSizeBytes?: number
   /** 是否可在浏览器中预览原文件。 */
   previewAvailable?: boolean
+}
+
+export interface DocumentPreviewBlock {
+  kind: 'HEADING' | 'TEXT' | 'CODE' | 'TABLE' | 'LIST'
+  content: string
+  level: number | null
+  sourceUnit: 'LINE' | 'PAGE' | 'PARAGRAPH'
+  sourceStart: number
+  sourceEnd: number
+}
+
+export interface DocumentPreview {
+  name: string
+  format: DocumentFormat
+  mediaType: string
+  fileSizeBytes: number
+  content: string | null
+  blocks: DocumentPreviewBlock[]
 }
 
 export interface DocumentChunk {
@@ -133,6 +152,24 @@ export function getDocument(knowledgeBaseId: string, documentId: string) {
   return request<KnowledgeDocument>({
     url: `/knowledge-bases/${knowledgeBaseId}/documents/${documentId}`,
   })
+}
+
+export function getDocumentPreview(knowledgeBaseId: string, documentId: string) {
+  return request<DocumentPreview>({
+    url: '/knowledge-bases/' + knowledgeBaseId + '/documents/' + documentId + '/preview',
+  })
+}
+
+export function documentContentUrl(knowledgeBaseId: string, documentId: string) {
+  const base = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
+  return (
+    base +
+    '/knowledge-bases/' +
+    encodeURIComponent(knowledgeBaseId) +
+    '/documents/' +
+    encodeURIComponent(documentId) +
+    '/content'
+  )
 }
 
 export function uploadDocument(knowledgeBaseId: string, file: File) {

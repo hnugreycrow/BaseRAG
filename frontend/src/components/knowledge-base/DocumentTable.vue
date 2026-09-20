@@ -14,6 +14,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   open: [row: KnowledgeDocument]
+  preview: [row: KnowledgeDocument]
   rename: [row: KnowledgeDocument]
   remove: [row: KnowledgeDocument]
   chunk: [row: KnowledgeDocument]
@@ -137,7 +138,7 @@ function statusLabel(row: KnowledgeDocument) {
       <el-table-column label="上传时间" width="150">
         <template #default="{ row }">{{ formatDate(row.createdAt) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="240" fixed="right" align="center">
+      <el-table-column label="操作" width="286" fixed="right" align="center">
         <template #default="{ row }">
           <div class="row-actions" @click.stop>
             <el-button
@@ -151,6 +152,14 @@ function statusLabel(row: KnowledgeDocument) {
             </el-button>
             <el-button v-if="canOpen(row)" class="open-button" text @click="emit('open', row)">
               管理分块
+            </el-button>
+            <el-button
+              v-if="row.previewAvailable !== false"
+              class="preview-button"
+              text
+              @click="emit('preview', row)"
+            >
+              预览
             </el-button>
             <el-dropdown
               trigger="click"
@@ -200,6 +209,9 @@ function statusLabel(row: KnowledgeDocument) {
           }}</el-button
         >
         <el-button v-if="canOpen(row)" text @click="emit('open', row)">管理分块</el-button>
+        <el-button v-if="row.previewAvailable !== false" text @click="emit('preview', row)"
+          >预览</el-button
+        >
         <el-button text @click="emit('rename', row)">重命名</el-button>
         <el-button text type="danger" @click="emit('remove', row)">删除</el-button>
       </div>
@@ -272,6 +284,11 @@ function statusLabel(row: KnowledgeDocument) {
 
 .open-button {
   color: var(--color-primary);
+  font-weight: 600;
+}
+
+.preview-button {
+  color: #3d587e;
   font-weight: 600;
 }
 

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import DOMPurify from 'dompurify'
-import { marked } from 'marked'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import type { AnswerSource, AssistantMessage } from '../../api'
+import MarkdownContent from '../common/MarkdownContent.vue'
+import { markdownSummary } from '../common/markdown'
 
 const props = defineProps<{
   message: AssistantMessage | null
@@ -21,24 +21,9 @@ const selectedSource = computed(
   () => citedSources.value.find((source) => source.citationId === selectedCitationId.value) ?? null,
 )
 
-function renderMarkdown(content: string) {
-  const html = marked.parse(content, { async: false }) as string
-  return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } })
-}
-
 function sourceSummary(content: string) {
-  const container = document.createElement('div')
-  container.innerHTML = renderMarkdown(content)
-  container
-    .querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote, pre, tr')
-    .forEach((node) => node.append(' '))
-  const plainText = (container.textContent ?? '').replace(/\s+/g, ' ').trim()
-  return plainText.length > 120 ? plainText.slice(0, 120).trimEnd() + '…' : plainText || '暂无内容'
+  return markdownSummary(content)
 }
-
-const previewHtml = computed(() =>
-  selectedSource.value ? renderMarkdown(selectedSource.value.content) : '',
-)
 
 function originalFileUrl(source: AnswerSource) {
   const base = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
@@ -143,7 +128,7 @@ watch(() => [props.highlighted, props.message?.id], locate)
             {{ location.heading ? location.heading + ' · ' : '' }}{{ location.range.label }}
           </li>
         </ul>
-        <div class="preview-content markdown-body" v-html="previewHtml"></div>
+        <MarkdownContent class="preview-content" :content="selectedSource.content" />
         <a
           v-if="conversationId && message?.status === 'COMPLETED'"
           class="source-original-link"
@@ -256,69 +241,6 @@ watch(() => [props.highlighted, props.message?.id], locate)
   font-size: 14px;
   line-height: 1.8;
   overflow-wrap: anywhere;
-}
-.markdown-body :deep(h1),
-.markdown-body :deep(h2),
-.markdown-body :deep(h3),
-.markdown-body :deep(h4) {
-  margin: 1.3em 0 0.5em;
-  line-height: 1.4;
-}
-.markdown-body :deep(h1:first-child),
-.markdown-body :deep(h2:first-child),
-.markdown-body :deep(h3:first-child) {
-  margin-top: 0;
-}
-.markdown-body :deep(p),
-.markdown-body :deep(ul),
-.markdown-body :deep(ol),
-.markdown-body :deep(blockquote),
-.markdown-body :deep(pre) {
-  margin: 0 0 1em;
-}
-.markdown-body :deep(ul),
-.markdown-body :deep(ol) {
-  padding-left: 1.6em;
-}
-.markdown-body :deep(blockquote) {
-  border-left: 3px solid #aabcf5;
-  padding-left: 1em;
-  color: #52627b;
-}
-.markdown-body :deep(pre) {
-  overflow-x: auto;
-  border-radius: 8px;
-  padding: 12px;
-  background: #f4f6fa;
-  line-height: 1.5;
-}
-.markdown-body :deep(code) {
-  border-radius: 4px;
-  padding: 1px 4px;
-  background: #f4f6fa;
-  font-size: 0.9em;
-}
-.markdown-body :deep(pre code) {
-  padding: 0;
-}
-.markdown-body :deep(table) {
-  display: block;
-  max-width: 100%;
-  overflow-x: auto;
-  border-collapse: collapse;
-  margin-bottom: 1em;
-}
-.markdown-body :deep(th),
-.markdown-body :deep(td) {
-  border: 1px solid var(--color-line);
-  padding: 6px 10px;
-}
-.markdown-body :deep(img) {
-  max-width: 100%;
-  height: auto;
-}
-.markdown-body :deep(a) {
-  color: var(--color-primary);
 }
 </style>
 

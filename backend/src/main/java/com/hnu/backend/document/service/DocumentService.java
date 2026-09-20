@@ -12,6 +12,7 @@ import com.hnu.backend.document.mapper.DocumentVersionMapper;
 import com.hnu.backend.document.parser.DocumentFormat;
 import com.hnu.backend.document.parser.DocumentParserRegistry;
 import com.hnu.backend.document.parser.MarkdownChunker;
+import com.hnu.backend.document.parser.StructuredBlock;
 import com.hnu.backend.document.parser.StructuredChunkPacker;
 import com.hnu.backend.document.storage.FileStorage;
 import com.hnu.backend.document.vo.DocumentBatchUploadResponse;
@@ -19,12 +20,14 @@ import com.hnu.backend.document.vo.DocumentChunkBatchResponse;
 import com.hnu.backend.document.vo.DocumentChunkDetailResponse;
 import com.hnu.backend.document.vo.DocumentChunkResponse;
 import com.hnu.backend.document.vo.DocumentImportResponse;
+import com.hnu.backend.document.vo.DocumentPreviewResponse;
 import com.hnu.backend.document.vo.DocumentResponse;
 import com.hnu.backend.knowledgebase.service.KnowledgeBaseService;
 import com.hnu.backend.model.client.EmbeddingClient;
 import com.hnu.backend.shared.error.ApiException;
 import com.hnu.backend.shared.web.PageResponse;
 import jakarta.annotation.PreDestroy;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -676,6 +679,58 @@ public class DocumentService {
         || !version.getDocumentId().equals(document.getId())
         || !version.getKnowledgeBaseId().equals(knowledgeBaseId))
       throw new ApiException("DOCUMENT_VERSION_NOT_FOUND", "文档版本不存在", HttpStatus.NOT_FOUND);
+    return originalFile(document, version);
+  }
+
+  /** 返回文档当前版本的原文件。 */
+  public OriginalFile originalFile(UUID ownerId, UUID knowledgeBaseId, UUID documentId) {
+    Document document = requireDocument(ownerId, knowledgeBaseId, documentId);
+    return originalFile(document, latestVersion(documentId));
+  }
+
+  /** 返回文档当前版本的在线预览数据。 */
+  public DocumentPreviewResponse preview(UUID ownerId, UUID knowledgeBaseId, UUID documentId) {
+    Document document = requireDocument(ownerId, knowledgeBaseId, documentId);
+    DocumentVersion version = latestVersion(documentId);
+    DocumentFormat format =
+        DocumentFormat.valueOf(version.getFormat() == null ? "MARKDOWN" : version.getFormat());
+    String content = null;
+    List<DocumentPreviewResponse.Block> blocks = List.of();
+    if (format == DocumentFormat.MARKDOWN) {
+      byte[] bytes = storage.get(version.getStorageKey());
+      content = new String(bytes, StandardCharsets.UTF_8);
+      if (content.startsWith("\uFEFF")) content = content.substring(1);
+    } else if (format == DocumentFormat.DOCX) {
+      byte[] bytes = storage.get(version.getStorageKey());
+      blocks =
+          parsers.parser(format).parse(bytes).stream()
+              .map(DocumentService::toPreviewBlock)
+              .toList();
+    }
+    return new DocumentPreviewResponse(
+        document.getName(),
+        format.name(),
+        version.getMediaType(),
+        version.getFileSizeBytes() == null ? 0 : version.getFileSizeBytes(),
+        content,
+        blocks);
+  }
+
+  private static DocumentPreviewResponse.Block toPreviewBlock(StructuredBlock block) {
+    Integer level =
+        block.kind() == StructuredBlock.Kind.HEADING
+            ? Math.max(1, Math.min(6, block.outlinePath().size()))
+            : null;
+    return new DocumentPreviewResponse.Block(
+        block.kind().name(),
+        block.content(),
+        level,
+        block.source().unit().name(),
+        block.source().start(),
+        block.source().end());
+  }
+
+  private OriginalFile originalFile(Document document, DocumentVersion version) {
     return new OriginalFile(
         document.getName(), version.getMediaType(), storage.get(version.getStorageKey()));
   }

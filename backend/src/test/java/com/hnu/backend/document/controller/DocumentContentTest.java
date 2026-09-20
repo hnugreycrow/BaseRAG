@@ -80,4 +80,21 @@ class DocumentContentTest {
     var invalid = controller.content(kb, document, version, "bytes=20-");
     assertEquals(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE, invalid.getStatusCode());
   }
+
+  @Test
+  void currentContentResolvesTheDocumentWithoutAClientVersionId() {
+    KnowledgeBase managed = new KnowledgeBase();
+    managed.setOwnerId(owner);
+    when(knowledgeBaseService.requireAdminOwned(kb)).thenReturn(managed);
+    when(documentService.originalFile(owner, kb, document))
+        .thenReturn(
+            new DocumentService.OriginalFile(
+                "手册.pdf", "application/pdf", "0123456789".getBytes(StandardCharsets.US_ASCII)));
+
+    var response = controller.currentContent(kb, document, "bytes=0-3");
+
+    assertEquals(HttpStatus.PARTIAL_CONTENT, response.getStatusCode());
+    assertEquals("0123", new String(response.getBody(), StandardCharsets.US_ASCII));
+    verify(documentService).originalFile(owner, kb, document);
+  }
 }

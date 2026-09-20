@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ArrowLeft, Collection, Plus, Refresh, Search, Upload } from '@element-plus/icons-vue'
+import { useRouter } from 'vue-router'
+import type { KnowledgeDocument } from '../api'
 
 import ChunkDetailDrawer from '../components/knowledge-base/ChunkDetailDrawer.vue'
 import ChunkTable from '../components/knowledge-base/ChunkTable.vue'
@@ -9,6 +11,8 @@ import KnowledgeBaseTable from '../components/knowledge-base/KnowledgeBaseTable.
 import RenameDialog from '../components/knowledge-base/RenameDialog.vue'
 import UploadDocumentDialog from '../components/knowledge-base/UploadDocumentDialog.vue'
 import { useKnowledgeBaseWorkspace } from '../components/knowledge-base/useKnowledgeBaseWorkspace'
+
+const router = useRouter()
 
 const {
   chunkDetail,
@@ -61,6 +65,15 @@ const {
   uploadResult,
   uploadDialogOpen,
 } = useKnowledgeBaseWorkspace()
+
+function openPreview(row: KnowledgeDocument) {
+  if (!selectedKnowledgeBase.value) return
+  const href = router.resolve({
+    name: 'document-preview',
+    params: { knowledgeBaseId: selectedKnowledgeBase.value.id, documentId: row.id },
+  }).href
+  window.open(href, '_blank', 'noopener,noreferrer')
+}
 </script>
 
 <template>
@@ -188,6 +201,7 @@ const {
         @toggle-selection="toggleSelection"
         @selection-change="setSelection"
         @open="openDocument"
+        @preview="openPreview"
         @rename="(row) => openRename({ kind: 'document', value: row })"
         @remove="handleRemoveDocument"
         @chunk="handleChunk"
