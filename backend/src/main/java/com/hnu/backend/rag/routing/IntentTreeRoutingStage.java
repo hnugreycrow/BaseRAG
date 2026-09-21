@@ -16,6 +16,7 @@ import jakarta.annotation.PreDestroy;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -32,7 +33,7 @@ import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-/** 一次模型调用对所有子问题和启用叶子分类，失败时直接检索全部公共知识库。 */
+/** 一次模型调用对所有子问题和启用叶子分类，按子问题隔离可恢复的分类失败。 */
 @Component
 public class IntentTreeRoutingStage {
   private static final Logger log = LoggerFactory.getLogger(IntentTreeRoutingStage.class);
@@ -54,7 +55,7 @@ public class IntentTreeRoutingStage {
     this.config = config;
   }
 
-  /** 读取树快照并分类；可恢复失败直接为全部子问题建立全公共库检索路由。 */
+  /** 读取树快照并分类；单个子问题无效时只将该子问题降级到全公共库检索。 */
   public RoutingPlan execute(QueryPlan plan, RagRunTrace trace) {
     RagRunTrace.Span span =
         trace.start(RagStageName.INTENT_ROUTING, null, plan.subQuestions().size());
@@ -104,11 +105,9 @@ public class IntentTreeRoutingStage {
         return knowledgeFallback(plan, span, trace, "INTENT_TREE_CLASSIFICATION_FAILED");
       }
       span.model(generation.id(), generation.provider(), generation.model());
-      RoutingPlan routed;
+      ParsedRouting parsed;
       try {
-        routed = parse(plan, byId, generation.content());
-      } catch (LowConfidenceException error) {
-        return knowledgeFallback(plan, span, trace, "INTENT_TREE_LOW_CONFIDENCE");
+        parsed = parse(plan, byId, generation.content());
       } catch (RuntimeException error) {
         if (isCancelled(error)) {
           span.cancelled("GENERATION_CANCELLED");
@@ -120,12 +119,18 @@ public class IntentTreeRoutingStage {
         span.cancelled("GENERATION_CANCELLED");
         throw ApiException.cancelled();
       }
-      span.success(routed.routes().size());
+      RoutingPlan routed = parsed.plan();
+      if (parsed.fallbacks().isEmpty()) {
+        span.success(routed.routes().size());
+      } else {
+        span.degraded(routed.routes().size(), parsed.traceReason());
+      }
       RagDecisionLog.emit(
           () ->
               log.info(
-                  "intent routing completed runId={} routes={}",
+                  "intent routing completed runId={} fallbackReasons={} routes={}",
                   trace.runId(),
+                  parsed.fallbacks(),
                   routeSummary(routed, paths)));
       return routed;
     } catch (ApiException error) {
@@ -190,8 +195,9 @@ public class IntentTreeRoutingStage {
   private boolean isCancelled(Throwable error) {
     for (Throwable cause = error; cause != null; cause = cause.getCause()) {
       if (cause instanceof InterruptedException
-          || cause instanceof ApiException api && "GENERATION_CANCELLED".equals(api.code()))
+          || cause instanceof ApiException api && "GENERATION_CANCELLED".equals(api.code())) {
         return true;
+      }
     }
     return false;
   }
@@ -201,83 +207,158 @@ public class IntentTreeRoutingStage {
     executor.shutdownNow();
   }
 
-  private RoutingPlan parse(QueryPlan plan, Map<UUID, IntentNode> nodes, String content) {
+  private ParsedRouting parse(QueryPlan plan, Map<UUID, IntentNode> nodes, String content) {
     JsonNode root = json.readTree(content);
+    JsonNode routes = validateEnvelope(plan, root);
+    List<IntentRoute> resolved = new ArrayList<>();
+    List<RouteFallback> fallbacks = new ArrayList<>();
+    for (int index = 0; index < routes.size(); index++) {
+      String subQuestionId = plan.subQuestions().get(index).id();
+      try {
+        resolved.add(parseRoute(subQuestionId, nodes, routes.get(index)));
+      } catch (LowConfidenceException error) {
+        addRouteFallback(resolved, fallbacks, subQuestionId, "INTENT_TREE_LOW_CONFIDENCE");
+      } catch (ToolValidationException error) {
+        addRouteFallback(resolved, fallbacks, subQuestionId, error.reason());
+      } catch (RuntimeException error) {
+        if (isCancelled(error)) {
+          throw error;
+        }
+        addRouteFallback(resolved, fallbacks, subQuestionId, "INTENT_TREE_INVALID_OUTPUT");
+      }
+    }
+    return new ParsedRouting(new RoutingPlan(resolved), List.copyOf(fallbacks));
+  }
+
+  private JsonNode validateEnvelope(QueryPlan plan, JsonNode root) {
+    if (root == null || !root.isObject()) {
+      throw new IllegalArgumentException("Invalid intent tree response");
+    }
     JsonNode routes = root.path("routes");
     if (!routes.isArray() || routes.size() != plan.subQuestions().size()) {
       throw new IllegalArgumentException("Invalid intent tree response");
     }
-    List<IntentRoute> resolved = new ArrayList<>();
     for (int index = 0; index < routes.size(); index++) {
       JsonNode item = routes.get(index);
       String expectedId = plan.subQuestions().get(index).id();
-      if (!expectedId.equals(item.path("subQuestionId").asString())) {
+      if (!item.isObject() || !expectedId.equals(item.path("subQuestionId").asString())) {
         throw new IllegalArgumentException("Invalid sub-question ID");
       }
-      ModelReasonCode reason = ModelReasonCode.parse(item.path("reasonCode").asString());
-      JsonNode candidates = item.path("candidates");
-      if (!candidates.isArray() || candidates.isEmpty() || candidates.size() > 2) {
-        throw new IllegalArgumentException("Invalid intent candidates");
-      }
-      List<ScoredNode> ranked = new ArrayList<>();
-      Set<UUID> seen = new HashSet<>();
-      for (JsonNode candidate : candidates) {
-        UUID nodeId = UUID.fromString(candidate.path("nodeId").asString());
-        double score = candidate.path("score").asDouble(Double.NaN);
-        if (!nodes.containsKey(nodeId)
-            || !seen.add(nodeId)
-            || !Double.isFinite(score)
-            || score < 0
-            || score > 1) throw new IllegalArgumentException("Invalid candidate");
-        ranked.add(new ScoredNode(nodes.get(nodeId), score));
-      }
-      if (ranked.size() == 2 && ranked.get(0).score() < ranked.get(1).score()) {
-        throw new IllegalArgumentException("Candidates are not ranked");
-      }
-      ScoredNode best = ranked.getFirst();
-      if (best.score() < config.getPipeline().getRouting().getConfidenceThreshold()) {
-        throw new LowConfidenceException();
-      }
-      IntentNode node = best.node();
-      ScoredNode second = ranked.size() == 2 ? ranked.get(1) : null;
-      RoutingReasonCode code =
-          reason == ModelReasonCode.AMBIGUOUS
-              ? RoutingReasonCode.AMBIGUOUS
-              : switch (node.kind()) {
-                case KB -> RoutingReasonCode.KNOWLEDGE_SOURCE_REQUIRED;
-                case MCP -> RoutingReasonCode.EXTERNAL_SOURCE_REQUIRED;
-                case SYSTEM -> RoutingReasonCode.GENERAL_CHAT;
-              };
-      Map<String, Object> arguments = Map.of();
-      if (node.kind() == IntentNode.Kind.MCP) {
-        JsonNode values = item.path("toolArguments");
-        if (!values.isObject()) throw new IllegalArgumentException("Invalid tool arguments");
-        arguments = json.convertValue(values, Map.class);
-        if (tools.check(node.toolName(), arguments) != McpToolRegistry.RoutingCheck.ALLOWED) {
-          throw new IllegalArgumentException("Tool is not executable");
-        }
-      }
-      resolved.add(
-          new IntentRoute(
-              expectedId,
-              switch (node.kind()) {
-                case KB -> IntentType.KNOWLEDGE_RETRIEVAL;
-                case MCP -> IntentType.MCP_TOOL;
-                case SYSTEM -> IntentType.SYSTEM_CHAT;
-              },
-              best.score(),
-              node.toolName(),
-              arguments,
-              code,
-              node.id(),
-              second == null ? null : second.node().id(),
-              second == null ? null : second.score(),
-              node.kind() == IntentNode.Kind.KB ? node.knowledgeBaseIds() : null));
     }
-    return new RoutingPlan(resolved);
+    return routes;
+  }
+
+  private IntentRoute parseRoute(String subQuestionId, Map<UUID, IntentNode> nodes, JsonNode item) {
+    ModelReasonCode reason = ModelReasonCode.parse(item.path("reasonCode").asString());
+    JsonNode candidates = item.path("candidates");
+    if (!candidates.isArray() || candidates.isEmpty() || candidates.size() > 2) {
+      throw new IllegalArgumentException("Invalid intent candidates");
+    }
+    List<ScoredNode> ranked = new ArrayList<>();
+    Set<UUID> seen = new HashSet<>();
+    for (JsonNode candidate : candidates) {
+      UUID nodeId = UUID.fromString(candidate.path("nodeId").asString());
+      double score = candidate.path("score").asDouble(Double.NaN);
+      if (!nodes.containsKey(nodeId)
+          || !seen.add(nodeId)
+          || !Double.isFinite(score)
+          || score < 0
+          || score > 1) {
+        throw new IllegalArgumentException("Invalid candidate");
+      }
+      ranked.add(new ScoredNode(nodes.get(nodeId), score));
+    }
+    if (ranked.size() == 2 && ranked.get(0).score() < ranked.get(1).score()) {
+      throw new IllegalArgumentException("Candidates are not ranked");
+    }
+    ScoredNode best = ranked.getFirst();
+    if (best.score() < config.getPipeline().getRouting().getConfidenceThreshold()) {
+      throw new LowConfidenceException();
+    }
+    IntentNode node = best.node();
+    ScoredNode second = ranked.size() == 2 ? ranked.get(1) : null;
+    RoutingReasonCode code =
+        reason == ModelReasonCode.AMBIGUOUS
+            ? RoutingReasonCode.AMBIGUOUS
+            : switch (node.kind()) {
+              case KB -> RoutingReasonCode.KNOWLEDGE_SOURCE_REQUIRED;
+              case MCP -> RoutingReasonCode.EXTERNAL_SOURCE_REQUIRED;
+              case SYSTEM -> RoutingReasonCode.GENERAL_CHAT;
+            };
+    Map<String, Object> arguments = Map.of();
+    if (node.kind() == IntentNode.Kind.MCP) {
+      JsonNode values = item.path("toolArguments");
+      if (!values.isObject()) {
+        throw new IllegalArgumentException("Invalid tool arguments");
+      }
+      arguments = json.convertValue(values, Map.class);
+      McpToolRegistry.RoutingCheck check = tools.check(node.toolName(), arguments);
+      if (check != McpToolRegistry.RoutingCheck.ALLOWED) {
+        throw new ToolValidationException(toolFallbackReason(check));
+      }
+    }
+    return new IntentRoute(
+        subQuestionId,
+        switch (node.kind()) {
+          case KB -> IntentType.KNOWLEDGE_RETRIEVAL;
+          case MCP -> IntentType.MCP_TOOL;
+          case SYSTEM -> IntentType.SYSTEM_CHAT;
+        },
+        best.score(),
+        node.toolName(),
+        arguments,
+        code,
+        node.id(),
+        second == null ? null : second.node().id(),
+        second == null ? null : second.score(),
+        node.kind() == IntentNode.Kind.KB ? node.knowledgeBaseIds() : null);
+  }
+
+  private void addRouteFallback(
+      List<IntentRoute> routes,
+      List<RouteFallback> fallbacks,
+      String subQuestionId,
+      String reason) {
+    routes.add(
+        IntentRoute.knowledgeFallback(subQuestionId, 0, RoutingReasonCode.INTENT_TREE_FALLBACK));
+    fallbacks.add(new RouteFallback(subQuestionId, reason));
+  }
+
+  private String toolFallbackReason(McpToolRegistry.RoutingCheck check) {
+    return switch (check) {
+      case MCP_DISABLED -> "INTENT_TREE_MCP_DISABLED";
+      case TOOL_NOT_ALLOWED -> "INTENT_TREE_TOOL_NOT_ALLOWED";
+      case TOOL_NOT_READ_ONLY -> "INTENT_TREE_TOOL_NOT_READ_ONLY";
+      case INVALID_ARGUMENTS -> "INTENT_TREE_INVALID_TOOL_ARGUMENTS";
+      case ALLOWED -> throw new IllegalArgumentException("Allowed tool cannot be a fallback");
+    };
   }
 
   private static final class LowConfidenceException extends RuntimeException {}
+
+  private static final class ToolValidationException extends RuntimeException {
+    private final String reason;
+
+    private ToolValidationException(String reason) {
+      this.reason = reason;
+    }
+
+    private String reason() {
+      return reason;
+    }
+  }
+
+  private record RouteFallback(String subQuestionId, String reason) {}
+
+  private record ParsedRouting(RoutingPlan plan, List<RouteFallback> fallbacks) {
+    private String traceReason() {
+      Set<String> reasons = new LinkedHashSet<>();
+      for (RouteFallback fallback : fallbacks) {
+        reasons.add(fallback.reason());
+      }
+      return reasons.size() == 1 ? reasons.iterator().next() : "INTENT_TREE_PARTIAL_FALLBACK";
+    }
+  }
 
   /** 分类模型输出的原因码，与最终路由决策的 {@link RoutingReasonCode} 区分。 */
   private enum ModelReasonCode {

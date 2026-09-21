@@ -201,6 +201,107 @@ class IntentTreeRoutingStageTest {
   }
 
   @Test
+  void lowConfidenceOnlyFallsBackForAffectedSubQuestion() {
+    UUID kbId = UUID.randomUUID();
+    IntentNode kb = node("制度", IntentNode.Kind.KB, List.of(kbId));
+    IntentNode chatNode = node("闲聊", IntentNode.Kind.SYSTEM, List.of());
+    when(snapshots.snapshot()).thenReturn(snapshot(List.of(kb, chatNode)));
+    QueryPlan plan =
+        new QueryPlan("复合问题", List.of(new SubQuestion("Q1", "你好"), new SubQuestion("Q2", "休假制度")));
+    String response =
+        "{\"routes\":["
+            + "{\"subQuestionId\":\"Q1\",\"candidates\":[{\"nodeId\":\""
+            + chatNode.id()
+            + "\",\"score\":0.95}],\"reasonCode\":\"MATCHED\",\"toolArguments\":{}},"
+            + "{\"subQuestionId\":\"Q2\",\"candidates\":[{\"nodeId\":\""
+            + kb.id()
+            + "\",\"score\":0.4}],\"reasonCode\":\"MATCHED\",\"toolArguments\":{}}]}";
+    when(chat.generate(any(), any())).thenReturn(generation(response));
+    RagRunTrace trace = trace();
+
+    RoutingPlan result = stage.execute(plan, trace);
+
+    assertEquals(IntentType.SYSTEM_CHAT, result.routes().get(0).intent());
+    assertEquals(RoutingReasonCode.GENERAL_CHAT, result.routes().get(0).reasonCode());
+    assertEquals(IntentType.KNOWLEDGE_RETRIEVAL, result.routes().get(1).intent());
+    assertEquals(RoutingReasonCode.INTENT_TREE_FALLBACK, result.routes().get(1).reasonCode());
+    assertNull(result.routes().get(1).knowledgeBaseIds());
+    var snapshot = trace.finish(RagRunStatus.COMPLETED, null);
+    assertEquals(RagStageStatus.DEGRADED, snapshot.stages().getFirst().status());
+    assertEquals("INTENT_TREE_LOW_CONFIDENCE", snapshot.stages().getFirst().reasonCode());
+    verify(chat, times(1)).generate(any(), any());
+  }
+
+  @Test
+  void toolValidationOnlyFallsBackForAffectedSubQuestion() {
+    UUID kbId = UUID.randomUUID();
+    IntentNode kb = node("制度", IntentNode.Kind.KB, List.of(kbId));
+    IntentNode mcp = mcpNode();
+    when(snapshots.snapshot()).thenReturn(snapshot(List.of(kb, mcp)));
+    when(tools.check("calendar.read", Map.of("date", "invalid")))
+        .thenReturn(McpToolRegistry.RoutingCheck.INVALID_ARGUMENTS);
+    QueryPlan plan =
+        new QueryPlan(
+            "复合问题", List.of(new SubQuestion("Q1", "休假制度"), new SubQuestion("Q2", "查询日程")));
+    String response =
+        "{\"routes\":["
+            + "{\"subQuestionId\":\"Q1\",\"candidates\":[{\"nodeId\":\""
+            + kb.id()
+            + "\",\"score\":0.95}],\"reasonCode\":\"MATCHED\",\"toolArguments\":{}},"
+            + "{\"subQuestionId\":\"Q2\",\"candidates\":[{\"nodeId\":\""
+            + mcp.id()
+            + "\",\"score\":0.92}],\"reasonCode\":\"MATCHED\","
+            + "\"toolArguments\":{\"date\":\"invalid\"}}]}";
+    when(chat.generate(any(), any())).thenReturn(generation(response));
+    RagRunTrace trace = trace();
+
+    RoutingPlan result = stage.execute(plan, trace);
+
+    assertEquals(IntentType.KNOWLEDGE_RETRIEVAL, result.routes().get(0).intent());
+    assertEquals(List.of(kbId), result.routes().get(0).knowledgeBaseIds());
+    assertEquals(RoutingReasonCode.KNOWLEDGE_SOURCE_REQUIRED, result.routes().get(0).reasonCode());
+    assertEquals(IntentType.KNOWLEDGE_RETRIEVAL, result.routes().get(1).intent());
+    assertEquals(RoutingReasonCode.INTENT_TREE_FALLBACK, result.routes().get(1).reasonCode());
+    assertNull(result.routes().get(1).knowledgeBaseIds());
+    assertNull(result.routes().get(1).toolHint());
+    var snapshot = trace.finish(RagRunStatus.COMPLETED, null);
+    assertEquals(RagStageStatus.DEGRADED, snapshot.stages().getFirst().status());
+    assertEquals("INTENT_TREE_INVALID_TOOL_ARGUMENTS", snapshot.stages().getFirst().reasonCode());
+    verify(tools).check("calendar.read", Map.of("date", "invalid"));
+    verify(chat, times(1)).generate(any(), any());
+  }
+
+  @Test
+  void invalidCandidateOnlyFallsBackForAffectedSubQuestion() {
+    UUID kbId = UUID.randomUUID();
+    IntentNode kb = node("制度", IntentNode.Kind.KB, List.of(kbId));
+    when(snapshots.snapshot()).thenReturn(snapshot(List.of(kb)));
+    QueryPlan plan =
+        new QueryPlan(
+            "复合问题", List.of(new SubQuestion("Q1", "休假制度"), new SubQuestion("Q2", "未知问题")));
+    String response =
+        "{\"routes\":["
+            + "{\"subQuestionId\":\"Q1\",\"candidates\":[{\"nodeId\":\""
+            + kb.id()
+            + "\",\"score\":0.95}],\"reasonCode\":\"MATCHED\",\"toolArguments\":{}},"
+            + "{\"subQuestionId\":\"Q2\",\"candidates\":[{\"nodeId\":\""
+            + UUID.randomUUID()
+            + "\",\"score\":0.9}],\"reasonCode\":\"MATCHED\",\"toolArguments\":{}}]}";
+    when(chat.generate(any(), any())).thenReturn(generation(response));
+    RagRunTrace trace = trace();
+
+    RoutingPlan result = stage.execute(plan, trace);
+
+    assertEquals(List.of(kbId), result.routes().get(0).knowledgeBaseIds());
+    assertEquals(RoutingReasonCode.KNOWLEDGE_SOURCE_REQUIRED, result.routes().get(0).reasonCode());
+    assertNull(result.routes().get(1).knowledgeBaseIds());
+    assertEquals(RoutingReasonCode.INTENT_TREE_FALLBACK, result.routes().get(1).reasonCode());
+    var snapshot = trace.finish(RagRunStatus.COMPLETED, null);
+    assertEquals(RagStageStatus.DEGRADED, snapshot.stages().getFirst().status());
+    assertEquals("INTENT_TREE_INVALID_OUTPUT", snapshot.stages().getFirst().reasonCode());
+  }
+
+  @Test
   void invalidOutputFallsBackWithFullPublicKnowledgeScope() {
     IntentNode kb = node("制度", IntentNode.Kind.KB, List.of(UUID.randomUUID()));
     active(kb);
@@ -226,7 +327,7 @@ class IntentTreeRoutingStageTest {
     when(chat.generate(any(), any()))
         .thenReturn(generation(response(mcp.id(), 0.9, "{\"date\":\"2026-09-16\"}")));
     when(tools.check(any(), any())).thenReturn(McpToolRegistry.RoutingCheck.INVALID_ARGUMENTS);
-    assertFallback(QueryPlan.fallback("日程"), "INTENT_TREE_INVALID_OUTPUT");
+    assertFallback(QueryPlan.fallback("日程"), "INTENT_TREE_INVALID_TOOL_ARGUMENTS");
     verify(tools).check("calendar.read", Map.of("date", "2026-09-16"));
   }
 
