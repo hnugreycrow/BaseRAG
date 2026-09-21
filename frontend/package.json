@@ -7,9 +7,7 @@
     "dev": "vite",
     "test": "vitest run",
     "build": "vue-tsc -b && vite build",
-    "build:prototype": "vue-tsc -b && vite build --mode prototype",
     "preview": "vite preview",
-    "preview:prototype": "vite preview --mode prototype",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

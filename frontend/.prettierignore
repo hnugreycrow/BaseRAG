@@ -1,6 +1,5 @@
 node_modules
 dist
-dist-prototype
 coverage
 package-lock.json
 public
