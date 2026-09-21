@@ -1,6 +1,7 @@
 package com.hnu.backend.document.parser;
 
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.error.ErrorCode;
 import java.util.Locale;
 
 /** 受支持的原文件格式及其存储和解析元数据。 */
@@ -63,6 +64,6 @@ public enum DocumentFormat {
     if (lower.endsWith(".md") || lower.endsWith(".markdown")) return MARKDOWN;
     if (lower.endsWith(".pdf")) return PDF;
     if (lower.endsWith(".docx")) return DOCX;
-    throw ApiException.bad("INVALID_FILE", "仅支持 Markdown、PDF 和 DOCX 文件");
+    throw ApiException.bad(ErrorCode.INVALID_FILE, "仅支持 Markdown、PDF 和 DOCX 文件");
   }
 }

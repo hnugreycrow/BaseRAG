@@ -48,6 +48,7 @@ export interface RagRunSummary {
   evidenceCount: number
   degraded: boolean
   errorCode?: string
+  errorMessage?: string
   startedAt: string
   firstTokenAt?: string
   completedAt?: string
@@ -70,6 +71,7 @@ export interface RagStageRun {
   model?: string
   reasonCode?: string
   errorCode?: string
+  errorMessage?: string
   startedAt: string
   firstTokenAt?: string
   completedAt: string

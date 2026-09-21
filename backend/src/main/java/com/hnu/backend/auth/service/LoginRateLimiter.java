@@ -1,6 +1,7 @@
 package com.hnu.backend.auth.service;
 
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.error.ErrorCode;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -9,7 +10,6 @@ import java.util.HexFormat;
 import java.util.List;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 /** 使用 Redis 固定窗口限制同一用户名和客户端地址的连续登录失败。 */
@@ -44,8 +44,7 @@ public class LoginRateLimiter {
   public void requireAllowed(String username, String clientAddress) {
     String value = redis.opsForValue().get(key(username, clientAddress));
     if (value != null && Long.parseLong(value) >= MAX_FAILURES) {
-      throw new ApiException(
-          "LOGIN_RATE_LIMITED", "登录失败次数过多，请 15 分钟后重试", HttpStatus.TOO_MANY_REQUESTS);
+      throw new ApiException(ErrorCode.LOGIN_RATE_LIMITED, "登录失败次数过多，请 15 分钟后重试");
     }
   }
 

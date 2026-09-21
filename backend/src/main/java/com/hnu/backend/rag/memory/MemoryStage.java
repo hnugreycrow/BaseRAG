@@ -2,6 +2,7 @@ package com.hnu.backend.rag.memory;
 
 import com.hnu.backend.observability.RagStageName;
 import com.hnu.backend.observability.trace.RagRunTrace;
+import com.hnu.backend.shared.error.ErrorCode;
 import java.util.Objects;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
@@ -58,7 +59,7 @@ public final class MemoryStage {
       span.success(memory.unsummarizedTurns().size() + memory.recentTurns().size());
       return memory;
     } catch (RuntimeException error) {
-      span.failed(errorCode(error, "MEMORY_LOAD_FAILED"));
+      span.failed(errorCode(error, ErrorCode.MEMORY_LOAD_FAILED.code()));
       throw error;
     }
   }

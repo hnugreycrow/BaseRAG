@@ -1,6 +1,7 @@
 package com.hnu.backend.document.parser;
 
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.error.ErrorCode;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -75,7 +76,7 @@ public final class DocumentParserRegistry {
         || (format == DocumentFormat.PDF && !pdf)
         || (format == DocumentFormat.DOCX && !zip)
         || (format == DocumentFormat.MARKDOWN && (pdf || zip))) {
-      throw ApiException.bad("INVALID_FILE_FORMAT", "文件内容与扩展名不符");
+      throw ApiException.bad(ErrorCode.INVALID_FILE_FORMAT, "文件内容与扩展名不符");
     }
     parser(format).parse(bytes);
     return format;
@@ -107,11 +108,12 @@ public final class DocumentParserRegistry {
                 .decode(ByteBuffer.wrap(bytes))
                 .toString();
         if (text.startsWith("\uFEFF")) text = text.substring(1);
-        if (text.indexOf('\0') >= 0) throw ApiException.bad("INVALID_FILE", "Markdown 不能包含二进制空字符");
-        if (text.isBlank()) throw ApiException.bad("EMPTY_DOCUMENT", "文档没有可用文本");
+        if (text.indexOf('\0') >= 0)
+          throw ApiException.bad(ErrorCode.INVALID_FILE, "Markdown 不能包含二进制空字符");
+        if (text.isBlank()) throw ApiException.bad(ErrorCode.EMPTY_DOCUMENT, "文档没有可用文本");
         return chunker.parse(text);
       } catch (java.nio.charset.CharacterCodingException e) {
-        throw ApiException.bad("INVALID_UTF8", "请使用 UTF-8 编码的 Markdown 文件");
+        throw ApiException.bad(ErrorCode.INVALID_UTF8, "请使用 UTF-8 编码的 Markdown 文件");
       }
     }
   }
@@ -135,7 +137,7 @@ public final class DocumentParserRegistry {
     public List<StructuredBlock> parse(byte[] bytes) {
       List<StructuredBlock> blocks = new ArrayList<>();
       try (PDDocument document = Loader.loadPDF(bytes)) {
-        if (document.isEncrypted()) throw ApiException.bad("ENCRYPTED_PDF", "不支持加密 PDF");
+        if (document.isEncrypted()) throw ApiException.bad(ErrorCode.ENCRYPTED_PDF, "不支持加密 PDF");
         PDFTextStripper stripper = new PDFTextStripper();
         // 跨页字符偏移只用于结构块排序；引用位置仍以页码为准。
         int offset = 0;
@@ -159,12 +161,12 @@ public final class DocumentParserRegistry {
           offset += text.length() + 1;
         }
       } catch (InvalidPasswordException e) {
-        throw ApiException.bad("ENCRYPTED_PDF", "不支持加密 PDF");
+        throw ApiException.bad(ErrorCode.ENCRYPTED_PDF, "不支持加密 PDF");
       } catch (IOException | RuntimeException e) {
         if (e instanceof ApiException api) throw api;
-        throw ApiException.bad("INVALID_PDF", "PDF 文件无法解析");
+        throw ApiException.bad(ErrorCode.INVALID_PDF, "PDF 文件无法解析");
       }
-      if (blocks.isEmpty()) throw ApiException.bad("PDF_NO_TEXT", "PDF 没有可提取文本");
+      if (blocks.isEmpty()) throw ApiException.bad(ErrorCode.PDF_NO_TEXT, "PDF 没有可提取文本");
       return blocks;
     }
   }
@@ -246,10 +248,10 @@ public final class DocumentParserRegistry {
         }
       } catch (IOException | RuntimeException e) {
         if (e instanceof ApiException api) throw api;
-        throw ApiException.bad("INVALID_DOCX", "DOCX 文件无法解析");
+        throw ApiException.bad(ErrorCode.INVALID_DOCX, "DOCX 文件无法解析");
       }
       if (blocks.stream().noneMatch(b -> b.kind() != StructuredBlock.Kind.HEADING))
-        throw ApiException.bad("EMPTY_DOCUMENT", "文档没有可用文本");
+        throw ApiException.bad(ErrorCode.EMPTY_DOCUMENT, "文档没有可用文本");
       return blocks;
     }
 
@@ -274,7 +276,7 @@ public final class DocumentParserRegistry {
         ZipEntry entry;
         byte[] buffer = new byte[8192];
         while ((entry = zip.getNextEntry()) != null) {
-          if (++count > 2000) throw ApiException.bad("DOCX_ZIP_LIMIT", "DOCX 包含过多文件");
+          if (++count > 2000) throw ApiException.bad(ErrorCode.DOCX_ZIP_LIMIT, "DOCX 包含过多文件");
           String name = entry.getName();
           if ("[Content_Types].xml".equals(name)) contentTypes = true;
           if ("word/document.xml".equals(name)) main = true;
@@ -282,14 +284,14 @@ public final class DocumentParserRegistry {
           while ((read = zip.read(buffer)) != -1) {
             total += read;
             if (total > 100L * 1024 * 1024 || total > (long) bytes.length * 100)
-              throw ApiException.bad("DOCX_ZIP_LIMIT", "DOCX 解压内容超出安全限制");
+              throw ApiException.bad(ErrorCode.DOCX_ZIP_LIMIT, "DOCX 解压内容超出安全限制");
           }
           zip.closeEntry();
         }
       } catch (IOException e) {
-        throw ApiException.bad("INVALID_DOCX", "DOCX 压缩包损坏");
+        throw ApiException.bad(ErrorCode.INVALID_DOCX, "DOCX 压缩包损坏");
       }
-      if (!contentTypes || !main) throw ApiException.bad("INVALID_DOCX", "缺少 Word 主文档结构");
+      if (!contentTypes || !main) throw ApiException.bad(ErrorCode.INVALID_DOCX, "缺少 Word 主文档结构");
     }
   }
 

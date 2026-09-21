@@ -104,7 +104,10 @@ onMounted(loadDetail)
             请求 <code>{{ detail.run.requestId }}</code>
           </p>
           <p v-if="detail.run.errorCode" class="run-error-code">
-            运行错误 <code>{{ detail.run.errorCode }}</code>
+            <strong>{{ detail.run.errorMessage || '处理失败，请根据请求 ID 查询日志' }}</strong>
+            <span
+              >错误代码 <code>{{ detail.run.errorCode }}</code></span
+            >
           </p>
         </div>
       </header>
@@ -213,8 +216,13 @@ onMounted(loadDetail)
               v-if="stage.reasonCode || stage.errorCode || stage.ttftMs !== undefined"
               class="stage-note"
             >
-              <code v-if="stage.reasonCode">{{ stage.reasonCode }}</code>
-              <code v-if="stage.errorCode">{{ stage.errorCode }}</code>
+              <span v-if="stage.reasonCode"
+                >降级/决策原因 <code>{{ stage.reasonCode }}</code></span
+              >
+              <span v-if="stage.errorCode">
+                {{ stage.errorMessage || '处理失败，请根据请求 ID 查询日志' }}
+                <code>{{ stage.errorCode }}</code>
+              </span>
               <span v-if="stage.ttftMs !== undefined"
                 >首内容 {{ formatDuration(stage.ttftMs) }}</span
               >
@@ -259,7 +267,7 @@ onMounted(loadDetail)
               </div>
               <dl>
                 <div>
-                  <dt>原因</dt>
+                  <dt>降级/决策原因</dt>
                   <dd>{{ attempt.reasonCode ?? '—' }}</dd>
                 </div>
                 <div>
@@ -272,7 +280,11 @@ onMounted(loadDetail)
                 </div>
                 <div>
                   <dt>错误</dt>
-                  <dd>{{ attempt.errorCode ?? '—' }}</dd>
+                  <dd v-if="attempt.errorCode">
+                    {{ attempt.errorMessage || '处理失败，请根据请求 ID 查询日志' }}
+                    <code>{{ attempt.errorCode }}</code>
+                  </dd>
+                  <dd v-else>—</dd>
                 </div>
               </dl>
             </article>

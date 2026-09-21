@@ -784,6 +784,9 @@ onBeforeUnmount(() => {
                   <span>{{
                     currentAssistant(turn)?.errorMessage || '你可以重新尝试生成回答。'
                   }}</span>
+                  <small v-if="currentAssistant(turn)?.errorCode">
+                    错误代码：{{ currentAssistant(turn)?.errorCode }}
+                  </small>
                 </div>
 
                 <div

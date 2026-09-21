@@ -11,6 +11,7 @@ import com.hnu.backend.model.client.EmbeddingClient;
 import com.hnu.backend.rag.execution.CancellationToken;
 import com.hnu.backend.rag.execution.RagBudgetSnapshot;
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.error.ErrorCode;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -98,7 +99,7 @@ class RetrievalServiceTest {
                 new EmbeddingBinding("fixed-id", "siliconflow", "same-model", 2),
                 new EmbeddingBinding("other-id", "bailian", "same-model", 2)));
     when(embedding.embed("fixed-id", "siliconflow", "same-model", 2, List.of("问题")))
-        .thenThrow(ApiException.upstream("MODEL_UNAVAILABLE", "test"));
+        .thenThrow(ApiException.upstream(ErrorCode.MODEL_UNAVAILABLE, "test"));
     RetrievalService retrievalService =
         new RetrievalService(embedding, retrievalMapper, new RagProperties(), new CandidateMerge());
     try {

@@ -7,6 +7,7 @@ import com.hnu.backend.rag.retrieval.RetrievalService;
 import com.hnu.backend.rag.vo.AnswerResponse;
 import com.hnu.backend.rag.vo.ModelInfoResponse;
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.error.ErrorCode;
 import java.util.List;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -71,7 +72,7 @@ public class RagService {
         || question.isBlank()
         || question.length() > config.getMaxQuestionChars()) {
       throw ApiException.bad(
-          "INVALID_QUESTION", "请输入非空问题，长度不能超过 " + config.getMaxQuestionChars() + " 字符");
+          ErrorCode.INVALID_QUESTION, "请输入非空问题，长度不能超过 " + config.getMaxQuestionChars() + " 字符");
     }
     long started = System.nanoTime();
     String normalizedQuestion = question.strip();

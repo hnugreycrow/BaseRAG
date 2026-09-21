@@ -14,12 +14,12 @@ import com.hnu.backend.observability.mapper.RagRunViewRow;
 import com.hnu.backend.observability.mapper.RagStageRunMapper;
 import com.hnu.backend.observability.vo.RagRunResponses;
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.error.ErrorCode;
 import com.hnu.backend.shared.web.PageResponse;
 import java.time.OffsetDateTime;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.UUID;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 /** 执行用户隔离的问答运行查询和统计。 */
@@ -84,7 +84,7 @@ public class RagRunQueryService {
   public RagRunResponses.Detail get(User actor, UUID id) {
     UUID ownerScope = actor.getRole() == UserRole.ADMIN ? null : actor.getId();
     RagRunViewRow run = ragRunMapper.findView(id, ownerScope);
-    if (run == null) throw ApiException.notFound("RAG_RUN_NOT_FOUND", "问答运行记录不存在");
+    if (run == null) throw ApiException.notFound(ErrorCode.RAG_RUN_NOT_FOUND, "问答运行记录不存在");
     List<RagStageRun> storedStages = ragStageRunMapper.listByRun(id);
     List<RagRunResponses.Stage> stageResponses = storedStages.stream().map(this::stage).toList();
     LinkedHashSet<String> reasons = new LinkedHashSet<>();
@@ -149,7 +149,7 @@ public class RagRunQueryService {
       ownerId = requestedUserId;
     } else {
       if (requestedUserId != null && !requestedUserId.equals(actor.getId())) {
-        throw new ApiException("FORBIDDEN", "当前账号无权查询其他用户", HttpStatus.FORBIDDEN);
+        throw new ApiException(ErrorCode.FORBIDDEN, "当前账号无权查询其他用户");
       }
       ownerId = actor.getId();
     }
@@ -160,10 +160,10 @@ public class RagRunQueryService {
   /** 校验时间和分页边界。 */
   private void validate(OffsetDateTime from, OffsetDateTime to, int page, int pageSize) {
     if (from != null && to != null && !from.isBefore(to)) {
-      throw ApiException.bad("INVALID_TIME_RANGE", "开始时间必须早于结束时间");
+      throw ApiException.bad(ErrorCode.INVALID_TIME_RANGE, "开始时间必须早于结束时间");
     }
     if (page < 1 || pageSize < 1 || pageSize > 100) {
-      throw ApiException.bad("INVALID_PAGE", "页码应大于 0，每页数量应为 1 到 100");
+      throw ApiException.bad(ErrorCode.INVALID_PAGE, "页码应大于 0，每页数量应为 1 到 100");
     }
   }
 
@@ -188,6 +188,7 @@ public class RagRunQueryService {
         value.getEvidenceCount(),
         value.isDegraded(),
         value.getErrorCode(),
+        ErrorCode.messageFor(value.getErrorCode()),
         value.getStartedAt(),
         value.getFirstTokenAt(),
         value.getCompletedAt(),
@@ -219,6 +220,7 @@ public class RagRunQueryService {
         value.getModel(),
         value.getReasonCode(),
         value.getErrorCode(),
+        ErrorCode.messageFor(value.getErrorCode()),
         value.getStartedAt(),
         value.getFirstTokenAt(),
         value.getCompletedAt(),

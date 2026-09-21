@@ -2,11 +2,11 @@ package com.hnu.backend.auth.service;
 
 import cn.dev33.satoken.stp.StpUtil;
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.error.ErrorCode;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.Base64;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 /** 在 Sa-Token Token Session 中签发和验证 CSRF nonce。 */
@@ -45,7 +45,7 @@ public class CsrfTokenService {
                 expected.getBytes(StandardCharsets.UTF_8),
                 submitted.getBytes(StandardCharsets.UTF_8));
     if (!valid) {
-      throw new ApiException("CSRF_INVALID", "CSRF Token 无效，请刷新页面后重试", HttpStatus.FORBIDDEN);
+      throw new ApiException(ErrorCode.CSRF_INVALID, "CSRF Token 无效，请刷新页面后重试");
     }
   }
 }

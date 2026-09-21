@@ -115,7 +115,10 @@ function submit() {
     <p v-if="fileError" class="file-error">{{ fileError }}</p>
     <ul v-if="failures.length" class="upload-failures">
       <li v-for="item in failures" :key="item.index">
-        {{ item.fileName || `第 ${item.index + 1} 个文件` }}：{{ item.message }}
+        {{ item.fileName || `第 ${item.index + 1} 个文件` }}：{{
+          item.message || '上传失败，请重试'
+        }}
+        <code v-if="item.errorCode">{{ item.errorCode }}</code>
       </li>
     </ul>
     <p class="process-note">上传后文档不会自动处理，请在文档列表中点击“开始分块”。</p>
@@ -151,6 +154,11 @@ function submit() {
 .process-note,
 .file-error,
 .upload-failures {
+  font-size: 12px;
+}
+
+.upload-failures code {
+  margin-left: 6px;
   font-size: 11px;
 }
 

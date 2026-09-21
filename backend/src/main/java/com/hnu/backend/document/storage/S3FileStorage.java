@@ -2,6 +2,7 @@ package com.hnu.backend.document.storage;
 
 import com.hnu.backend.configuration.RagProperties;
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.error.ErrorCode;
 import jakarta.annotation.PreDestroy;
 import java.net.URI;
 import java.time.Duration;
@@ -27,7 +28,7 @@ public class S3FileStorage implements FileStorage {
   private synchronized S3Client readyClient() {
     var storage = config.getStorage();
     if (storage.getAccessKey().isBlank() || storage.getSecretKey().isBlank()) {
-      throw ApiException.bad("STORAGE_NOT_CONFIGURED", "请配置 RustFS 访问凭据");
+      throw ApiException.bad(ErrorCode.STORAGE_NOT_CONFIGURED, "请配置 RustFS 访问凭据");
     }
     if (client == null)
       client =
@@ -71,7 +72,7 @@ public class S3FileStorage implements FileStorage {
     } catch (ApiException e) {
       throw e;
     } catch (RuntimeException e) {
-      throw ApiException.upstream("STORAGE_UNAVAILABLE", "无法保存原文件，请检查 RustFS 服务");
+      throw ApiException.upstream(ErrorCode.STORAGE_UNAVAILABLE, "无法保存原文件，请检查 RustFS 服务", e);
     }
   }
 
@@ -84,7 +85,7 @@ public class S3FileStorage implements FileStorage {
     } catch (ApiException e) {
       throw e;
     } catch (RuntimeException e) {
-      throw ApiException.upstream("STORAGE_UNAVAILABLE", "无法读取原文件，请检查 RustFS 服务");
+      throw ApiException.upstream(ErrorCode.STORAGE_UNAVAILABLE, "无法读取原文件，请检查 RustFS 服务", e);
     }
   }
 
@@ -95,7 +96,7 @@ public class S3FileStorage implements FileStorage {
     } catch (ApiException e) {
       throw e;
     } catch (RuntimeException e) {
-      throw ApiException.upstream("STORAGE_UNAVAILABLE", "无法删除原文件，请检查 RustFS 服务");
+      throw ApiException.upstream(ErrorCode.STORAGE_UNAVAILABLE, "无法删除原文件，请检查 RustFS 服务", e);
     }
   }
 

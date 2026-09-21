@@ -21,6 +21,7 @@ import com.hnu.backend.rag.retrieval.CandidateMergeTest;
 import com.hnu.backend.rag.retrieval.EvidenceCandidate;
 import com.hnu.backend.rag.routing.IntentType;
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.error.ErrorCode;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletionException;
@@ -142,7 +143,7 @@ class RerankStageTest {
     RagProperties rag = new RagProperties();
     EvidenceCandidate candidate = candidate(1, "Q1", .10);
     when(reranker.rerank("组合问题", List.of(candidate)))
-        .thenThrow(ApiException.upstream("MODEL_TIMEOUT", "模型请求超时"));
+        .thenThrow(ApiException.upstream(ErrorCode.MODEL_TIMEOUT, "模型请求超时"));
 
     RerankResult result =
         stage(reranker)

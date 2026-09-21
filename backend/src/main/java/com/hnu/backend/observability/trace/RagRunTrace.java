@@ -4,6 +4,7 @@ import com.hnu.backend.observability.RagExecutionMode;
 import com.hnu.backend.observability.RagRunStatus;
 import com.hnu.backend.observability.RagStageName;
 import com.hnu.backend.observability.RagStageStatus;
+import com.hnu.backend.shared.error.ErrorCode;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -177,7 +178,9 @@ public final class RagRunTrace {
         status == RagRunStatus.CANCELLED ? RagStageStatus.CANCELLED : RagStageStatus.FAILED;
     String unfinishedCode =
         errorCode == null
-            ? (status == RagRunStatus.CANCELLED ? "GENERATION_CANCELLED" : "RUN_TERMINATED")
+            ? (status == RagRunStatus.CANCELLED
+                ? ErrorCode.GENERATION_CANCELLED.code()
+                : ErrorCode.RUN_TERMINATED.code())
             : errorCode;
     // 先在锁内关闭遗留 span，再封存集合，避免迟到的并发任务写入终态快照。
     for (Span span : List.copyOf(openSpans)) {

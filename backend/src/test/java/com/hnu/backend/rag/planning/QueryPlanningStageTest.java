@@ -17,6 +17,7 @@ import com.hnu.backend.observability.RagStageStatus;
 import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.rag.memory.RagMemory;
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.error.ErrorCode;
 import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -206,7 +207,7 @@ class QueryPlanningStageTest {
     assertFallback(stage.execute(emptyMemory, ORIGINAL));
 
     when(planner.plan(any(RagMemory.class), anyString(), eq(4)))
-        .thenThrow(ApiException.upstream("MODEL_TIMEOUT", "timeout"));
+        .thenThrow(ApiException.upstream(ErrorCode.MODEL_TIMEOUT, "timeout"));
     assertFallback(stage.execute(emptyMemory, ORIGINAL));
   }
 

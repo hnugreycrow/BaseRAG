@@ -1,6 +1,7 @@
 package com.hnu.backend.auth.service;
 
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.error.ErrorCode;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.regex.Pattern;
@@ -21,7 +22,7 @@ public class AccountPolicy {
   public String username(String raw) {
     String value = raw == null ? "" : raw.strip().toLowerCase(Locale.ROOT);
     if (!USERNAME.matcher(value).matches() || "__legacy_owner__".equals(value)) {
-      throw ApiException.bad("INVALID_USERNAME", "用户名应为 3 到 64 位 ASCII 字母、数字或 . _ -");
+      throw ApiException.bad(ErrorCode.INVALID_USERNAME, "用户名应为 3 到 64 位 ASCII 字母、数字或 . _ -");
     }
     return value;
   }
@@ -38,7 +39,7 @@ public class AccountPolicy {
     if (value.isEmpty()
         || value.length() > 100
         || value.chars().anyMatch(Character::isISOControl)) {
-      throw ApiException.bad("INVALID_DISPLAY_NAME", "显示名应为 1 到 100 个有效字符");
+      throw ApiException.bad(ErrorCode.INVALID_DISPLAY_NAME, "显示名应为 1 到 100 个有效字符");
     }
     return value;
   }
@@ -54,7 +55,7 @@ public class AccountPolicy {
     int characters = raw == null ? 0 : raw.codePointCount(0, raw.length());
     int bytes = raw == null ? 0 : raw.getBytes(StandardCharsets.UTF_8).length;
     if (characters < 12 || bytes > 72 || raw.chars().anyMatch(value -> value == 0)) {
-      throw ApiException.bad("INVALID_PASSWORD", "密码至少 12 个字符且 UTF-8 编码不能超过 72 字节");
+      throw ApiException.bad(ErrorCode.INVALID_PASSWORD, "密码至少 12 个字符且 UTF-8 编码不能超过 72 字节");
     }
     return raw;
   }

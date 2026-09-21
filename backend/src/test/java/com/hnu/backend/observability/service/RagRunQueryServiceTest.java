@@ -16,6 +16,7 @@ import com.hnu.backend.observability.mapper.RagRunSummaryRow;
 import com.hnu.backend.observability.mapper.RagRunViewRow;
 import com.hnu.backend.observability.mapper.RagStageRunMapper;
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.error.ErrorCode;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -126,6 +127,27 @@ class RagRunQueryServiceTest {
     var detail = ragRunQueryService.get(admin, row.getId());
 
     assertEquals(List.of("PROVIDER_FALLBACK", "MODEL_TIMEOUT"), detail.degradationReasons());
+  }
+
+  @Test
+  void derivesSafeErrorMessagesAndToleratesUnknownHistoricalCodes() {
+    User admin = user(UserRole.ADMIN);
+    RagRunViewRow row = run(UUID.randomUUID());
+    row.setStatus(RagRunStatus.FAILED);
+    row.setErrorCode(ErrorCode.MODEL_TIMEOUT.code());
+    RagStageRun known = stage(RagStageName.ANSWER_MODEL, RagStageStatus.FAILED, null);
+    known.setErrorCode(ErrorCode.MODEL_HTTP_ERROR.code());
+    RagStageRun unknown = stage(RagStageName.DATABASE_RETRIEVAL, RagStageStatus.FAILED, null);
+    unknown.setErrorCode("LEGACY_UNKNOWN");
+    when(ragRunMapper.findView(row.getId(), null)).thenReturn(row);
+    when(ragStageRunMapper.listByRun(row.getId())).thenReturn(List.of(known, unknown));
+
+    var detail = ragRunQueryService.get(admin, row.getId());
+
+    assertEquals(ErrorCode.MODEL_TIMEOUT.defaultMessage(), detail.run().errorMessage());
+    assertEquals(
+        ErrorCode.MODEL_HTTP_ERROR.defaultMessage(), detail.stages().getFirst().errorMessage());
+    assertNull(detail.stages().getLast().errorMessage());
   }
 
   @Test

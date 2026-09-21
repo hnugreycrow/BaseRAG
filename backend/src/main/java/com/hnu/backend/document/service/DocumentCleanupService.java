@@ -10,6 +10,8 @@ import com.hnu.backend.document.mapper.DocumentMapper;
 import com.hnu.backend.document.mapper.DocumentVersionMapper;
 import com.hnu.backend.document.storage.FileStorage;
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.error.ErrorCode;
+import com.hnu.backend.shared.error.SafeExceptionLog;
 import java.util.List;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -57,7 +59,7 @@ public class DocumentCleanupService {
             new LambdaQueryWrapper<DocumentVersion>()
                 .eq(DocumentVersion::getKnowledgeBaseId, knowledgeBaseId)
                 .eq(DocumentVersion::getStatus, DocumentVersionStatus.PROCESSING))
-        > 0) throw ApiException.conflict("DOCUMENT_PROCESSING", "知识库中有文档正在分块，完成后才能删除");
+        > 0) throw ApiException.conflict(ErrorCode.DOCUMENT_PROCESSING, "知识库中有文档正在分块，完成后才能删除");
     documentMapper.update(
         new LambdaUpdateWrapper<Document>()
             .eq(Document::getKnowledgeBaseId, knowledgeBaseId)
@@ -79,7 +81,11 @@ public class DocumentCleanupService {
     try {
       storage.remove(key);
     } catch (RuntimeException e) {
-      log.warn("Could not remove stored knowledge file key={}", key, e);
+      log.warn(
+          "removeStoredKnowledgeFile key={} exceptionType={} safeStack={}",
+          key,
+          e.getClass().getSimpleName(),
+          SafeExceptionLog.render(e));
     }
   }
 }

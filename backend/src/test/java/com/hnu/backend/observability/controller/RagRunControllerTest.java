@@ -130,6 +130,7 @@ class RagRunControllerTest {
             0,
             false,
             null,
+            null,
             OffsetDateTime.parse("2026-09-01T00:00:00Z"),
             null,
             null,

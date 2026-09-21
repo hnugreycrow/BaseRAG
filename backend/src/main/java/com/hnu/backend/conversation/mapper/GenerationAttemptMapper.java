@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.hnu.backend.conversation.entity.GenerationAttempt;
 import com.hnu.backend.conversation.entity.GenerationAttemptStatus;
+import com.hnu.backend.shared.error.ErrorCode;
 import java.util.UUID;
 import org.apache.ibatis.annotations.Mapper;
 
@@ -148,7 +149,7 @@ public interface GenerationAttemptMapper extends BaseMapper<GenerationAttempt> {
                 ownerId)
             .eq(GenerationAttempt::getStatus, GenerationAttemptStatus.STREAMING)
             .set(GenerationAttempt::getStatus, GenerationAttemptStatus.CANCELLED)
-            .set(GenerationAttempt::getErrorCode, "GENERATION_CANCELLED")
+            .set(GenerationAttempt::getErrorCode, ErrorCode.GENERATION_CANCELLED.code())
             .set(GenerationAttempt::getErrorMessage, "生成已停止")
             .setSql("completed_at = now()"));
   }
@@ -163,7 +164,7 @@ public interface GenerationAttemptMapper extends BaseMapper<GenerationAttempt> {
         Wrappers.<GenerationAttempt>lambdaUpdate()
             .eq(GenerationAttempt::getStatus, GenerationAttemptStatus.STREAMING)
             .set(GenerationAttempt::getStatus, GenerationAttemptStatus.FAILED)
-            .set(GenerationAttempt::getErrorCode, "GENERATION_INTERRUPTED")
+            .set(GenerationAttempt::getErrorCode, ErrorCode.GENERATION_INTERRUPTED.code())
             .set(GenerationAttempt::getErrorMessage, "应用重启中断了生成")
             .setSql("completed_at = now()"));
   }

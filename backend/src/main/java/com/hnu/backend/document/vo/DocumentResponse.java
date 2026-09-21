@@ -10,6 +10,7 @@ import java.util.UUID;
  * @param name 文档名称
  * @param status 当前处理状态
  * @param errorCode 处理失败时的错误码
+ * @param errorMessage 由错误码目录派生的安全错误说明
  * @param chunkCount 当前有效版本的分块数量
  * @param createdAt 创建时间
  * @param format 原文件格式
@@ -22,6 +23,7 @@ public record DocumentResponse(
     String name,
     String status,
     String errorCode,
+    String errorMessage,
     long chunkCount,
     OffsetDateTime createdAt,
     String format,

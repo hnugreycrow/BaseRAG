@@ -12,6 +12,7 @@ import com.hnu.backend.rag.mcp.McpToolRegistry;
 import com.hnu.backend.rag.planning.QueryPlan;
 import com.hnu.backend.rag.prompt.IntentTreeRoutingPrompts;
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.error.ErrorCode;
 import jakarta.annotation.PreDestroy;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -60,7 +61,7 @@ public class IntentTreeRoutingStage {
     RagRunTrace.Span span =
         trace.start(RagStageName.INTENT_ROUTING, null, plan.subQuestions().size());
     if (Thread.currentThread().isInterrupted()) {
-      span.cancelled("GENERATION_CANCELLED");
+      span.cancelled(ErrorCode.GENERATION_CANCELLED.code());
       throw ApiException.cancelled();
     }
     try {
@@ -91,7 +92,7 @@ public class IntentTreeRoutingStage {
       } catch (InterruptedException error) {
         future.cancel(true);
         Thread.currentThread().interrupt();
-        span.cancelled("GENERATION_CANCELLED");
+        span.cancelled(ErrorCode.GENERATION_CANCELLED.code());
         throw ApiException.cancelled();
       } catch (TimeoutException error) {
         future.cancel(true);
@@ -99,7 +100,7 @@ public class IntentTreeRoutingStage {
       } catch (ExecutionException error) {
         future.cancel(true);
         if (isCancelled(error.getCause())) {
-          span.cancelled("GENERATION_CANCELLED");
+          span.cancelled(ErrorCode.GENERATION_CANCELLED.code());
           throw ApiException.cancelled();
         }
         return knowledgeFallback(plan, span, trace, "INTENT_TREE_CLASSIFICATION_FAILED");
@@ -110,13 +111,13 @@ public class IntentTreeRoutingStage {
         parsed = parse(plan, byId, generation.content());
       } catch (RuntimeException error) {
         if (isCancelled(error)) {
-          span.cancelled("GENERATION_CANCELLED");
+          span.cancelled(ErrorCode.GENERATION_CANCELLED.code());
           throw ApiException.cancelled();
         }
         return knowledgeFallback(plan, span, trace, "INTENT_TREE_INVALID_OUTPUT");
       }
       if (Thread.currentThread().isInterrupted()) {
-        span.cancelled("GENERATION_CANCELLED");
+        span.cancelled(ErrorCode.GENERATION_CANCELLED.code());
         throw ApiException.cancelled();
       }
       RoutingPlan routed = parsed.plan();
@@ -134,14 +135,14 @@ public class IntentTreeRoutingStage {
                   routeSummary(routed, paths)));
       return routed;
     } catch (ApiException error) {
-      if ("GENERATION_CANCELLED".equals(error.code())) {
+      if (ErrorCode.GENERATION_CANCELLED.code().equals(error.code())) {
         span.cancelled(error.code());
         throw error;
       }
       return knowledgeFallback(plan, span, trace, "INTENT_TREE_CLASSIFICATION_FAILED");
     } catch (RuntimeException error) {
       if (Thread.currentThread().isInterrupted()) {
-        span.cancelled("GENERATION_CANCELLED");
+        span.cancelled(ErrorCode.GENERATION_CANCELLED.code());
         throw ApiException.cancelled();
       }
       return knowledgeFallback(plan, span, trace, "INTENT_TREE_CLASSIFICATION_FAILED");
@@ -151,7 +152,7 @@ public class IntentTreeRoutingStage {
   private RoutingPlan knowledgeFallback(
       QueryPlan plan, RagRunTrace.Span span, RagRunTrace trace, String reason) {
     if (Thread.currentThread().isInterrupted()) {
-      span.cancelled("GENERATION_CANCELLED");
+      span.cancelled(ErrorCode.GENERATION_CANCELLED.code());
       throw ApiException.cancelled();
     }
     RoutingPlan routed =
@@ -195,7 +196,8 @@ public class IntentTreeRoutingStage {
   private boolean isCancelled(Throwable error) {
     for (Throwable cause = error; cause != null; cause = cause.getCause()) {
       if (cause instanceof InterruptedException
-          || cause instanceof ApiException api && "GENERATION_CANCELLED".equals(api.code())) {
+          || cause instanceof ApiException api
+              && ErrorCode.GENERATION_CANCELLED.code().equals(api.code())) {
         return true;
       }
     }

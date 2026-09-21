@@ -7,8 +7,8 @@ import com.hnu.backend.auth.mapper.UserMapper;
 import com.hnu.backend.auth.vo.AuthSessionResponse;
 import com.hnu.backend.auth.vo.UserResponse;
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.error.ErrorCode;
 import java.util.UUID;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -74,10 +74,10 @@ public class AuthService {
     String expectedHash = user == null ? dummyHash : user.getPasswordHash();
     if (!passwords.matches(password == null ? "" : password, expectedHash)) {
       limiter.recordFailure(username, clientAddress);
-      throw new ApiException("INVALID_CREDENTIALS", "用户名或密码错误", HttpStatus.UNAUTHORIZED);
+      throw new ApiException(ErrorCode.INVALID_CREDENTIALS, "用户名或密码错误");
     }
     if (!user.isEnabled()) {
-      throw new ApiException("ACCOUNT_DISABLED", "账号已被禁用", HttpStatus.FORBIDDEN);
+      throw new ApiException(ErrorCode.ACCOUNT_DISABLED, "账号已被禁用");
     }
     limiter.clear(username, clientAddress);
     user.setLastLoginAt(java.time.OffsetDateTime.now());
@@ -113,7 +113,7 @@ public class AuthService {
   public AuthSessionResponse changePassword(String oldPassword, String newPassword) {
     User current = currentUserService.require();
     if (!passwords.matches(oldPassword == null ? "" : oldPassword, current.getPasswordHash())) {
-      throw new ApiException("INVALID_CREDENTIALS", "当前密码错误", HttpStatus.UNAUTHORIZED);
+      throw new ApiException(ErrorCode.INVALID_CREDENTIALS, "当前密码错误");
     }
     String validated = policy.password(newPassword);
     tx.executeWithoutResult(

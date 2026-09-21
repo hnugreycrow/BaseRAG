@@ -71,4 +71,54 @@ describe('conversation thinking stream', () => {
     expect(store.taskFor('conversation')?.assistant.reasoningContent).toBe('新思考')
     expect(store.taskFor('conversation')?.phase).toBe('completed')
   })
+
+  it('keeps the safe SSE error message and diagnostic code on a failed answer', async () => {
+    setActivePinia(createPinia())
+    const user: UserMessage = {
+      id: 'failed-user',
+      turnIndex: 1,
+      content: '问题',
+      createdAt: '2026-01-01T00:00:00Z',
+    }
+    const assistant: AssistantMessage = {
+      id: 'failed-assistant',
+      replyToId: user.id,
+      turnIndex: 1,
+      variantIndex: 1,
+      active: true,
+      status: 'PENDING',
+      content: '',
+      thinkingEnabled: false,
+      reasoningContent: '',
+      retrievalQuery: null,
+      sources: [],
+      citations: [],
+      modelInfo: null,
+      errorCode: null,
+      errorMessage: null,
+      createdAt: user.createdAt,
+      updatedAt: user.createdAt,
+      completedAt: null,
+    }
+    vi.mocked(askConversation).mockImplementation(async (_id, _clientId, _content, onEvent) => {
+      onEvent({
+        type: 'error',
+        data: {
+          schemaVersion: 1,
+          code: 'MODEL_TIMEOUT',
+          message: '模型请求超时，请稍后重试',
+          requestId: 'safe-request-id',
+          retryable: true,
+        },
+      })
+    })
+
+    const store = useConversationGenerationStore()
+    await store.startAsk('failed-conversation', user, assistant, user.content)
+
+    const task = store.taskFor('failed-conversation')
+    expect(task?.phase).toBe('failed')
+    expect(task?.assistant.errorMessage).toBe('模型请求超时，请稍后重试')
+    expect(task?.assistant.errorCode).toBe('MODEL_TIMEOUT')
+  })
 })

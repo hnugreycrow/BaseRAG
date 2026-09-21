@@ -42,6 +42,7 @@ import com.hnu.backend.rag.routing.IntentType;
 import com.hnu.backend.rag.routing.RoutingPlan;
 import com.hnu.backend.rag.routing.RoutingReasonCode;
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.error.ErrorCode;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -218,7 +219,8 @@ class ConversationServiceCancellationTest {
               ChatClient.StreamObserver observer = invocation.getArgument(1);
               observer.started(primary, "PRIMARY");
               observer.reasoningDelta("旧思考");
-              observer.failed(primary, "", ApiException.upstream("MODEL_UNAVAILABLE", "模型失败"));
+              observer.failed(
+                  primary, "", ApiException.upstream(ErrorCode.MODEL_UNAVAILABLE, "模型失败"));
               observer.started(fallback, "PROVIDER_FALLBACK");
               observer.reasoningDelta("新思考");
               observer.delta("答案");

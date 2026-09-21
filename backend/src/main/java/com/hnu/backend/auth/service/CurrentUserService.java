@@ -4,8 +4,8 @@ import cn.dev33.satoken.stp.StpUtil;
 import com.hnu.backend.auth.entity.User;
 import com.hnu.backend.auth.mapper.UserMapper;
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.error.ErrorCode;
 import java.util.UUID;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 /** 将 Sa-Token 登录标识解析为每次请求都重新校验的数据库用户。 */
@@ -45,16 +45,16 @@ public class CurrentUserService {
       id = UUID.fromString(String.valueOf(loginId));
     } catch (IllegalArgumentException error) {
       StpUtil.logout();
-      throw new ApiException("AUTH_REQUIRED", "请先登录", HttpStatus.UNAUTHORIZED);
+      throw new ApiException(ErrorCode.AUTH_REQUIRED, "请先登录");
     }
     User user = userMapper.find(id);
     if (user == null) {
       StpUtil.logout(id.toString());
-      throw new ApiException("AUTH_REQUIRED", "请先登录", HttpStatus.UNAUTHORIZED);
+      throw new ApiException(ErrorCode.AUTH_REQUIRED, "请先登录");
     }
     if (!user.isEnabled()) {
       StpUtil.logout(id.toString());
-      throw new ApiException("ACCOUNT_DISABLED", "账号已被禁用", HttpStatus.FORBIDDEN);
+      throw new ApiException(ErrorCode.ACCOUNT_DISABLED, "账号已被禁用");
     }
     return user;
   }

@@ -9,11 +9,11 @@ import com.hnu.backend.knowledgebase.vo.EmbeddingModelResponse;
 import com.hnu.backend.knowledgebase.vo.KnowledgeBaseResponse;
 import com.hnu.backend.model.config.AiProperties;
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.error.ErrorCode;
 import com.hnu.backend.shared.web.PageResponse;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -91,8 +91,7 @@ public class KnowledgeBaseService {
             Wrappers.<KnowledgeBase>lambdaQuery()
                 .eq(KnowledgeBase::getId, id)
                 .eq(KnowledgeBase::getOwnerId, ownerId));
-    if (kb == null)
-      throw new ApiException("KNOWLEDGE_BASE_NOT_FOUND", "知识库不存在", HttpStatus.NOT_FOUND);
+    if (kb == null) throw new ApiException(ErrorCode.KNOWLEDGE_BASE_NOT_FOUND, "知识库不存在");
     return kb;
   }
 
@@ -104,8 +103,7 @@ public class KnowledgeBaseService {
    */
   public KnowledgeBase requireAdminOwned(UUID id) {
     KnowledgeBase kb = knowledgeBaseMapper.findAdminOwned(id);
-    if (kb == null)
-      throw new ApiException("KNOWLEDGE_BASE_NOT_FOUND", "知识库不存在", HttpStatus.NOT_FOUND);
+    if (kb == null) throw new ApiException(ErrorCode.KNOWLEDGE_BASE_NOT_FOUND, "知识库不存在");
     return kb;
   }
 
@@ -122,7 +120,7 @@ public class KnowledgeBaseService {
     try {
       model = ai.embeddingModel(embeddingModelId);
     } catch (IllegalArgumentException e) {
-      throw ApiException.bad("INVALID_EMBEDDING_MODEL", "请选择配置文件中可用的向量模型");
+      throw ApiException.bad(ErrorCode.INVALID_EMBEDDING_MODEL, "请选择配置文件中可用的向量模型");
     }
     requireAvailable(model);
     KnowledgeBase kb = new KnowledgeBase();
@@ -221,7 +219,7 @@ public class KnowledgeBaseService {
   private String normalizeName(String rawName) {
     String name = rawName == null ? "" : rawName.trim();
     if (name.isEmpty() || name.length() > 200 || name.chars().anyMatch(Character::isISOControl))
-      throw ApiException.bad("INVALID_KNOWLEDGE_BASE_NAME", "知识库名称应为 1 到 200 个有效字符");
+      throw ApiException.bad(ErrorCode.INVALID_KNOWLEDGE_BASE_NAME, "知识库名称应为 1 到 200 个有效字符");
     return name;
   }
 
@@ -245,7 +243,7 @@ public class KnowledgeBaseService {
    */
   private long offset(int page, int pageSize) {
     if (page < 1 || pageSize < 1 || pageSize > 100)
-      throw ApiException.bad("INVALID_PAGE", "页码应大于 0，每页数量应为 1 到 100");
+      throw ApiException.bad(ErrorCode.INVALID_PAGE, "页码应大于 0，每页数量应为 1 到 100");
     return (long) (page - 1) * pageSize;
   }
 
@@ -265,21 +263,18 @@ public class KnowledgeBaseService {
             || !kb.getEmbeddingProvider().equals(provider)
             || !kb.getEmbeddingModel().equals(model)
             || kb.getEmbeddingDimensions() != dimensions)) {
-      throw new ApiException(
-          "EMBEDDING_MODEL_CHANGED", "Embedding 供应商、模型或维度已变更，请恢复原配置", HttpStatus.CONFLICT);
+      throw new ApiException(ErrorCode.EMBEDDING_MODEL_CHANGED, "Embedding 供应商、模型或维度已变更，请恢复原配置");
     }
     AiProperties.ModelTarget configured;
     try {
       configured = ai.embeddingModel(modelId);
     } catch (IllegalArgumentException error) {
-      throw new ApiException(
-          "EMBEDDING_MODEL_UNAVAILABLE", "知识库绑定的向量模型已不在配置中", HttpStatus.CONFLICT);
+      throw new ApiException(ErrorCode.EMBEDDING_MODEL_UNAVAILABLE, "知识库绑定的向量模型已不在配置中");
     }
     if (!configured.provider().equals(provider)
         || !configured.model().equals(model)
         || configured.dimension() != dimensions)
-      throw new ApiException(
-          "EMBEDDING_BINDING_CHANGED", "向量模型配置已变更，请恢复原供应商、模型和维度", HttpStatus.CONFLICT);
+      throw new ApiException(ErrorCode.EMBEDDING_BINDING_CHANGED, "向量模型配置已变更，请恢复原供应商、模型和维度");
   }
 
   /**
@@ -296,8 +291,7 @@ public class KnowledgeBaseService {
   public KnowledgeBase lockAndBindModel(
       UUID ownerId, UUID id, String modelId, String provider, String model, int dimensions) {
     KnowledgeBase kb = knowledgeBaseMapper.lock(ownerId, id);
-    if (kb == null)
-      throw new ApiException("KNOWLEDGE_BASE_NOT_FOUND", "知识库不存在", HttpStatus.NOT_FOUND);
+    if (kb == null) throw new ApiException(ErrorCode.KNOWLEDGE_BASE_NOT_FOUND, "知识库不存在");
     checkModel(kb, modelId, provider, model, dimensions);
     if (kb.getEmbeddingModel() == null) {
       kb.setEmbeddingModelId(modelId);
@@ -329,6 +323,6 @@ public class KnowledgeBaseService {
 
   private void requireAvailable(AiProperties.ModelTarget model) {
     if (model.apiKey() == null || model.apiKey().isBlank())
-      throw ApiException.bad("MODEL_NOT_CONFIGURED", "所选向量模型未配置 API Key");
+      throw ApiException.bad(ErrorCode.MODEL_NOT_CONFIGURED, "所选向量模型未配置 API Key");
   }
 }

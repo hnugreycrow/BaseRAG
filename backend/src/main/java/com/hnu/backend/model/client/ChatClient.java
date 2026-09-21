@@ -3,6 +3,7 @@ package com.hnu.backend.model.client;
 import com.hnu.backend.model.config.AiProperties;
 import com.hnu.backend.model.http.ModelHttpClient;
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.error.ErrorCode;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -68,14 +69,14 @@ public class ChatClient {
             || content.asString().isBlank()
             || !choice.path("finish_reason").isString()
             || !"stop".equals(choice.path("finish_reason").asString())) {
-          throw ApiException.upstream("GENERATION_FAILED", "模型未完整生成有效回答，请重试");
+          throw ApiException.upstream(ErrorCode.GENERATION_FAILED, "模型未完整生成有效回答，请重试");
         }
         return new Generation(content.asString(), target.id(), target.provider(), target.model());
       } catch (ApiException e) {
         last = e;
       }
     }
-    throw last == null ? ApiException.upstream("MODEL_UNAVAILABLE", "没有可用的对话模型") : last;
+    throw last == null ? ApiException.upstream(ErrorCode.MODEL_UNAVAILABLE, "没有可用的对话模型") : last;
   }
 
   /**
@@ -128,7 +129,7 @@ public class ChatClient {
             control);
         if (control.cancelled()) throw ApiException.cancelled();
         if (content.isEmpty() || !"stop".equals(finishReason[0])) {
-          throw ApiException.upstream("GENERATION_FAILED", "模型未完整生成有效回答，请重试");
+          throw ApiException.upstream(ErrorCode.GENERATION_FAILED, "模型未完整生成有效回答，请重试");
         }
         observer.completed(target, content.toString(), finishReason[0]);
         return new Generation(content.toString(), target.id(), target.provider(), target.model());
@@ -139,7 +140,7 @@ public class ChatClient {
         if (!content.isEmpty() || control.cancelled()) throw e;
       }
     }
-    throw last == null ? ApiException.upstream("MODEL_UNAVAILABLE", "没有可用的对话模型") : last;
+    throw last == null ? ApiException.upstream(ErrorCode.MODEL_UNAVAILABLE, "没有可用的对话模型") : last;
   }
 
   /**

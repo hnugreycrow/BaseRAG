@@ -25,6 +25,8 @@ import com.hnu.backend.document.vo.DocumentResponse;
 import com.hnu.backend.knowledgebase.service.KnowledgeBaseService;
 import com.hnu.backend.model.client.EmbeddingClient;
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.error.ErrorCode;
+import com.hnu.backend.shared.error.SafeExceptionLog;
 import com.hnu.backend.shared.web.PageResponse;
 import jakarta.annotation.PreDestroy;
 import java.nio.charset.StandardCharsets;
@@ -47,7 +49,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
@@ -128,21 +129,19 @@ public class DocumentService {
     name = name.replace('\\', '/');
     name = name.substring(name.lastIndexOf('/') + 1);
     if (name.isBlank() || name.length() > 255 || name.chars().anyMatch(Character::isISOControl))
-      throw ApiException.bad("INVALID_FILE", "文件名不能超过 255 字符");
+      throw ApiException.bad(ErrorCode.INVALID_FILE, "文件名不能超过 255 字符");
     DocumentFormat format = DocumentFormat.fromName(name);
-    if (file.isEmpty()) throw ApiException.bad("EMPTY_DOCUMENT", "文档不能为空");
+    if (file.isEmpty()) throw ApiException.bad(ErrorCode.EMPTY_DOCUMENT, "文档不能为空");
     // Markdown 限 5 MiB；PDF 和 DOCX 限 20 MiB，读取前后均检查大小。
     long limit = (format == DocumentFormat.MARKDOWN ? 5L : 20L) * 1024 * 1024;
-    if (file.getSize() > limit)
-      throw new ApiException("FILE_TOO_LARGE", "文件超过格式大小限制", HttpStatus.PAYLOAD_TOO_LARGE);
+    if (file.getSize() > limit) throw new ApiException(ErrorCode.FILE_TOO_LARGE, "文件超过格式大小限制");
     byte[] bytes;
     try {
       bytes = file.getBytes();
     } catch (java.io.IOException e) {
-      throw ApiException.bad("INVALID_FILE", "无法读取上传文件");
+      throw ApiException.bad(ErrorCode.INVALID_FILE, "无法读取上传文件");
     }
-    if (bytes.length > limit)
-      throw new ApiException("FILE_TOO_LARGE", "文件超过格式大小限制", HttpStatus.PAYLOAD_TOO_LARGE);
+    if (bytes.length > limit) throw new ApiException(ErrorCode.FILE_TOO_LARGE, "文件超过格式大小限制");
     parsers.verify(name, bytes);
 
     Document document = new Document();
@@ -194,7 +193,7 @@ public class DocumentService {
     } catch (RuntimeException e) {
       removeStoredFile(version.getStorageKey());
       if (e instanceof ApiException api) throw api;
-      throw ApiException.upstream("IMPORT_FAILED", "文档入库失败，请检查服务状态后重新上传");
+      throw ApiException.upstream(ErrorCode.IMPORT_FAILED, "文档入库失败，请检查服务状态后重新上传", e);
     }
   }
 
@@ -202,7 +201,7 @@ public class DocumentService {
   public DocumentBatchUploadResponse uploadBatch(
       UUID ownerId, UUID knowledgeBaseId, List<MultipartFile> files) {
     if (files == null || files.isEmpty() || files.size() > 10)
-      throw ApiException.bad("INVALID_BATCH_SIZE", "每次请选择 1 至 10 个文件");
+      throw ApiException.bad(ErrorCode.INVALID_BATCH_SIZE, "每次请选择 1 至 10 个文件");
     knowledgeBaseService.ensureModel(ownerId, knowledgeBaseId);
     List<DocumentBatchUploadResponse.Item> results = new ArrayList<>(files.size());
     for (int index = 0; index < files.size(); index++) {
@@ -240,8 +239,7 @@ public class DocumentService {
    * @return 最新导入状态
    */
   public DocumentImportResponse createChunks(UUID ownerId, UUID knowledgeBaseId, UUID documentId) {
-    if (!imports.tryAcquire())
-      throw new ApiException("IMPORT_BUSY", "正在处理其他文档，请稍后重试", HttpStatus.TOO_MANY_REQUESTS);
+    if (!imports.tryAcquire()) throw new ApiException(ErrorCode.IMPORT_BUSY, "正在处理其他文档，请稍后重试");
     try {
       return processChunks(ownerId, knowledgeBaseId, documentId, false);
     } finally {
@@ -271,7 +269,7 @@ public class DocumentService {
         || documentIds.size() > 50
         || new HashSet<>(documentIds).size() != documentIds.size()
         || documentIds.stream().anyMatch(Objects::isNull))
-      throw ApiException.bad("INVALID_BATCH", "请选择 1 到 50 篇不同的文档");
+      throw ApiException.bad(ErrorCode.INVALID_BATCH, "请选择 1 到 50 篇不同的文档");
     AtomicInteger reserved = new AtomicInteger();
     DocumentChunkBatchResponse result;
     try {
@@ -291,7 +289,7 @@ public class DocumentService {
                   DocumentVersion version = selectedVersions.get(i);
                   if (version.getStatus() == DocumentVersionStatus.PROCESSING) {
                     if (!skipProcessing)
-                      throw ApiException.conflict("DOCUMENT_PROCESSING", "文档正在分块，请稍后刷新");
+                      throw ApiException.conflict(ErrorCode.DOCUMENT_PROCESSING, "文档正在分块，请稍后刷新");
                     skipped.add(documentId);
                     continue;
                   }
@@ -306,12 +304,11 @@ public class DocumentService {
                     skipped.add(documentId);
                     continue;
                   }
-                  throw ApiException.conflict("DOCUMENT_PROCESSING", "所选文档状态已变化，请刷新后重试");
+                  throw ApiException.conflict(ErrorCode.DOCUMENT_PROCESSING, "所选文档状态已变化，请刷新后重试");
                 }
                 if (!accepted.isEmpty()) {
                   if (!taskSlots.tryAcquire(accepted.size()))
-                    throw new ApiException(
-                        "IMPORT_BUSY", "分块队列已满，请稍后重试", HttpStatus.TOO_MANY_REQUESTS);
+                    throw new ApiException(ErrorCode.IMPORT_BUSY, "分块队列已满，请稍后重试");
                   reserved.set(accepted.size());
                 }
                 return new DocumentChunkBatchResponse(List.copyOf(accepted), List.copyOf(skipped));
@@ -329,7 +326,11 @@ public class DocumentService {
               try {
                 processChunks(ownerId, knowledgeBaseId, documentId, true);
               } catch (RuntimeException e) {
-                log.error("Background chunking failed documentId={}", documentId, e);
+                log.error(
+                    "backgroundChunking documentId={} exceptionType={} safeStack={}",
+                    documentId,
+                    e.getClass().getSimpleName(),
+                    SafeExceptionLog.render(e));
               } finally {
                 taskSlots.release();
               }
@@ -341,7 +342,7 @@ public class DocumentService {
         markInterrupted(accepted.get(i));
       }
       taskSlots.release(accepted.size() - submitted);
-      throw new ApiException("IMPORT_BUSY", "分块队列已停止，请稍后重试", HttpStatus.TOO_MANY_REQUESTS);
+      throw new ApiException(ErrorCode.IMPORT_BUSY, "分块队列已停止，请稍后重试");
     }
     return result;
   }
@@ -388,7 +389,7 @@ public class DocumentService {
             .set(
                 DocumentVersion::getStatus,
                 rebuilding ? DocumentVersionStatus.READY : DocumentVersionStatus.FAILED)
-            .set(DocumentVersion::getErrorCode, "IMPORT_INTERRUPTED"));
+            .set(DocumentVersion::getErrorCode, ErrorCode.IMPORT_INTERRUPTED.code()));
   }
 
   @PreDestroy
@@ -410,16 +411,15 @@ public class DocumentService {
     DocumentVersion version = latestVersion(documentId);
     boolean rebuilding = Objects.equals(document.getActiveVersionId(), version.getId());
     if (!alreadyClaimed && version.getStatus() == DocumentVersionStatus.PROCESSING) {
-      throw new ApiException("DOCUMENT_PROCESSING", "文档正在分块，请稍后刷新", HttpStatus.CONFLICT);
+      throw new ApiException(ErrorCode.DOCUMENT_PROCESSING, "文档正在分块，请稍后刷新");
     }
     if (alreadyClaimed) {
       if (version.getStatus() != DocumentVersionStatus.PROCESSING) {
-        throw new ApiException("DOCUMENT_PROCESSING", "文档状态已变化，请稍后刷新", HttpStatus.CONFLICT);
+        throw new ApiException(ErrorCode.DOCUMENT_PROCESSING, "文档状态已变化，请稍后刷新");
       }
     } else {
       int claimed = claimVersion(version, true);
-      if (claimed != 1)
-        throw new ApiException("DOCUMENT_PROCESSING", "文档正在分块，请稍后刷新", HttpStatus.CONFLICT);
+      if (claimed != 1) throw new ApiException(ErrorCode.DOCUMENT_PROCESSING, "文档正在分块，请稍后刷新");
     }
     version.setStatus(DocumentVersionStatus.PROCESSING);
     version.setErrorCode(null);
@@ -431,9 +431,9 @@ public class DocumentService {
       // 解析器只负责结构和来源；所有格式共用同一分块预算与策略。
       List<StructuredChunkPacker.Chunk> pieces =
           chunker.pack(parsers.parser(format).parse(original));
-      if (pieces.isEmpty()) throw ApiException.bad("EMPTY_DOCUMENT", "文档没有可用文本");
+      if (pieces.isEmpty()) throw ApiException.bad(ErrorCode.EMPTY_DOCUMENT, "文档没有可用文本");
       if (pieces.size() > 1000)
-        throw ApiException.bad("TOO_MANY_CHUNKS", "单份文档最多处理 1000 个片段，请拆分文档");
+        throw ApiException.bad(ErrorCode.TOO_MANY_CHUNKS, "单份文档最多处理 1000 个片段，请拆分文档");
       embedding.requireConfigured(
           version.getEmbeddingModelId(),
           version.getEmbeddingProvider(),
@@ -491,7 +491,7 @@ public class DocumentService {
       return new DocumentImportResponse(
           document.getId(), DocumentVersionStatus.READY.name(), pieces.size());
     } catch (RuntimeException e) {
-      String code = e instanceof ApiException api ? api.code() : "IMPORT_FAILED";
+      String code = e instanceof ApiException api ? api.code() : ErrorCode.IMPORT_FAILED.code();
       try {
         tx.executeWithoutResult(
             status -> {
@@ -502,10 +502,15 @@ public class DocumentService {
               documentVersionMapper.updateById(version);
             });
       } catch (RuntimeException markingFailure) {
-        log.error("Could not mark failed chunking documentId={} code={}", document.getId(), code);
+        log.error(
+            "markFailedChunking documentId={} code={} exceptionType={} safeStack={}",
+            document.getId(),
+            code,
+            markingFailure.getClass().getSimpleName(),
+            SafeExceptionLog.render(markingFailure));
       }
       if (e instanceof ApiException api) throw api;
-      throw ApiException.upstream("IMPORT_FAILED", "文档分块失败，请检查服务状态后重试");
+      throw ApiException.upstream(ErrorCode.IMPORT_FAILED, "文档分块失败，请检查服务状态后重试", e);
     }
   }
 
@@ -571,7 +576,7 @@ public class DocumentService {
   public void delete(UUID ownerId, UUID knowledgeBaseId, UUID documentId) {
     requireDocument(ownerId, knowledgeBaseId, documentId);
     if (latestVersion(documentId).getStatus() == DocumentVersionStatus.PROCESSING) {
-      throw ApiException.conflict("DOCUMENT_PROCESSING", "文档正在分块，完成后才能删除");
+      throw ApiException.conflict(ErrorCode.DOCUMENT_PROCESSING, "文档正在分块，完成后才能删除");
     }
     List<DocumentVersion> storedVersions =
         documentVersionMapper.selectList(
@@ -646,7 +651,7 @@ public class DocumentService {
     if (chunk == null
         || !chunk.getDocumentId().equals(documentId)
         || !Objects.equals(chunk.getVersionId(), document.getActiveVersionId()))
-      throw new ApiException("CHUNK_NOT_FOUND", "分块不存在", HttpStatus.NOT_FOUND);
+      throw new ApiException(ErrorCode.CHUNK_NOT_FOUND, "分块不存在");
     return new DocumentChunkDetailResponse(
         chunk.getId(),
         chunk.getDocumentId(),
@@ -678,7 +683,7 @@ public class DocumentService {
     if (version == null
         || !version.getDocumentId().equals(document.getId())
         || !version.getKnowledgeBaseId().equals(knowledgeBaseId))
-      throw new ApiException("DOCUMENT_VERSION_NOT_FOUND", "文档版本不存在", HttpStatus.NOT_FOUND);
+      throw new ApiException(ErrorCode.DOCUMENT_VERSION_NOT_FOUND, "文档版本不存在");
     return originalFile(document, version);
   }
 
@@ -757,6 +762,7 @@ public class DocumentService {
         document.getName(),
         version.getStatus().name(),
         version.getErrorCode(),
+        ErrorCode.messageFor(version.getErrorCode()),
         chunkCount,
         document.getCreatedAt(),
         version.getFormat(),
@@ -811,7 +817,7 @@ public class DocumentService {
 
   private long offset(int page, int pageSize) {
     if (page < 1 || pageSize < 1 || pageSize > 100)
-      throw ApiException.bad("INVALID_PAGE", "页码应大于 0，每页数量应为 1 到 100");
+      throw ApiException.bad(ErrorCode.INVALID_PAGE, "页码应大于 0，每页数量应为 1 到 100");
     return (long) (page - 1) * pageSize;
   }
 
@@ -822,8 +828,7 @@ public class DocumentService {
                 .eq(DocumentVersion::getDocumentId, documentId)
                 .orderByDesc(DocumentVersion::getCreatedAt)
                 .last("LIMIT 1"));
-    if (version == null)
-      throw new ApiException("DOCUMENT_VERSION_NOT_FOUND", "文档版本不存在", HttpStatus.NOT_FOUND);
+    if (version == null) throw new ApiException(ErrorCode.DOCUMENT_VERSION_NOT_FOUND, "文档版本不存在");
     return version;
   }
 
@@ -839,14 +844,14 @@ public class DocumentService {
     knowledgeBaseService.requireEntity(ownerId, knowledgeBaseId);
     Document document = documentMapper.selectById(documentId);
     if (document == null || !document.getKnowledgeBaseId().equals(knowledgeBaseId))
-      throw new ApiException("DOCUMENT_NOT_FOUND", "文档不存在", HttpStatus.NOT_FOUND);
+      throw new ApiException(ErrorCode.DOCUMENT_NOT_FOUND, "文档不存在");
     return document;
   }
 
   private String normalizeDocumentName(String rawName) {
     String name = rawName == null ? "" : rawName.trim();
     if (name.isEmpty() || name.length() > 255 || name.chars().anyMatch(Character::isISOControl))
-      throw ApiException.bad("INVALID_DOCUMENT_NAME", "文档名称应为 1 到 255 个有效字符");
+      throw ApiException.bad(ErrorCode.INVALID_DOCUMENT_NAME, "文档名称应为 1 到 255 个有效字符");
     return name;
   }
 
@@ -854,7 +859,11 @@ public class DocumentService {
     try {
       storage.remove(key);
     } catch (RuntimeException e) {
-      log.warn("Could not remove stored document file key={}", key, e);
+      log.warn(
+          "removeStoredDocument key={} exceptionType={} safeStack={}",
+          key,
+          e.getClass().getSimpleName(),
+          SafeExceptionLog.render(e));
     }
   }
 

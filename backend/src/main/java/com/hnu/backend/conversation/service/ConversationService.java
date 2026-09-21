@@ -29,6 +29,8 @@ import com.hnu.backend.rag.vo.ModelInfoResponse;
 import com.hnu.backend.rag.vo.SourceResponse;
 import com.hnu.backend.rag.vo.SourceSnapshotDecoder;
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.error.ErrorCode;
+import com.hnu.backend.shared.error.SafeExceptionLog;
 import com.hnu.backend.shared.web.RequestTiming;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -254,7 +256,7 @@ public class ConversationService {
   public void delete(UUID ownerId, UUID id) {
     require(ownerId, id);
     if (activeByConversation.containsKey(id) || messageMapper.countRunning(ownerId, id) > 0) {
-      throw ApiException.conflict("GENERATION_IN_PROGRESS", "请先停止当前生成再删除会话");
+      throw ApiException.conflict(ErrorCode.GENERATION_IN_PROGRESS, "请先停止当前生成再删除会话");
     }
     conversationMapper.delete(ownerId, id);
     conversationLocks.remove(id);
@@ -435,18 +437,18 @@ public class ConversationService {
       if (previous == null
           || !conversationId.equals(previous.getConversationId())
           || previous.getRole() != MessageRole.ASSISTANT) {
-        throw ApiException.notFound("MESSAGE_NOT_FOUND", "回答不存在");
+        throw ApiException.notFound(ErrorCode.MESSAGE_NOT_FOUND, "回答不存在");
       }
       if (regenerate) {
         int lastTurn = messageMapper.nextTurn(ownerId, conversationId) - 1;
         if (!previous.isActive()
             || previous.getStatus() != MessageStatus.COMPLETED
             || previous.getTurnIndex() != lastTurn) {
-          throw ApiException.conflict("REGENERATE_NOT_ALLOWED", "只能重新生成会话最后一轮的当前成功回答");
+          throw ApiException.conflict(ErrorCode.REGENERATE_NOT_ALLOWED, "只能重新生成会话最后一轮的当前成功回答");
         }
       } else if (!(previous.getStatus() == MessageStatus.FAILED
           || previous.getStatus() == MessageStatus.CANCELLED)) {
-        throw ApiException.conflict("RETRY_NOT_ALLOWED", "只能重试失败或已停止的回答");
+        throw ApiException.conflict(ErrorCode.RETRY_NOT_ALLOWED, "只能重试失败或已停止的回答");
       }
       Message user = messageMapper.find(ownerId, previous.getReplyToId());
       PreparedAnswer next =
@@ -499,7 +501,7 @@ public class ConversationService {
     if (stored == null
         || !conversationId.equals(stored.getConversationId())
         || stored.getRole() != MessageRole.ASSISTANT) {
-      throw ApiException.notFound("GENERATION_NOT_FOUND", "生成任务不存在");
+      throw ApiException.notFound(ErrorCode.GENERATION_NOT_FOUND, "生成任务不存在");
     }
     if (stored.getStatus() != MessageStatus.PENDING
         && stored.getStatus() != MessageStatus.STREAMING) {
@@ -543,7 +545,7 @@ public class ConversationService {
   private void ensureIdle(UUID ownerId, UUID conversationId) {
     if (activeByConversation.containsKey(conversationId)
         || messageMapper.countRunning(ownerId, conversationId) > 0) {
-      throw ApiException.conflict("GENERATION_IN_PROGRESS", "该会话正在生成回答");
+      throw ApiException.conflict(ErrorCode.GENERATION_IN_PROGRESS, "该会话正在生成回答");
     }
   }
 
@@ -558,10 +560,10 @@ public class ConversationService {
    */
   private SseEmitter replayOrConflict(
       Conversation conversation, Message user, Message assistant, String requestId) {
-    if (assistant == null) throw ApiException.conflict("MESSAGE_INCOMPLETE", "消息尚未创建回答");
+    if (assistant == null) throw ApiException.conflict(ErrorCode.MESSAGE_INCOMPLETE, "消息尚未创建回答");
     if (assistant.getStatus() == MessageStatus.PENDING
         || assistant.getStatus() == MessageStatus.STREAMING) {
-      throw ApiException.conflict("GENERATION_IN_PROGRESS", "相同请求正在生成");
+      throw ApiException.conflict(ErrorCode.GENERATION_IN_PROGRESS, "相同请求正在生成");
     }
     SseEmitter emitter = new SseEmitter(0L);
     executor.submit(
@@ -723,7 +725,7 @@ public class ConversationService {
               active.assistant.isThinkingEnabled());
       complete(active, answer.content(), answer.citations(), answer.generation());
     } catch (ApiException e) {
-      if (active.control.cancelled() || "GENERATION_CANCELLED".equals(e.code()))
+      if (active.control.cancelled() || ErrorCode.GENERATION_CANCELLED.code().equals(e.code()))
         cancelTerminal(active);
       else errorTerminal(active, e.code(), e.getMessage());
     } catch (RuntimeException e) {
@@ -732,12 +734,14 @@ public class ConversationService {
         return;
       }
       log.error(
-          "conversation={} generation={} exceptionType={}",
+          "conversation={} generation={} code={} exceptionType={} safeStack={}",
           active.conversation.getId(),
           active.assistant.getId(),
+          ErrorCode.INTERNAL_ERROR.code(),
           e.getClass().getSimpleName(),
-          e);
-      errorTerminal(active, "INTERNAL_ERROR", "服务暂时不可用，请稍后重试");
+          SafeExceptionLog.render(e));
+      errorTerminal(
+          active, ErrorCode.INTERNAL_ERROR.code(), ErrorCode.INTERNAL_ERROR.defaultMessage());
     }
   }
 
@@ -1056,11 +1060,14 @@ public class ConversationService {
             // Trace 阶段批量写入与回答终态共享事务，任一失败都不会留下互相矛盾的状态。
             traces.finish(active.trace, RagRunStatus.COMPLETED, null);
           });
-      finishPersisted(active, "complete", "INTERNAL_ERROR", "回答保存失败，请重试");
+      finishPersisted(active, "complete", ErrorCode.INTERNAL_ERROR.code(), "回答保存失败，请重试");
     } catch (RuntimeException e) {
-      persistenceSpan.failed("TRACE_OR_RESULT_PERSISTENCE_FAILED");
+      persistenceSpan.failed(ErrorCode.TRACE_OR_RESULT_PERSISTENCE_FAILED.code());
       terminalPersistenceFailed(active, "complete", e);
-      finish(active, "error", terminalEvent("INTERNAL_ERROR", "回答保存失败，请重试", active.requestId));
+      finish(
+          active,
+          "error",
+          terminalEvent(ErrorCode.INTERNAL_ERROR.code(), "回答保存失败，请重试", active.requestId));
     }
   }
 
@@ -1085,13 +1092,17 @@ public class ConversationService {
             generationAttemptMapper.cancelRunning(active.ownerId, active.generationId);
             if (changed > 0) conversationMapper.touch(active.ownerId, active.conversation.getId());
             persistenceSpan.success(changed);
-            traces.finish(active.trace, RagRunStatus.CANCELLED, "GENERATION_CANCELLED");
+            traces.finish(
+                active.trace, RagRunStatus.CANCELLED, ErrorCode.GENERATION_CANCELLED.code());
           });
-      finishPersisted(active, "cancelled", "GENERATION_CANCELLED", "生成已停止");
+      finishPersisted(active, "cancelled", ErrorCode.GENERATION_CANCELLED.code(), "生成已停止");
     } catch (RuntimeException e) {
-      persistenceSpan.failed("TRACE_OR_RESULT_PERSISTENCE_FAILED");
+      persistenceSpan.failed(ErrorCode.TRACE_OR_RESULT_PERSISTENCE_FAILED.code());
       terminalPersistenceFailed(active, "cancelled", e);
-      finish(active, "cancelled", terminalEvent("GENERATION_CANCELLED", "生成已停止", active.requestId));
+      finish(
+          active,
+          "cancelled",
+          terminalEvent(ErrorCode.GENERATION_CANCELLED.code(), "生成已停止", active.requestId));
     }
   }
 
@@ -1128,7 +1139,7 @@ public class ConversationService {
           });
       finishPersisted(active, "error", code, message);
     } catch (RuntimeException e) {
-      persistenceSpan.failed("TRACE_OR_RESULT_PERSISTENCE_FAILED");
+      persistenceSpan.failed(ErrorCode.TRACE_OR_RESULT_PERSISTENCE_FAILED.code());
       terminalPersistenceFailed(active, "error", e);
       finish(active, "error", terminalEvent(code, message, active.requestId));
     }
@@ -1187,11 +1198,13 @@ public class ConversationService {
   private void terminalPersistenceFailed(
       ActiveGeneration active, String terminalEvent, RuntimeException error) {
     log.error(
-        "conversation={} generation={} terminalEvent={} persistenceFailed",
+        "conversation={} generation={} terminalEvent={} code={} exceptionType={} safeStack={}",
         active.conversation.getId(),
         active.generationId,
         terminalEvent,
-        error);
+        ErrorCode.TRACE_OR_RESULT_PERSISTENCE_FAILED.code(),
+        error.getClass().getSimpleName(),
+        SafeExceptionLog.render(error));
   }
 
   /**
@@ -1238,7 +1251,7 @@ public class ConversationService {
   private Map<String, Object> terminalPayload(Message assistant, String requestId) {
     Map<String, Object> value = event("assistantMessage", assistantResponse(assistant));
     value.put("requestId", requestId);
-    value.put("retryable", !"INVALID_QUESTION".equals(assistant.getErrorCode()));
+    value.put("retryable", ErrorCode.retryable(assistant.getErrorCode()));
     if (assistant.getErrorCode() != null) value.put("code", assistant.getErrorCode());
     if (assistant.getErrorMessage() != null) value.put("message", assistant.getErrorMessage());
     return value;
@@ -1256,7 +1269,7 @@ public class ConversationService {
     Map<String, Object> value = event("code", code);
     value.put("message", message);
     value.put("requestId", requestId);
-    value.put("retryable", !"INVALID_QUESTION".equals(code));
+    value.put("retryable", ErrorCode.retryable(code));
     return value;
   }
 
@@ -1330,7 +1343,7 @@ public class ConversationService {
    */
   private Conversation require(UUID ownerId, UUID id) {
     Conversation value = conversationMapper.find(ownerId, id);
-    if (value == null) throw ApiException.notFound("CONVERSATION_NOT_FOUND", "会话不存在");
+    if (value == null) throw ApiException.notFound(ErrorCode.CONVERSATION_NOT_FOUND, "会话不存在");
     return value;
   }
 
@@ -1358,7 +1371,7 @@ public class ConversationService {
   private String normalizeTitle(String raw) {
     String value = raw == null ? "" : raw.strip();
     if (value.isEmpty() || value.length() > 200 || value.chars().anyMatch(Character::isISOControl))
-      throw ApiException.bad("INVALID_CONVERSATION_TITLE", "会话标题应为 1 到 200 个有效字符");
+      throw ApiException.bad(ErrorCode.INVALID_CONVERSATION_TITLE, "会话标题应为 1 到 200 个有效字符");
     return value;
   }
 
@@ -1372,7 +1385,7 @@ public class ConversationService {
     String value = raw == null ? "" : raw.strip();
     if (value.isEmpty() || value.length() > rag.getMaxQuestionChars())
       throw ApiException.bad(
-          "INVALID_QUESTION", "请输入非空问题，长度不能超过 " + rag.getMaxQuestionChars() + " 字符");
+          ErrorCode.INVALID_QUESTION, "请输入非空问题，长度不能超过 " + rag.getMaxQuestionChars() + " 字符");
     return value;
   }
 

@@ -5,6 +5,7 @@ import com.hnu.backend.auth.entity.UserRole;
 import com.hnu.backend.auth.mapper.UserMapper;
 import com.hnu.backend.auth.vo.UserResponse;
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.error.ErrorCode;
 import com.hnu.backend.shared.web.PageResponse;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -56,7 +57,7 @@ public class AdminUserService {
    */
   public PageResponse<UserResponse> list(int page, int pageSize, String rawQuery) {
     if (page < 1 || pageSize < 1 || pageSize > 100) {
-      throw ApiException.bad("INVALID_PAGE", "页码应大于 0，每页数量应为 1 到 100");
+      throw ApiException.bad(ErrorCode.INVALID_PAGE, "页码应大于 0，每页数量应为 1 到 100");
     }
     String query = rawQuery == null || rawQuery.isBlank() ? null : rawQuery.strip();
     long total = userMapper.count(query);
@@ -92,7 +93,7 @@ public class AdminUserService {
               });
       return AuthService.toResponse(userMapper.find(created.getId()));
     } catch (DataIntegrityViolationException error) {
-      throw ApiException.conflict("USERNAME_EXISTS", "用户名已存在");
+      throw ApiException.conflict(ErrorCode.USERNAME_EXISTS, "用户名已存在");
     }
   }
 
@@ -107,7 +108,7 @@ public class AdminUserService {
    */
   public UserResponse setEnabled(UUID actorId, UUID targetId, boolean enabled) {
     if (!enabled && actorId.equals(targetId)) {
-      throw ApiException.conflict("SELF_DISABLE_NOT_ALLOWED", "不能禁用当前登录账号");
+      throw ApiException.conflict(ErrorCode.SELF_DISABLE_NOT_ALLOWED, "不能禁用当前登录账号");
     }
     User updated =
         tx.execute(
@@ -117,7 +118,7 @@ public class AdminUserService {
                 // 行锁使两个管理员无法并发禁用彼此后同时通过“最后一个管理员”检查。
                 userMapper.lockEnabledAdmins();
                 if (userMapper.countEnabledAdmins() <= 1) {
-                  throw ApiException.conflict("LAST_ADMIN_REQUIRED", "不能禁用最后一个启用的管理员");
+                  throw ApiException.conflict(ErrorCode.LAST_ADMIN_REQUIRED, "不能禁用最后一个启用的管理员");
                 }
               }
               target.setEnabled(enabled);
@@ -177,7 +178,7 @@ public class AdminUserService {
    */
   private User require(UUID id) {
     User user = userMapper.find(id);
-    if (user == null) throw ApiException.notFound("USER_NOT_FOUND", "用户不存在");
+    if (user == null) throw ApiException.notFound(ErrorCode.USER_NOT_FOUND, "用户不存在");
     return user;
   }
 }

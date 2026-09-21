@@ -93,6 +93,10 @@ function statusType(row: KnowledgeDocument) {
 function statusLabel(row: KnowledgeDocument) {
   return statusMeta[row.status].label
 }
+
+function errorMessage(row: KnowledgeDocument) {
+  return row.errorMessage || '处理失败，请根据请求 ID 查询日志'
+}
 </script>
 
 <template>
@@ -115,7 +119,10 @@ function statusLabel(row: KnowledgeDocument) {
             ></span>
             <div>
               <strong :title="row.name">{{ row.name }}</strong>
-              <small v-if="row.errorCode">错误代码：{{ row.errorCode }}</small>
+              <template v-if="row.errorCode">
+                <small class="error-message">{{ errorMessage(row) }}</small>
+                <small class="error-code">错误代码：{{ row.errorCode }}</small>
+              </template>
               <small v-else>{{ formatDate(row.createdAt) }}</small>
             </div>
           </div>
@@ -198,7 +205,10 @@ function statusLabel(row: KnowledgeDocument) {
         processingIds.has(row.id) ? '处理中' : statusLabel(row)
       }}</el-tag>
       <p>{{ row.chunkCount }} 块 · {{ formatDate(row.createdAt) }}</p>
-      <p v-if="row.errorCode" role="status">错误代码：{{ row.errorCode }}</p>
+      <div v-if="row.errorCode" class="mobile-error" role="status">
+        <strong>{{ errorMessage(row) }}</strong>
+        <small>错误代码：{{ row.errorCode }}</small>
+      </div>
       <div class="card-actions">
         <el-button
           :loading="processingIds.has(row.id)"
@@ -261,6 +271,24 @@ function statusLabel(row: KnowledgeDocument) {
 .document-cell small {
   color: var(--color-muted);
   font-size: 11px;
+}
+
+.document-cell .error-message,
+.mobile-error strong {
+  color: #b65349;
+  font-weight: 600;
+}
+
+.document-cell .error-code {
+  font-family: var(--font-data);
+}
+
+.mobile-error {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--color-muted);
+  font-size: 12px;
 }
 
 .row-actions {

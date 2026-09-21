@@ -4,6 +4,7 @@ import com.hnu.backend.model.config.AiProperties;
 import com.hnu.backend.model.config.EmbeddingProtocol;
 import com.hnu.backend.model.http.ModelHttpClient;
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.error.ErrorCode;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -73,6 +74,7 @@ public class OpenAICompatibleEmbeddingAdapter implements EmbeddingAdapter {
   }
 
   private static ApiException invalid() {
-    return ApiException.upstream("EMBEDDING_INVALID_RESPONSE", "Embedding 返回的数量、索引、维度或向量值无效");
+    return ApiException.upstream(
+        ErrorCode.EMBEDDING_INVALID_RESPONSE, "Embedding 返回的数量、索引、维度或向量值无效");
   }
 }

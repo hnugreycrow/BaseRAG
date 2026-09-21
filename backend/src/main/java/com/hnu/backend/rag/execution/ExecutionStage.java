@@ -15,6 +15,7 @@ import com.hnu.backend.rag.routing.IntentRoute;
 import com.hnu.backend.rag.routing.IntentType;
 import com.hnu.backend.rag.routing.RoutingPlan;
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.error.ErrorCode;
 import jakarta.annotation.PreDestroy;
 import java.util.ArrayList;
 import java.util.List;
@@ -284,11 +285,11 @@ public class ExecutionStage {
       return result(
           question, route, status, List.of(), observation, observation.reasonCode(), startedAt);
     } catch (ApiException error) {
-      if ("GENERATION_CANCELLED".equals(error.code())) throw error;
+      if (ErrorCode.GENERATION_CANCELLED.code().equals(error.code())) throw error;
       return result(
           question,
           route,
-          "SUBQUESTION_TIMEOUT".equals(error.code())
+          ErrorCode.SUBQUESTION_TIMEOUT.code().equals(error.code())
               ? SubQuestionExecution.Status.TIMEOUT
               : SubQuestionExecution.Status.FAILED,
           List.of(),
@@ -302,7 +303,7 @@ public class ExecutionStage {
           SubQuestionExecution.Status.FAILED,
           List.of(),
           null,
-          "EXECUTION_FAILED",
+          ErrorCode.EXECUTION_FAILED.code(),
           startedAt);
     }
   }
@@ -339,7 +340,7 @@ public class ExecutionStage {
               SubQuestionExecution.Status.TIMEOUT,
               List.of(),
               null,
-              "SUBQUESTION_TIMEOUT",
+              ErrorCode.SUBQUESTION_TIMEOUT.code(),
               handle.startedAt());
         }
         long waitNanos = Math.min(remaining, TimeUnit.MILLISECONDS.toNanos(CANCELLATION_POLL_MS));
@@ -366,7 +367,7 @@ public class ExecutionStage {
         SubQuestionExecution.Status.TIMEOUT,
         List.of(),
         null,
-        "SUBQUESTION_TIMEOUT",
+        ErrorCode.SUBQUESTION_TIMEOUT.code(),
         handle.startedAt());
   }
 

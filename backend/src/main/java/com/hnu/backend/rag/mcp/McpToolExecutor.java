@@ -1,6 +1,7 @@
 package com.hnu.backend.rag.mcp;
 
 import com.hnu.backend.configuration.RagProperties;
+import com.hnu.backend.shared.error.ErrorCode;
 import jakarta.annotation.PreDestroy;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -87,7 +88,7 @@ public class McpToolExecutor {
           argumentsSummary,
           auditSource,
           ToolObservation.Status.TIMEOUT,
-          "TOOL_TIMEOUT",
+          ErrorCode.TOOL_TIMEOUT.code(),
           "",
           false,
           startedAt);
@@ -99,7 +100,7 @@ public class McpToolExecutor {
           argumentsSummary,
           auditSource,
           ToolObservation.Status.FAILED,
-          "TOOL_INTERRUPTED",
+          ErrorCode.TOOL_INTERRUPTED.code(),
           "",
           false,
           startedAt);
@@ -109,7 +110,7 @@ public class McpToolExecutor {
           argumentsSummary,
           auditSource,
           ToolObservation.Status.FAILED,
-          "TOOL_FAILED",
+          ErrorCode.TOOL_FAILED.code(),
           "",
           false,
           startedAt);

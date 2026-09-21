@@ -39,6 +39,7 @@ import com.hnu.backend.rag.answer.ContextBuilder;
 import com.hnu.backend.rag.retrieval.EmbeddingBinding;
 import com.hnu.backend.rag.retrieval.RetrievalMapper;
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.error.ErrorCode;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.URI;
@@ -736,7 +737,7 @@ class InfrastructureIntegrationTest {
     UUID kb = kb();
     UUID ownerId = ownerId();
     when(embedding.embed(anyString(), anyString(), anyString(), anyInt(), anyList()))
-        .thenThrow(ApiException.upstream("MODEL_TIMEOUT", "test"));
+        .thenThrow(ApiException.upstream(ErrorCode.MODEL_TIMEOUT, "test"));
     var uploaded = documentService.upload(ownerId, kb, file("失败.md", "# 测试\n不应可检索。"));
     assertThrows(
         ApiException.class, () -> documentService.createChunks(ownerId, kb, uploaded.documentId()));

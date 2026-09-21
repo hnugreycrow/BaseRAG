@@ -7,6 +7,7 @@ import com.hnu.backend.observability.RagStageName;
 import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.rag.memory.RagMemory;
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.error.ErrorCode;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -263,7 +264,7 @@ public class QueryPlanningStage {
    * @return 降级原因
    */
   private DegradedReason failureReason(RuntimeException error) {
-    if (error instanceof ApiException api && "MODEL_TIMEOUT".equals(api.code())) {
+    if (error instanceof ApiException api && ErrorCode.MODEL_TIMEOUT.code().equals(api.code())) {
       return DegradedReason.MODEL_TIMEOUT;
     }
     return DegradedReason.MODEL_ERROR;

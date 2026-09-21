@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.hnu.backend.conversation.entity.Message;
 import com.hnu.backend.conversation.entity.MessageRole;
 import com.hnu.backend.conversation.entity.MessageStatus;
+import com.hnu.backend.shared.error.ErrorCode;
 import java.util.List;
 import java.util.UUID;
 import org.apache.ibatis.annotations.Mapper;
@@ -321,7 +322,7 @@ public interface MessageMapper extends BaseMapper<Message> {
             .in(Message::getStatus, MessageStatus.PENDING, MessageStatus.STREAMING)
             .set(Message::getStatus, MessageStatus.CANCELLED)
             .set(Message::getContent, content)
-            .set(Message::getErrorCode, "GENERATION_CANCELLED")
+            .set(Message::getErrorCode, ErrorCode.GENERATION_CANCELLED.code())
             .set(Message::getErrorMessage, "生成已停止")
             .setSql("updated_at = now()")
             .setSql("completed_at = now()"));
@@ -338,7 +339,7 @@ public interface MessageMapper extends BaseMapper<Message> {
             .eq(Message::getRole, MessageRole.ASSISTANT)
             .in(Message::getStatus, MessageStatus.PENDING, MessageStatus.STREAMING)
             .set(Message::getStatus, MessageStatus.FAILED)
-            .set(Message::getErrorCode, "GENERATION_INTERRUPTED")
+            .set(Message::getErrorCode, ErrorCode.GENERATION_INTERRUPTED.code())
             .set(Message::getErrorMessage, "应用重启中断了生成，请重试")
             .setSql("updated_at = now()")
             .setSql("completed_at = now()"));

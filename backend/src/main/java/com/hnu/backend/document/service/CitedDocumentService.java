@@ -7,6 +7,7 @@ import com.hnu.backend.knowledgebase.entity.KnowledgeBase;
 import com.hnu.backend.knowledgebase.service.KnowledgeBaseService;
 import com.hnu.backend.rag.vo.SourceResponse;
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.error.ErrorCode;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 
@@ -64,6 +65,6 @@ public class CitedDocumentService {
 
   /** 对未授权引用使用统一的不存在响应，避免泄露文档标识。 */
   private static ApiException notFound() {
-    return ApiException.notFound("CITED_SOURCE_NOT_FOUND", "引用来源不存在");
+    return ApiException.notFound(ErrorCode.CITED_SOURCE_NOT_FOUND, "引用来源不存在");
   }
 }

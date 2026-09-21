@@ -53,6 +53,9 @@
 }
 
 .detail-heading .run-error-code {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
   color: #b65349;
 }
 

@@ -35,6 +35,7 @@ public final class RagRunResponses {
    * @param evidenceCount 最终证据数量
    * @param degraded 是否发生过降级
    * @param errorCode 可选错误码
+   * @param errorMessage 由错误码目录派生的安全错误说明
    * @param startedAt 开始时间
    * @param firstTokenAt 首个成功发送思考或正文增量的时间
    * @param completedAt 完成时间
@@ -62,6 +63,7 @@ public final class RagRunResponses {
       int evidenceCount,
       boolean degraded,
       String errorCode,
+      String errorMessage,
       OffsetDateTime startedAt,
       OffsetDateTime firstTokenAt,
       OffsetDateTime completedAt,
@@ -84,6 +86,7 @@ public final class RagRunResponses {
    * @param model 模型名称
    * @param reasonCode 状态原因
    * @param errorCode 错误码
+   * @param errorMessage 由错误码目录派生的安全错误说明
    * @param startedAt 开始时间
    * @param firstTokenAt 首内容时间
    * @param completedAt 完成时间
@@ -103,6 +106,7 @@ public final class RagRunResponses {
       String model,
       String reasonCode,
       String errorCode,
+      String errorMessage,
       OffsetDateTime startedAt,
       OffsetDateTime firstTokenAt,
       OffsetDateTime completedAt,

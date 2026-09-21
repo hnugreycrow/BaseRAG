@@ -13,6 +13,7 @@ import static org.mockito.Mockito.when;
 import com.hnu.backend.model.client.ChatClient;
 import com.hnu.backend.model.config.AiProperties;
 import com.hnu.backend.model.http.ModelHttpClient;
+import com.hnu.backend.shared.error.ErrorCode;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 
@@ -36,7 +37,7 @@ class ChatAnswerGeneratorTest {
                   primary,
                   "",
                   com.hnu.backend.shared.error.ApiException.upstream(
-                      "MODEL_UNAVAILABLE", "failed"));
+                      ErrorCode.MODEL_UNAVAILABLE, "failed"));
               delegate.started(fallback, "PROVIDER_FALLBACK");
               delegate.requesting(fallback);
               delegate.delta("answer");

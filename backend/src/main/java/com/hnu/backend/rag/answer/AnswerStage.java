@@ -3,6 +3,7 @@ package com.hnu.backend.rag.answer;
 import com.hnu.backend.rag.prompt.AssembledPrompt;
 import com.hnu.backend.rag.prompt.PromptAssemblyStage;
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.error.ErrorCode;
 import java.util.List;
 import org.springframework.stereotype.Component;
 
@@ -10,7 +11,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class AnswerStage {
   private static final String INSUFFICIENT_EVIDENCE = "现有资料不足以回答这个问题。请先导入包含相关内容的文档。";
-  private static final String INVALID_CITATIONS = "INVALID_CITATIONS";
+  private static final ErrorCode INVALID_CITATIONS = ErrorCode.INVALID_CITATIONS;
 
   private final AnswerGenerator generator;
   private final PromptAssemblyStage prompts;
@@ -69,7 +70,7 @@ public class AnswerStage {
       observer.validationCompleted(references.citations().size());
     } catch (IllegalArgumentException invalid) {
       // 首次非法回答已经完成模型流，先作废尝试并清空客户端正文，再启动唯一一次修复。
-      observer.invalidReferences(INVALID_CITATIONS, true);
+      observer.invalidReferences(INVALID_CITATIONS.code(), true);
       control.throwIfCancelled();
       AssembledPrompt repair = prompts.forCitationRepair(prompt);
       generation =
@@ -84,7 +85,7 @@ public class AnswerStage {
         references = validate(generation, repair);
         observer.validationCompleted(references.citations().size());
       } catch (IllegalArgumentException again) {
-        observer.invalidReferences(INVALID_CITATIONS, false);
+        observer.invalidReferences(INVALID_CITATIONS.code(), false);
         throw ApiException.upstream(INVALID_CITATIONS, "模型连续返回无效引用，请重试");
       }
     }

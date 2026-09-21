@@ -30,6 +30,7 @@ export interface KnowledgeDocument {
   name: string
   status: DocumentStatus
   errorCode: string | null
+  errorMessage?: string | null
   chunkCount: number
   createdAt: string
   /** 版本原文件的实际格式。 */

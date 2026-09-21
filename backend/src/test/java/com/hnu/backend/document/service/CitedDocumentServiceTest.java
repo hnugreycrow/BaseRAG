@@ -10,6 +10,7 @@ import com.hnu.backend.knowledgebase.entity.KnowledgeBase;
 import com.hnu.backend.knowledgebase.service.KnowledgeBaseService;
 import com.hnu.backend.rag.vo.SourceResponse;
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.error.ErrorCode;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -73,7 +74,7 @@ class CitedDocumentServiceTest {
 
     reset(conversationService);
     when(conversationService.get(userId, conversationId))
-        .thenThrow(ApiException.notFound("CONVERSATION_NOT_FOUND", "会话不存在"));
+        .thenThrow(ApiException.notFound(ErrorCode.CONVERSATION_NOT_FOUND, "会话不存在"));
     assertThrows(
         ApiException.class,
         () -> citedDocumentService.originalFile(userId, conversationId, messageId, "S1"));

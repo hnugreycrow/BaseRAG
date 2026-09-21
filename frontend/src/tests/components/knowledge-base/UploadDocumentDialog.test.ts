@@ -94,6 +94,7 @@ describe('upload document dialog', () => {
       })
       await flushPromises()
       expect(wrapper.text()).toContain('two.md：入库失败')
+      expect(wrapper.text()).toContain('IMPORT_FAILED')
       await submit.trigger('click')
       expect(wrapper.emitted('submit')?.[1]).toEqual([[second.raw]])
     } finally {

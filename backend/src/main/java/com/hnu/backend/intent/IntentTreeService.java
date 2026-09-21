@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.hnu.backend.knowledgebase.mapper.KnowledgeBaseMapper;
 import com.hnu.backend.rag.mcp.McpToolRegistry;
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.error.ErrorCode;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -86,7 +87,7 @@ public class IntentTreeService {
   public IntentNode update(UUID id, IntentNodeRequest request) {
     List<IntentNode> all = new ArrayList<>(list());
     if (all.stream().noneMatch(node -> node.id().equals(id))) {
-      throw ApiException.notFound("INTENT_NODE_NOT_FOUND", "意图节点不存在");
+      throw ApiException.notFound(ErrorCode.INTENT_NODE_NOT_FOUND, "意图节点不存在");
     }
     IntentNode replacement = normalized(id, request);
     all.removeIf(node -> node.id().equals(id));
@@ -105,10 +106,10 @@ public class IntentTreeService {
   public void delete(UUID id) {
     List<IntentNode> all = list();
     if (all.stream().noneMatch(node -> node.id().equals(id))) {
-      throw ApiException.notFound("INTENT_NODE_NOT_FOUND", "意图节点不存在");
+      throw ApiException.notFound(ErrorCode.INTENT_NODE_NOT_FOUND, "意图节点不存在");
     }
     if (all.stream().anyMatch(node -> id.equals(node.parentId()))) {
-      throw ApiException.conflict("INTENT_NODE_HAS_CHILDREN", "请先删除子节点");
+      throw ApiException.conflict(ErrorCode.INTENT_NODE_HAS_CHILDREN, "请先删除子节点");
     }
     intentNodeMapper.deleteById(id);
     events.publishEvent(new IntentTreeChangedEvent());
@@ -120,11 +121,11 @@ public class IntentTreeService {
         || request.name().isBlank()
         || request.name().strip().length() > 100
         || request.sortOrder() < 0) {
-      throw ApiException.bad("INVALID_INTENT_NODE", "节点名称或排序无效");
+      throw ApiException.bad(ErrorCode.INVALID_INTENT_NODE, "节点名称或排序无效");
     }
     String description = request.description() == null ? "" : request.description().strip();
     if (description.length() > 300) {
-      throw ApiException.bad("INVALID_INTENT_NODE", "节点描述过长");
+      throw ApiException.bad(ErrorCode.INVALID_INTENT_NODE, "节点描述过长");
     }
     List<String> examples =
         request.examples() == null
@@ -132,7 +133,7 @@ public class IntentTreeService {
             : request.examples().stream().map(item -> item == null ? "" : item.strip()).toList();
     if (examples.size() > 4
         || examples.stream().anyMatch(item -> item.isBlank() || item.length() > 120)) {
-      throw ApiException.bad("INVALID_INTENT_NODE", "示例问题无效");
+      throw ApiException.bad(ErrorCode.INVALID_INTENT_NODE, "示例问题无效");
     }
     List<UUID> kbIds =
         request.knowledgeBaseIds() == null
@@ -155,7 +156,7 @@ public class IntentTreeService {
   private void validate(IntentNode node, List<IntentNode> all) {
     Map<UUID, IntentNode> byId = index(all);
     if (node.parentId() != null && !byId.containsKey(node.parentId())) {
-      throw ApiException.bad("INVALID_INTENT_PARENT", "父节点不存在");
+      throw ApiException.bad(ErrorCode.INVALID_INTENT_PARENT, "父节点不存在");
     }
     for (IntentNode candidate : all) {
       Set<UUID> visited = new HashSet<>();
@@ -163,16 +164,16 @@ public class IntentTreeService {
       int depth = 0;
       while (current != null) {
         if (!visited.add(current.id())) {
-          throw ApiException.bad("INTENT_CYCLE", "意图树不能成环");
+          throw ApiException.bad(ErrorCode.INTENT_CYCLE, "意图树不能成环");
         }
         if (++depth > 3) {
-          throw ApiException.bad("INTENT_DEPTH_EXCEEDED", "意图树最多三级");
+          throw ApiException.bad(ErrorCode.INTENT_DEPTH_EXCEEDED, "意图树最多三级");
         }
         current = current.parentId() == null ? null : byId.get(current.parentId());
       }
       if (candidate.kind() != null
           && all.stream().anyMatch(child -> candidate.id().equals(child.parentId()))) {
-        throw ApiException.bad("INVALID_INTENT_KIND", "有子节点的节点不能设置执行类型");
+        throw ApiException.bad(ErrorCode.INVALID_INTENT_KIND, "有子节点的节点不能设置执行类型");
       }
     }
     long active =
@@ -180,15 +181,15 @@ public class IntentTreeService {
             .filter(candidate -> candidate.kind() != null && enabledPath(candidate, byId))
             .count();
     if (active > MAX_ACTIVE_LEAVES) {
-      throw ApiException.bad("INTENT_LEAF_LIMIT", "启用的叶子节点最多 32 个");
+      throw ApiException.bad(ErrorCode.INTENT_LEAF_LIMIT, "启用的叶子节点最多 32 个");
     }
     if (node.kind() == IntentNode.Kind.KB) {
       if (node.knowledgeBaseIds().isEmpty() || node.toolName() != null) {
-        throw ApiException.bad("INVALID_INTENT_BINDING", "知识库叶子必须绑定公共知识库");
+        throw ApiException.bad(ErrorCode.INVALID_INTENT_BINDING, "知识库叶子必须绑定公共知识库");
       }
       for (UUID kbId : node.knowledgeBaseIds()) {
         if (knowledgeBaseMapper.findAdminOwned(kbId) == null) {
-          throw ApiException.bad("INVALID_INTENT_BINDING", "绑定的公共知识库不存在");
+          throw ApiException.bad(ErrorCode.INVALID_INTENT_BINDING, "绑定的公共知识库不存在");
         }
       }
     } else if (node.kind() == IntentNode.Kind.MCP) {
@@ -196,10 +197,10 @@ public class IntentTreeService {
           || node.toolName() == null
           || tools.availableReadOnlyTools().stream()
               .noneMatch(tool -> tool.name().equals(node.toolName()))) {
-        throw ApiException.bad("INVALID_INTENT_BINDING", "只能绑定当前可用的只读工具");
+        throw ApiException.bad(ErrorCode.INVALID_INTENT_BINDING, "只能绑定当前可用的只读工具");
       }
     } else if (!node.knowledgeBaseIds().isEmpty() || node.toolName() != null) {
-      throw ApiException.bad("INVALID_INTENT_BINDING", "该节点不能绑定知识库或工具");
+      throw ApiException.bad(ErrorCode.INVALID_INTENT_BINDING, "该节点不能绑定知识库或工具");
     }
   }
 

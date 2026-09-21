@@ -10,6 +10,7 @@ import com.hnu.backend.rag.execution.CancellationToken;
 import com.hnu.backend.rag.execution.RagBudgetSnapshot;
 import com.hnu.backend.rag.execution.StageBudget;
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.error.ErrorCode;
 import jakarta.annotation.PreDestroy;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -195,7 +196,7 @@ public class RetrievalService {
                 .getFirst();
         embeddingSpan.success(1);
       } catch (RuntimeException error) {
-        embeddingSpan.failed(errorCode(error, "EMBEDDING_FAILED"));
+        embeddingSpan.failed(errorCode(error, ErrorCode.EMBEDDING_FAILED.code()));
         throw error;
       }
       RagRunTrace.Span retrievalSpan =
@@ -215,7 +216,7 @@ public class RetrievalService {
         remainingSearchNanos -= System.nanoTime() - searchStartedAt;
         retrievalSpan.success(hits.size());
       } catch (RuntimeException error) {
-        retrievalSpan.failed(errorCode(error, "DATABASE_RETRIEVAL_FAILED"));
+        retrievalSpan.failed(errorCode(error, ErrorCode.DATABASE_RETRIEVAL_FAILED.code()));
         throw error;
       }
       cancellationToken.throwIfCancelled();
@@ -300,7 +301,7 @@ public class RetrievalService {
                 .getFirst();
         embeddingSpan.success(1);
       } catch (RuntimeException error) {
-        embeddingSpan.failed(errorCode(error, "EMBEDDING_FAILED"));
+        embeddingSpan.failed(errorCode(error, ErrorCode.EMBEDDING_FAILED.code()));
         throw error;
       }
       RagRunTrace.Span retrievalSpan =
@@ -334,7 +335,7 @@ public class RetrievalService {
         }
         retrievalSpan.success(candidates.size());
       } catch (RuntimeException error) {
-        retrievalSpan.failed(errorCode(error, "DATABASE_RETRIEVAL_FAILED"));
+        retrievalSpan.failed(errorCode(error, ErrorCode.DATABASE_RETRIEVAL_FAILED.code()));
         throw error;
       }
     }
@@ -429,7 +430,7 @@ public class RetrievalService {
   }
 
   private ApiException channelTimeout() {
-    return ApiException.upstream("SUBQUESTION_TIMEOUT", "向量检索通道超时");
+    return ApiException.upstream(ErrorCode.SUBQUESTION_TIMEOUT, "向量检索通道超时");
   }
 
   /** 记录向量通道未执行时的两个非降级阶段。 */

@@ -11,6 +11,7 @@ import com.hnu.backend.rag.retrieval.CandidateMerge;
 import com.hnu.backend.rag.retrieval.EvidenceCandidate;
 import com.hnu.backend.rag.routing.IntentType;
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.error.ErrorCode;
 import jakarta.annotation.PreDestroy;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -150,7 +151,8 @@ public class RerankStage {
               output,
               startedAt));
     } catch (ApiException error) {
-      if (cancellationToken.cancelled() || "GENERATION_CANCELLED".equals(error.code())) throw error;
+      if (cancellationToken.cancelled()
+          || ErrorCode.GENERATION_CANCELLED.code().equals(error.code())) throw error;
       return observed(
           span,
           fallback(
@@ -158,9 +160,10 @@ public class RerankStage {
               knowledgeQuestionIds,
               budget.selectedEvidenceLimit(),
               RerankResult.Status.DEGRADED,
-              "MODEL_TIMEOUT".equals(error.code()) || "RERANK_TIMEOUT".equals(error.code())
-                  ? "RERANK_TIMEOUT"
-                  : "RERANK_FAILED",
+              ErrorCode.MODEL_TIMEOUT.code().equals(error.code())
+                      || ErrorCode.RERANK_TIMEOUT.code().equals(error.code())
+                  ? ErrorCode.RERANK_TIMEOUT.code()
+                  : ErrorCode.RERANK_FAILED.code(),
               output,
               startedAt));
     } catch (RuntimeException error) {
@@ -172,7 +175,7 @@ public class RerankStage {
               knowledgeQuestionIds,
               budget.selectedEvidenceLimit(),
               RerankResult.Status.DEGRADED,
-              "RERANK_INVALID_RESULT",
+              ErrorCode.RERANK_INVALID_RESULT.code(),
               output,
               startedAt));
     }

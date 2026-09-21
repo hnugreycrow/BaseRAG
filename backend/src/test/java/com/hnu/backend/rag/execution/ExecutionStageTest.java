@@ -22,6 +22,7 @@ import com.hnu.backend.rag.routing.IntentType;
 import com.hnu.backend.rag.routing.RoutingPlan;
 import com.hnu.backend.rag.routing.RoutingReasonCode;
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.error.ErrorCode;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -113,7 +114,7 @@ class ExecutionStageTest {
     RoutingPlan routing = new RoutingPlan(List.of(knowledge("Q1"), knowledge("Q2")));
     when(retrievalService.retrieveCandidates(
             eq(ownerId), eq("Q1"), anyString(), isNull(), any(), any()))
-        .thenThrow(ApiException.upstream("SUBQUESTION_TIMEOUT", "向量检索通道超时"));
+        .thenThrow(ApiException.upstream(ErrorCode.SUBQUESTION_TIMEOUT, "向量检索通道超时"));
     when(retrievalService.retrieveCandidates(
             eq(ownerId), eq("Q2"), anyString(), isNull(), any(), any()))
         .thenThrow(new IllegalStateException("boom"));
@@ -166,7 +167,7 @@ class ExecutionStageTest {
         new RagRunTrace(UUID.randomUUID(), OffsetDateTime.now(ZoneOffset.UTC), System.nanoTime());
     when(retrievalService.retrieveCandidates(
             eq(ownerId), eq("Q1"), anyString(), isNull(), any(), any(), same(trace)))
-        .thenThrow(ApiException.upstream("SUBQUESTION_TIMEOUT", "向量检索通道超时"));
+        .thenThrow(ApiException.upstream(ErrorCode.SUBQUESTION_TIMEOUT, "向量检索通道超时"));
 
     ExecutionResult result = stage.execute(ownerId, plan, routing, null, () -> false, trace);
     var snapshot = trace.finish(RagRunStatus.COMPLETED, null);

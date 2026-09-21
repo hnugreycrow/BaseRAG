@@ -70,4 +70,33 @@ describe('document table selection', () => {
       wrapper.unmount()
     }
   })
+
+  it('shows the safe failure reason before the diagnostic error code', async () => {
+    const failedRows: KnowledgeDocument[] = [
+      {
+        ...rows[1]!,
+        errorCode: 'MODEL_TIMEOUT',
+        errorMessage: '模型请求超时，请稍后重试',
+      },
+    ]
+    const wrapper = mount(DocumentTable, {
+      props: {
+        rows: failedRows,
+        loading: false,
+        processingIds: new Set<string>(),
+        selectedIds: new Set<string>(),
+      },
+      global: { plugins: [ElementPlus] },
+      attachTo: document.body,
+    })
+    try {
+      await flushPromises()
+      const text = wrapper.text()
+      expect(text).toContain('模型请求超时，请稍后重试')
+      expect(text).toContain('MODEL_TIMEOUT')
+      expect(text.indexOf('模型请求超时，请稍后重试')).toBeLessThan(text.indexOf('MODEL_TIMEOUT'))
+    } finally {
+      wrapper.unmount()
+    }
+  })
 })

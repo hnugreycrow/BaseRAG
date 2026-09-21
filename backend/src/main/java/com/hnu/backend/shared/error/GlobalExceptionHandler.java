@@ -12,7 +12,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.RedisSystemException;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -39,7 +38,22 @@ public class GlobalExceptionHandler {
 
   @ExceptionHandler(ApiException.class)
   ResponseEntity<ApiResponse<Void>> api(ApiException e, HttpServletRequest request) {
-    log.warn("requestId={} code={}", requestId(request), e.code());
+    if (e.status().is5xxServerError()) {
+      log.error(
+          "requestId={} code={} status={} exceptionType={} safeStack={}",
+          requestId(request),
+          e.code(),
+          e.status().value(),
+          e.getClass().getSimpleName(),
+          SafeExceptionLog.render(e));
+    } else {
+      log.warn(
+          "requestId={} code={} status={} publicMessage={}",
+          requestId(request),
+          e.code(),
+          e.status().value(),
+          e.getMessage());
+    }
     return failure(e.status(), e.code(), e.getMessage(), request);
   }
 
@@ -52,7 +66,7 @@ public class GlobalExceptionHandler {
    */
   @ExceptionHandler(NotLoginException.class)
   ResponseEntity<ApiResponse<Void>> notLoggedIn(NotLoginException e, HttpServletRequest request) {
-    return failure(HttpStatus.UNAUTHORIZED, "AUTH_REQUIRED", "请先登录", request);
+    return failure(ErrorCode.AUTH_REQUIRED, request);
   }
 
   /**
@@ -64,7 +78,7 @@ public class GlobalExceptionHandler {
    */
   @ExceptionHandler(NotRoleException.class)
   ResponseEntity<ApiResponse<Void>> roleDenied(NotRoleException e, HttpServletRequest request) {
-    return failure(HttpStatus.FORBIDDEN, "FORBIDDEN", "当前账号无权执行此操作", request);
+    return failure(ErrorCode.FORBIDDEN, request);
   }
 
   /**
@@ -78,15 +92,14 @@ public class GlobalExceptionHandler {
     RedisSystemException.class,
     RedisException.class
   })
-  ResponseEntity<ApiResponse<Void>> redisUnavailable(HttpServletRequest request) {
-    return failure(
-        HttpStatus.SERVICE_UNAVAILABLE, "AUTH_STORE_UNAVAILABLE", "认证服务暂时不可用，请稍后重试", request);
+  ResponseEntity<ApiResponse<Void>> redisUnavailable(
+      RuntimeException error, HttpServletRequest request) {
+    return redisUnavailableResponse(error, request);
   }
 
   @ExceptionHandler(MaxUploadSizeExceededException.class)
   ResponseEntity<ApiResponse<Void>> size(HttpServletRequest request) {
-    return failure(
-        HttpStatus.PAYLOAD_TOO_LARGE, "UPLOAD_REQUEST_TOO_LARGE", "上传请求不能超过 60 MB", request);
+    return failure(ErrorCode.UPLOAD_REQUEST_TOO_LARGE, request);
   }
 
   @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -97,7 +110,9 @@ public class GlobalExceptionHandler {
             .map(error -> new FieldViolation(error.getField(), error.getDefaultMessage()))
             .toList();
     return ResponseEntity.badRequest()
-        .body(ApiResponse.failure("INVALID_REQUEST", "请求参数校验失败", violations, requestId(request)));
+        .body(
+            ApiResponse.failure(
+                ErrorCode.INVALID_REQUEST.code(), "请求参数校验失败", violations, requestId(request)));
   }
 
   @ExceptionHandler({
@@ -108,31 +123,35 @@ public class GlobalExceptionHandler {
     ConstraintViolationException.class
   })
   ResponseEntity<ApiResponse<Void>> invalid(HttpServletRequest request) {
-    return failure(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "请检查请求参数及文件", request);
+    return failure(ErrorCode.INVALID_REQUEST, request);
   }
 
   @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
   ResponseEntity<ApiResponse<Void>> methodNotAllowed(HttpServletRequest request) {
-    return failure(HttpStatus.METHOD_NOT_ALLOWED, "METHOD_NOT_ALLOWED", "请求方法不受支持", request);
+    return failure(ErrorCode.METHOD_NOT_ALLOWED, request);
   }
 
   @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
   ResponseEntity<ApiResponse<Void>> mediaTypeNotSupported(HttpServletRequest request) {
-    return failure(
-        HttpStatus.UNSUPPORTED_MEDIA_TYPE, "UNSUPPORTED_MEDIA_TYPE", "请求内容类型不受支持", request);
+    return failure(ErrorCode.UNSUPPORTED_MEDIA_TYPE, request);
   }
 
   @ExceptionHandler(NoResourceFoundException.class)
   ResponseEntity<ApiResponse<Void>> notFound(HttpServletRequest request) {
-    return failure(HttpStatus.NOT_FOUND, "RESOURCE_NOT_FOUND", "请求的资源不存在", request);
+    return failure(ErrorCode.RESOURCE_NOT_FOUND, request);
   }
 
   @ExceptionHandler(Exception.class)
   ResponseEntity<ApiResponse<Void>> unexpected(Exception e, HttpServletRequest request) {
-    if (isAuthStoreFailure(e)) return redisUnavailable(request);
+    if (isAuthStoreFailure(e)) return redisUnavailableResponse(e, request);
     // Do not log raw provider responses, SQL values, credentials or document text.
-    log.error("requestId={} exceptionType={}", requestId(request), e.getClass().getSimpleName());
-    return failure(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "服务暂时不可用，请稍后重试", request);
+    log.error(
+        "requestId={} code={} exceptionType={} safeStack={}",
+        requestId(request),
+        ErrorCode.INTERNAL_ERROR.code(),
+        e.getClass().getSimpleName(),
+        SafeExceptionLog.render(e));
+    return failure(ErrorCode.INTERNAL_ERROR, request);
   }
 
   /**
@@ -156,5 +175,21 @@ public class GlobalExceptionHandler {
       HttpStatusCode status, String code, String message, HttpServletRequest request) {
     return ResponseEntity.status(status)
         .body(ApiResponse.failure(code, message, null, requestId(request)));
+  }
+
+  private ResponseEntity<ApiResponse<Void>> redisUnavailableResponse(
+      Throwable error, HttpServletRequest request) {
+    log.error(
+        "requestId={} code={} exceptionType={} safeStack={}",
+        requestId(request),
+        ErrorCode.AUTH_STORE_UNAVAILABLE.code(),
+        error.getClass().getSimpleName(),
+        SafeExceptionLog.render(error));
+    return failure(ErrorCode.AUTH_STORE_UNAVAILABLE, request);
+  }
+
+  private ResponseEntity<ApiResponse<Void>> failure(
+      ErrorCode errorCode, HttpServletRequest request) {
+    return failure(errorCode.status(), errorCode.code(), errorCode.defaultMessage(), request);
   }
 }

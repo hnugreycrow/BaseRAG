@@ -411,6 +411,12 @@
   font-size: 12px;
 }
 
+.answer-error small {
+  color: #9b625b;
+  font-family: var(--font-data);
+  font-size: 11px;
+}
+
 .answer-toolbar {
   min-height: 30px;
   display: flex;

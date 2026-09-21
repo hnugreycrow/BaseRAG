@@ -2,6 +2,7 @@ package com.hnu.backend.model.http;
 
 import com.hnu.backend.model.config.AiProperties;
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.error.ErrorCode;
 import java.io.BufferedReader;
 import java.io.Closeable;
 import java.io.IOException;
@@ -41,7 +42,8 @@ public class ModelHttpClient {
         || target.model().isBlank()
         || target.apiKey() == null
         || target.apiKey().isBlank()) {
-      throw ApiException.bad("MODEL_NOT_CONFIGURED", "请配置 " + target.provider() + " 的 API Key");
+      throw ApiException.bad(
+          ErrorCode.MODEL_NOT_CONFIGURED, "请配置 " + target.provider() + " 的 API Key");
     }
   }
 
@@ -49,7 +51,7 @@ public class ModelHttpClient {
     requireConfigured(target);
     Circuit circuit = circuits.computeIfAbsent(target.id(), ignored -> new Circuit());
     if (circuit.isOpen()) {
-      throw ApiException.upstream("MODEL_CIRCUIT_OPEN", "模型服务暂时不可用，请稍后重试");
+      throw ApiException.upstream(ErrorCode.MODEL_CIRCUIT_OPEN, "模型服务暂时不可用，请稍后重试");
     }
     HttpRequest.Builder builder =
         HttpRequest.newBuilder(URI.create(target.baseUrl() + target.endpoint()))
@@ -70,7 +72,7 @@ public class ModelHttpClient {
             return node;
           } catch (RuntimeException e) {
             failure(circuit);
-            throw ApiException.upstream("MODEL_INVALID_RESPONSE", "模型服务返回了无效 JSON");
+            throw ApiException.upstream(ErrorCode.MODEL_INVALID_RESPONSE, "模型服务返回了无效 JSON", e);
           }
         }
         boolean retryable = status == 429 || status >= 500;
@@ -80,7 +82,7 @@ public class ModelHttpClient {
         }
         failure(circuit);
         throw ApiException.upstream(
-            status == 429 ? "MODEL_RATE_LIMITED" : "MODEL_HTTP_ERROR",
+            status == 429 ? ErrorCode.MODEL_RATE_LIMITED : ErrorCode.MODEL_HTTP_ERROR,
             status == 429 ? "模型服务请求频繁，请稍后重试" : "模型服务请求失败，请检查服务配置");
       } catch (HttpTimeoutException e) {
         if (attempt < config.getSelection().getMaxRetries()) {
@@ -88,17 +90,17 @@ public class ModelHttpClient {
           continue;
         }
         failure(circuit);
-        throw ApiException.upstream("MODEL_TIMEOUT", "模型请求超时，请稍后重试");
+        throw ApiException.upstream(ErrorCode.MODEL_TIMEOUT, "模型请求超时，请稍后重试", e);
       } catch (IOException e) {
         if (attempt < config.getSelection().getMaxRetries()) {
           pause(attempt);
           continue;
         }
         failure(circuit);
-        throw ApiException.upstream("MODEL_UNAVAILABLE", "无法连接模型服务");
+        throw ApiException.upstream(ErrorCode.MODEL_UNAVAILABLE, "无法连接模型服务", e);
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
-        throw ApiException.upstream("REQUEST_INTERRUPTED", "请求已中断");
+        throw ApiException.upstream(ErrorCode.REQUEST_INTERRUPTED, "请求已中断", e);
       }
     }
   }
@@ -111,7 +113,7 @@ public class ModelHttpClient {
     requireConfigured(target);
     Circuit circuit = circuits.computeIfAbsent(target.id(), ignored -> new Circuit());
     if (circuit.isOpen()) {
-      throw ApiException.upstream("MODEL_CIRCUIT_OPEN", "模型服务暂时不可用，请稍后重试");
+      throw ApiException.upstream(ErrorCode.MODEL_CIRCUIT_OPEN, "模型服务暂时不可用，请稍后重试");
     }
     HttpRequest request =
         HttpRequest.newBuilder(URI.create(target.baseUrl() + target.endpoint()))
@@ -137,7 +139,7 @@ public class ModelHttpClient {
           }
           failure(circuit);
           throw ApiException.upstream(
-              status == 429 ? "MODEL_RATE_LIMITED" : "MODEL_HTTP_ERROR",
+              status == 429 ? ErrorCode.MODEL_RATE_LIMITED : ErrorCode.MODEL_HTTP_ERROR,
               status == 429 ? "模型服务请求频繁，请稍后重试" : "模型服务请求失败，请检查服务配置");
         }
         control.attach(response.body());
@@ -170,7 +172,7 @@ public class ModelHttpClient {
         }
         if (!done) {
           failure(circuit);
-          throw ApiException.upstream("MODEL_INVALID_RESPONSE", "模型流式响应未正常结束");
+          throw ApiException.upstream(ErrorCode.MODEL_INVALID_RESPONSE, "模型流式响应未正常结束");
         }
         success(circuit);
         return;
@@ -182,7 +184,7 @@ public class ModelHttpClient {
           continue;
         }
         failure(circuit);
-        throw ApiException.upstream("MODEL_TIMEOUT", "模型请求超时，请稍后重试");
+        throw ApiException.upstream(ErrorCode.MODEL_TIMEOUT, "模型请求超时，请稍后重试", e);
       } catch (IOException e) {
         if (control.cancelled()) throw ApiException.cancelled();
         if (!emitted && attempt < config.getSelection().getMaxRetries()) {
@@ -190,15 +192,15 @@ public class ModelHttpClient {
           continue;
         }
         failure(circuit);
-        throw ApiException.upstream("MODEL_UNAVAILABLE", "无法连接模型服务");
+        throw ApiException.upstream(ErrorCode.MODEL_UNAVAILABLE, "无法连接模型服务", e);
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
         if (control.cancelled()) throw ApiException.cancelled();
-        throw ApiException.upstream("REQUEST_INTERRUPTED", "请求已中断");
+        throw ApiException.upstream(ErrorCode.REQUEST_INTERRUPTED, "请求已中断", e);
       } catch (RuntimeException e) {
         if (e instanceof ApiException api) throw api;
         failure(circuit);
-        throw ApiException.upstream("MODEL_INVALID_RESPONSE", "模型服务返回了无效流式数据");
+        throw ApiException.upstream(ErrorCode.MODEL_INVALID_RESPONSE, "模型服务返回了无效流式数据", e);
       }
     }
   }
@@ -251,7 +253,7 @@ public class ModelHttpClient {
       Thread.sleep(250L << attempt);
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
-      throw ApiException.upstream("REQUEST_INTERRUPTED", "请求已中断");
+      throw ApiException.upstream(ErrorCode.REQUEST_INTERRUPTED, "请求已中断", e);
     }
   }
 

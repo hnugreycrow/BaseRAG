@@ -1,11 +1,8 @@
 package com.hnu.backend.shared.error;
 
-import org.springframework.http.HttpStatus;
-
 /** 携带稳定业务错误码和 HTTP 状态的 API 异常。 */
 public class ApiException extends RuntimeException {
-  private final String code;
-  private final HttpStatus status;
+  private final ErrorCode errorCode;
 
   /**
    * 创建 API 异常。
@@ -14,10 +11,17 @@ public class ApiException extends RuntimeException {
    * @param message 面向用户的错误信息
    * @param status 对应的 HTTP 状态
    */
-  public ApiException(String code, String message, HttpStatus status) {
-    super(message);
-    this.code = code;
-    this.status = status;
+  public ApiException(ErrorCode errorCode) {
+    this(errorCode, errorCode.defaultMessage(), null);
+  }
+
+  public ApiException(ErrorCode errorCode, String message) {
+    this(errorCode, message, null);
+  }
+
+  public ApiException(ErrorCode errorCode, String message, Throwable cause) {
+    super(message, cause);
+    this.errorCode = errorCode;
   }
 
   /**
@@ -26,7 +30,7 @@ public class ApiException extends RuntimeException {
    * @return 稳定业务错误码
    */
   public String code() {
-    return code;
+    return errorCode.code();
   }
 
   /**
@@ -34,8 +38,13 @@ public class ApiException extends RuntimeException {
    *
    * @return HTTP 状态
    */
-  public HttpStatus status() {
-    return status;
+  public org.springframework.http.HttpStatus status() {
+    return errorCode.status();
+  }
+
+  /** 返回类型安全的错误码。 */
+  public ErrorCode errorCode() {
+    return errorCode;
   }
 
   /**
@@ -45,8 +54,8 @@ public class ApiException extends RuntimeException {
    * @param message 错误信息
    * @return HTTP 400 异常
    */
-  public static ApiException bad(String code, String message) {
-    return new ApiException(code, message, HttpStatus.BAD_REQUEST);
+  public static ApiException bad(ErrorCode code, String message) {
+    return new ApiException(code, message);
   }
 
   /**
@@ -56,8 +65,13 @@ public class ApiException extends RuntimeException {
    * @param message 错误信息
    * @return HTTP 502 异常
    */
-  public static ApiException upstream(String code, String message) {
-    return new ApiException(code, message, HttpStatus.BAD_GATEWAY);
+  public static ApiException upstream(ErrorCode code, String message) {
+    return new ApiException(code, message);
+  }
+
+  /** 创建保留内部根因的上游服务错误。 */
+  public static ApiException upstream(ErrorCode code, String message, Throwable cause) {
+    return new ApiException(code, message, cause);
   }
 
   /**
@@ -67,8 +81,8 @@ public class ApiException extends RuntimeException {
    * @param message 错误信息
    * @return HTTP 409 异常
    */
-  public static ApiException conflict(String code, String message) {
-    return new ApiException(code, message, HttpStatus.CONFLICT);
+  public static ApiException conflict(ErrorCode code, String message) {
+    return new ApiException(code, message);
   }
 
   /**
@@ -78,8 +92,8 @@ public class ApiException extends RuntimeException {
    * @param message 错误信息
    * @return HTTP 404 异常
    */
-  public static ApiException notFound(String code, String message) {
-    return new ApiException(code, message, HttpStatus.NOT_FOUND);
+  public static ApiException notFound(ErrorCode code, String message) {
+    return new ApiException(code, message);
   }
 
   /**
@@ -88,6 +102,6 @@ public class ApiException extends RuntimeException {
    * @return 生成取消异常
    */
   public static ApiException cancelled() {
-    return conflict("GENERATION_CANCELLED", "生成已停止");
+    return new ApiException(ErrorCode.GENERATION_CANCELLED);
   }
 }

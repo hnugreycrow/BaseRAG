@@ -3,6 +3,7 @@ package com.hnu.backend.model.client;
 import com.hnu.backend.model.config.AiProperties;
 import com.hnu.backend.model.http.ModelHttpClient;
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.error.ErrorCode;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -44,8 +45,8 @@ public class RerankClient {
         JsonNode response = http.post(target, payload(target, query, documents));
         return parse(target, response, documents.size());
       } catch (ApiException error) {
-        if ("REQUEST_INTERRUPTED".equals(error.code())
-            || "GENERATION_CANCELLED".equals(error.code())) throw error;
+        if (ErrorCode.REQUEST_INTERRUPTED.code().equals(error.code())
+            || ErrorCode.GENERATION_CANCELLED.code().equals(error.code())) throw error;
         log.warn(
             "rerank model failed modelId={} provider={} code={}",
             target.id(),
@@ -54,13 +55,14 @@ public class RerankClient {
         last = error;
       } catch (RuntimeException error) {
         log.warn(
-            "rerank model failed modelId={} provider={} code=RERANK_INVALID_RESPONSE",
+            "rerank model failed modelId={} provider={} code={}",
             target.id(),
-            target.provider());
-        last = ApiException.upstream("RERANK_INVALID_RESPONSE", "重排模型返回了无效结果");
+            target.provider(),
+            ErrorCode.RERANK_INVALID_RESPONSE.code());
+        last = ApiException.upstream(ErrorCode.RERANK_INVALID_RESPONSE, "重排模型返回了无效结果", error);
       }
     }
-    throw last == null ? ApiException.upstream("RERANK_UNAVAILABLE", "没有可用的重排模型") : last;
+    throw last == null ? ApiException.upstream(ErrorCode.RERANK_UNAVAILABLE, "没有可用的重排模型") : last;
   }
 
   private Map<String, Object> payload(
@@ -107,7 +109,7 @@ public class RerankClient {
   }
 
   private ApiException invalid() {
-    return ApiException.upstream("RERANK_INVALID_RESPONSE", "重排模型返回了无效结果");
+    return ApiException.upstream(ErrorCode.RERANK_INVALID_RESPONSE, "重排模型返回了无效结果");
   }
 
   /**

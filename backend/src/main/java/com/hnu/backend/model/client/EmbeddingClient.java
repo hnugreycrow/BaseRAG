@@ -3,8 +3,8 @@ package com.hnu.backend.model.client;
 import com.hnu.backend.model.config.AiProperties;
 import com.hnu.backend.model.config.EmbeddingProtocol;
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.error.ErrorCode;
 import java.util.*;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
 /** 根据固定模型身份路由到对应 Embedding 协议适配器。 */
@@ -106,14 +106,12 @@ public class EmbeddingClient {
     try {
       target = config.embeddingModel(modelId);
     } catch (IllegalArgumentException e) {
-      throw new ApiException(
-          "EMBEDDING_MODEL_UNAVAILABLE", "知识库绑定的向量模型已不在配置文件中", HttpStatus.CONFLICT);
+      throw new ApiException(ErrorCode.EMBEDDING_MODEL_UNAVAILABLE, "知识库绑定的向量模型已不在配置文件中");
     }
     if (!target.provider().equals(provider)
         || !target.model().equals(model)
         || target.dimension() != dimensions) {
-      throw new ApiException(
-          "EMBEDDING_BINDING_CHANGED", "向量模型配置已变更，请恢复原供应商、模型和维度", HttpStatus.CONFLICT);
+      throw new ApiException(ErrorCode.EMBEDDING_BINDING_CHANGED, "向量模型配置已变更，请恢复原供应商、模型和维度");
     }
     return target;
   }
