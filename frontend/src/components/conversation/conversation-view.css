@@ -265,6 +265,28 @@
   margin: 5px 0 13px;
   padding-left: 21px;
 }
+.answer-table-scroll {
+  max-width: 100%;
+  margin: 8px 0 14px;
+  overflow-x: auto;
+}
+.answer-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.answer-table th,
+.answer-table td {
+  min-width: 100px;
+  padding: 9px 12px;
+  border: 1px solid #e2e6ed;
+  vertical-align: top;
+}
+.answer-table th {
+  color: #252b36;
+  background: #f6f8fc;
+  font-weight: 600;
+}
 .answer-list li {
   margin: 4px 0;
   padding-left: 2px;

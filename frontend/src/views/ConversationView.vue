@@ -10,6 +10,7 @@ import {
   VideoPause,
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import type { Tokens } from 'marked'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -29,6 +30,7 @@ import {
 import AppSidebar from '../layout/AppSidebar.vue'
 import ConversationHistory from '../components/conversation/ConversationHistory.vue'
 import SourcePanel from '../components/conversation/SourcePanel.vue'
+import { answerTable } from '../components/conversation/answerTable'
 import { useConversationGenerationStore } from '../store'
 
 const route = useRoute()
@@ -88,7 +90,8 @@ const groupedConversations = computed(() => {
 })
 
 interface AnswerBlock {
-  type: 'paragraph' | 'heading' | 'unordered-list' | 'ordered-list' | 'quote' | 'code'
+  type: 'paragraph' | 'heading' | 'unordered-list' | 'ordered-list' | 'quote' | 'code' | 'table'
+  table?: Tokens.Table
   content?: string
   items?: string[]
   level?: number
@@ -297,6 +300,13 @@ function answerBlocks(content: string) {
       continue
     }
 
+    const table = answerTable(lines, index)
+    if (table) {
+      blocks.push({ type: 'table', table })
+      index += table.raw.replace(/\n$/, '').split('\n').length
+      continue
+    }
+
     const heading = line.match(/^(#{1,6})\s+(.+)/)
     if (heading) {
       blocks.push({ type: 'heading', level: heading[1]!.length, content: heading[2] })
@@ -345,6 +355,7 @@ function answerBlocks(content: string) {
     while (
       index < lines.length &&
       lines[index]!.trim() &&
+      !answerTable(lines, index) &&
       !/^(#{1,6})\s+|^```|^\s*[-*]\s+|^\s*\d+[.)]\s+|^>/.test(lines[index]!)
     ) {
       paragraph.push(lines[index++]!)
@@ -753,6 +764,52 @@ onBeforeUnmount(() => {
                         </template>
                       </li>
                     </ol>
+
+                    <div
+                      v-else-if="block.type === 'table' && block.table"
+                      class="answer-table-scroll"
+                      role="region"
+                      aria-label="回答表格"
+                      tabindex="0"
+                    >
+                      <table class="answer-table">
+                        <component
+                          :is="sectionIndex === 0 ? 'thead' : 'tbody'"
+                          v-for="(rows, sectionIndex) in [[block.table.header], block.table.rows]"
+                          :key="sectionIndex"
+                        >
+                          <tr v-for="(row, rowIndex) in rows" :key="rowIndex">
+                            <component
+                              :is="sectionIndex === 0 ? 'th' : 'td'"
+                              v-for="(cell, cellIndex) in row"
+                              :key="cellIndex"
+                              :scope="sectionIndex === 0 ? 'col' : undefined"
+                              :style="{ textAlign: block.table.align[cellIndex] || 'left' }"
+                            >
+                              <template
+                                v-for="(part, index) in inlineParts(cell.text)"
+                                :key="index"
+                              >
+                                <button
+                                  v-if="part.type === 'citation'"
+                                  type="button"
+                                  class="citation"
+                                  :title="`查看来源 ${part.citationId}`"
+                                  @click="openSources(currentAssistant(turn)!, part.citationId)"
+                                >
+                                  {{ part.text }}
+                                </button>
+                                <strong v-else-if="part.type === 'strong'">{{ part.text }}</strong>
+                                <code v-else-if="part.type === 'code'" class="inline-code">{{
+                                  part.text
+                                }}</code>
+                                <span v-else>{{ part.text }}</span>
+                              </template>
+                            </component>
+                          </tr>
+                        </component>
+                      </table>
+                    </div>
 
                     <blockquote v-else-if="block.type === 'quote'" class="answer-quote">
                       {{ block.content }}

@@ -82,7 +82,12 @@ describe('ConversationView', () => {
               variantIndex: 1,
               active: true,
               status: 'COMPLETED',
-              content: '答案',
+              content:
+                '采购审批要求：\n| 含税总额 | 最少报价数 | 审批要求 |\n' +
+                '| --- | ---: | --- |\n' +
+                '| 不超过 5,000 元 | 1 | **直属负责人** [S1] |\n' +
+                '| 超过 5,000 元 | 3 | `采购经理` |\n\n' +
+                '表格之后。\n\n```text\n| 原样 | 显示 |\n| --- | --- |\n```',
               thinkingEnabled: true,
               reasoningContent: '这里是历史思考内容',
               retrievalQuery: null,
@@ -115,6 +120,25 @@ describe('ConversationView', () => {
     expect(wrapper.find('.composer-shell .composer-actions .thinking-toggle').exists()).toBe(true)
     expect(wrapper.get('.reasoning-panel summary').text()).toBe('深度思考')
     expect(wrapper.get('.reasoning-body').text()).toBe('这里是历史思考内容')
+    expect(wrapper.findAll('.answer-table')).toHaveLength(1)
+    expect(wrapper.findAll('.answer-table th').map((cell) => cell.text())).toEqual([
+      '含税总额',
+      '最少报价数',
+      '审批要求',
+    ])
+    expect(wrapper.findAll('.answer-table tbody tr')).toHaveLength(2)
+    expect(wrapper.findAll('.answer-table td')[1]!.attributes('style')).toContain(
+      'text-align: right',
+    )
+    expect(wrapper.get('.answer-table strong').text()).toBe('直属负责人')
+    expect(wrapper.get('.answer-table code').text()).toBe('采购经理')
+    expect(wrapper.get('.answer-code').text()).toContain('| --- | --- |')
+    expect(wrapper.findAll('.answer-paragraph').map((item) => item.text())).toEqual([
+      '采购审批要求：',
+      '表格之后。',
+    ])
+    await wrapper.get('.answer-table .citation').trigger('click')
+    expect(wrapper.getComponent({ name: 'SourcePanel' }).props('highlighted')).toBe('S1')
   })
 
   it('updates the visible title after renaming and resets it after deleting the current conversation', async () => {
