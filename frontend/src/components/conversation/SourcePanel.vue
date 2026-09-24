@@ -8,6 +8,7 @@ const props = defineProps<{
   message: AssistantMessage | null
   highlighted: string | null
   conversationId?: string
+  locateRequest?: number
 }>()
 const open = defineModel<boolean>({ required: true })
 // sources 是完整提示词证据快照；来源抽屉只展示回答真正使用的引用。
@@ -17,6 +18,8 @@ const citedSources = computed(() => {
 })
 const selectedCitationId = ref<string | null>(null)
 const previewOpen = ref(false)
+const activeHighlight = ref<string | null>(null)
+let highlightTimer: ReturnType<typeof setTimeout> | undefined
 const selectedSource = computed(
   () => citedSources.value.find((source) => source.citationId === selectedCitationId.value) ?? null,
 )
@@ -54,16 +57,28 @@ function resize() {
   wide.value = window.innerWidth >= 1180
 }
 window.addEventListener('resize', resize)
-onBeforeUnmount(() => window.removeEventListener('resize', resize))
-function locate() {
-  if (props.highlighted && props.message)
-    void nextTick(() =>
-      document
-        .getElementById('source-' + props.message!.id + '-' + props.highlighted)
-        ?.scrollIntoView({ block: 'nearest' }),
-    )
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', resize)
+  clearTimeout(highlightTimer)
+})
+async function locate() {
+  clearTimeout(highlightTimer)
+  activeHighlight.value = null
+  await nextTick()
+  if (!open.value || !props.highlighted || !props.message) {
+    return
+  }
+  activeHighlight.value = props.highlighted
+  document
+    .getElementById('source-' + props.message.id + '-' + props.highlighted)
+    ?.scrollIntoView({ block: 'nearest', behavior: 'auto' })
+  highlightTimer = setTimeout(() => {
+    activeHighlight.value = null
+  }, 1600)
 }
-watch(() => [props.highlighted, props.message?.id], locate)
+watch(() => [props.highlighted, props.message?.id, props.locateRequest, open.value], locate, {
+  immediate: true,
+})
 </script>
 <template>
   <div class="source-space" :class="{ expanded: open && wide }">
@@ -83,7 +98,7 @@ watch(() => [props.highlighted, props.message?.id], locate)
         :key="source.citationId"
         type="button"
         class="source-card"
-        :class="{ highlighted: highlighted === source.citationId }"
+        :class="{ highlighted: activeHighlight === source.citationId }"
         :aria-label="'预览来源 ' + source.citationId + '：' + source.documentName"
         @click="showPreview(source)"
       >
@@ -149,6 +164,18 @@ watch(() => [props.highlighted, props.message?.id], locate)
 .source-space.expanded {
   width: 380px;
   flex-basis: 380px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .source-space {
+    transition:
+      width var(--motion-duration-layout) var(--motion-ease),
+      flex-basis var(--motion-duration-layout) var(--motion-ease);
+  }
+  .source-card {
+    transition:
+      background-color var(--motion-duration-layout) ease,
+      border-color var(--motion-duration-layout) ease;
+  }
 }
 .source-count {
   font-size: 13px;

@@ -8,6 +8,9 @@
   --color-surface: #ffffff;
   --color-canvas: #f5f6f9;
   --color-line: #e9edf3;
+  --motion-duration-fast: 100ms;
+  --motion-duration-layout: 150ms;
+  --motion-ease: cubic-bezier(0.2, 0, 0, 1);
   --font-body: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   --font-data: var(--font-body);
   --el-font-family: var(--font-body);

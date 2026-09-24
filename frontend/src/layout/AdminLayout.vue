@@ -183,6 +183,11 @@ const collapsed = computed(() => tablet.value || sidebarCollapsed.value)
   color: #8a95a7;
 }
 @media (prefers-reduced-motion: no-preference) {
+  .desktop-sidebar {
+    transition:
+      width var(--motion-duration-layout) var(--motion-ease),
+      flex-basis var(--motion-duration-layout) var(--motion-ease);
+  }
   .chat-link,
   .topbar-account :deep(.profile) {
     transition:

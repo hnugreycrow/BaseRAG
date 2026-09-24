@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import {
   ArrowLeft,
+  ArrowDown,
   ArrowRight,
+  Check,
   CopyDocument,
   Document,
   Menu as MenuIcon,
@@ -30,6 +32,7 @@ import {
 import AppSidebar from '../layout/AppSidebar.vue'
 import ConversationHistory from '../components/conversation/ConversationHistory.vue'
 import SourcePanel from '../components/conversation/SourcePanel.vue'
+import ReasoningPanel from '../components/conversation/ReasoningPanel.vue'
 import { answerTable } from '../components/conversation/answerTable'
 import { useConversationGenerationStore } from '../store'
 
@@ -55,8 +58,15 @@ onBeforeUnmount(() => window.removeEventListener('resize', updateSidebarWidth))
 const sourcePanelOpen = ref(false)
 const sourceMessage = ref<AssistantMessage | null>(null)
 const highlightedCitation = ref<string | null>(null)
+const citationRequest = ref(0)
+const followingLatest = ref(true)
+let scrollingToLatest = false
+let scrollTimer: ReturnType<typeof setTimeout> | undefined
 const messageViewport = ref<HTMLElement | null>(null)
 const viewedVersions = ref<Record<number, string>>({})
+const enteringTurnId = ref<string | null>(null)
+const copiedAnswerId = ref<string | null>(null)
+let copiedTimer: ReturnType<typeof setTimeout> | undefined
 
 let listSequence = 0
 let searchTimer: ReturnType<typeof setTimeout> | undefined
@@ -156,6 +166,9 @@ async function loadConversationList(query = searchQuery.value) {
 }
 
 async function loadCurrentConversation(id: string) {
+  followingLatest.value = true
+  enteringTurnId.value = null
+  copiedAnswerId.value = null
   sourcePanelOpen.value = false
   viewedVersions.value = {}
   if (!id) {
@@ -370,17 +383,38 @@ function openSources(message: AssistantMessage, citationId?: string) {
   sourceMessage.value = message
   highlightedCitation.value = citationId || null
   sourcePanelOpen.value = true
-  void nextTick(() => {
-    if (!citationId) return
-    document
-      .getElementById(`source-${message.id}-${citationId}`)
-      ?.scrollIntoView({ block: 'center' })
-  })
+  citationRequest.value += 1
 }
 
-async function copyAnswer(content: string) {
+function trackScroll() {
+  const viewport = messageViewport.value
+  if (viewport) {
+    const atBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 80
+    if (atBottom || !scrollingToLatest) {
+      followingLatest.value = atBottom
+    }
+  }
+}
+
+function interruptScroll() {
+  scrollingToLatest = false
+  clearTimeout(scrollTimer)
+}
+
+async function copyAnswer(message: AssistantMessage) {
+  const conversationId = currentConversationId.value
   try {
-    await navigator.clipboard.writeText(content)
+    await navigator.clipboard.writeText(message.content)
+    if (currentConversationId.value !== conversationId) {
+      return
+    }
+    if (copiedTimer) {
+      clearTimeout(copiedTimer)
+    }
+    copiedAnswerId.value = message.id
+    copiedTimer = setTimeout(() => {
+      copiedAnswerId.value = null
+    }, 1800)
     ElMessage.success('回答已复制')
   } catch {
     ElMessage.error('复制失败，请手动选择文本')
@@ -388,10 +422,20 @@ async function copyAnswer(content: string) {
 }
 
 async function scrollToBottom(smooth = true) {
+  followingLatest.value = true
   await nextTick()
+  const animate = smooth && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  scrollingToLatest = animate
+  clearTimeout(scrollTimer)
+  if (animate) {
+    scrollTimer = setTimeout(() => {
+      scrollingToLatest = false
+      trackScroll()
+    }, 800)
+  }
   messageViewport.value?.scrollTo({
     top: messageViewport.value.scrollHeight,
-    behavior: smooth ? 'smooth' : 'auto',
+    behavior: animate ? 'smooth' : 'auto',
   })
 }
 
@@ -441,6 +485,7 @@ async function submitQuestion() {
     assistantVersions: [assistant],
     activeAssistantId: assistant.id,
   }
+  enteringTurnId.value = turn.user.id
   conversation.value.turns.push(turn)
   viewedVersions.value[turnIndex] = assistant.id
   await scrollToBottom()
@@ -527,14 +572,18 @@ watch(
 watch(
   () => currentTask.value?.assistant.content.length,
   () => {
-    if (sending.value) void scrollToBottom()
+    if (sending.value && followingLatest.value) {
+      void scrollToBottom(false)
+    }
   },
 )
 
 watch(
   () => currentTask.value?.assistant.reasoningContent.length,
   () => {
-    if (sending.value) void scrollToBottom()
+    if (sending.value && followingLatest.value) {
+      void scrollToBottom(false)
+    }
   },
 )
 
@@ -563,7 +612,11 @@ watch(searchQuery, () => {
 void loadConversationList()
 
 onBeforeUnmount(() => {
+  clearTimeout(scrollTimer)
   if (searchTimer) clearTimeout(searchTimer)
+  if (copiedTimer) {
+    clearTimeout(copiedTimer)
+  }
 })
 </script>
 
@@ -616,7 +669,15 @@ onBeforeUnmount(() => {
         </button>
         <span class="chat-title" :title="conversationTitle">{{ conversationTitle }}</span>
       </header>
-      <div ref="messageViewport" class="message-viewport">
+      <div
+        ref="messageViewport"
+        class="message-viewport"
+        @scroll.passive="trackScroll"
+        @wheel.passive="interruptScroll"
+        @touchstart.passive="interruptScroll"
+        @pointerdown="interruptScroll"
+        @keydown="interruptScroll"
+      >
         <div v-if="detailLoading" class="loading-state" aria-label="正在加载会话">
           <span></span><span></span><span></span>
         </div>
@@ -628,7 +689,13 @@ onBeforeUnmount(() => {
         </section>
 
         <div v-else class="message-list">
-          <article v-for="turn in conversation?.turns" :key="turn.user.id" class="turn">
+          <article
+            v-for="turn in conversation?.turns"
+            :key="turn.user.id"
+            class="turn"
+            :class="{ 'is-entering': enteringTurnId === turn.user.id }"
+            @animationend.self="enteringTurnId = null"
+          >
             <div class="user-row">
               <div class="user-message">{{ turn.user.content }}</div>
             </div>
@@ -647,13 +714,11 @@ onBeforeUnmount(() => {
                   <strong>深度思考中</strong>
                   <div class="reasoning-body">{{ currentAssistant(turn)?.reasoningContent }}</div>
                 </div>
-                <details
+                <ReasoningPanel
                   v-else-if="currentAssistant(turn)?.reasoningContent"
-                  class="reasoning-panel"
-                >
-                  <summary>深度思考</summary>
-                  <div class="reasoning-body">{{ currentAssistant(turn)?.reasoningContent }}</div>
-                </details>
+                  :key="currentAssistant(turn)?.id"
+                  :content="currentAssistant(turn)?.reasoningContent || ''"
+                />
                 <div
                   v-else-if="
                     currentAssistant(turn)?.thinkingEnabled &&
@@ -853,10 +918,18 @@ onBeforeUnmount(() => {
                   <button
                     v-if="currentAssistant(turn)?.content"
                     type="button"
-                    title="复制回答"
-                    @click="copyAnswer(currentAssistant(turn)!.content)"
+                    class="copy-answer"
+                    :class="{ 'is-copied': copiedAnswerId === currentAssistant(turn)?.id }"
+                    :title="copiedAnswerId === currentAssistant(turn)?.id ? '已复制' : '复制回答'"
+                    :aria-label="
+                      copiedAnswerId === currentAssistant(turn)?.id ? '已复制' : '复制回答'
+                    "
+                    @click="copyAnswer(currentAssistant(turn)!)"
                   >
-                    <el-icon><CopyDocument /></el-icon>
+                    <el-icon aria-hidden="true">
+                      <Check v-if="copiedAnswerId === currentAssistant(turn)?.id" />
+                      <CopyDocument v-else />
+                    </el-icon>
                   </button>
                   <button
                     v-if="currentAssistant(turn)?.citations.length"
@@ -925,6 +998,17 @@ onBeforeUnmount(() => {
       </div>
 
       <footer class="composer-area">
+        <Transition name="latest">
+          <button
+            v-if="!followingLatest && !detailLoading && !isEmpty"
+            type="button"
+            class="latest-button"
+            @click="scrollToBottom()"
+          >
+            <el-icon aria-hidden="true"><ArrowDown /></el-icon>
+            返回最新消息
+          </button>
+        </Transition>
         <div class="composer-shell" :class="{ 'is-busy': sending }">
           <el-input
             v-model="draft"
@@ -980,6 +1064,7 @@ onBeforeUnmount(() => {
       :message="sourceMessage"
       :conversation-id="currentConversationId"
       :highlighted="highlightedCitation"
+      :locate-request="citationRequest"
     />
   </div>
 </template>

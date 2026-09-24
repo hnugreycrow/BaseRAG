@@ -13,6 +13,7 @@ import {
 import ConversationHistory from '../../components/conversation/ConversationHistory.vue'
 
 import ConversationView from '../../views/ConversationView.vue'
+import { useConversationGenerationStore } from '../../store'
 
 vi.mock('../../api', async () => {
   const actual = await vi.importActual<typeof import('../../api')>('../../api')
@@ -118,8 +119,9 @@ describe('ConversationView', () => {
     expect(wrapper.get('.chat-workspace').classes()).not.toContain('is-empty')
     expect(wrapper.get('.thinking-toggle').attributes('aria-pressed')).toBe('true')
     expect(wrapper.find('.composer-shell .composer-actions .thinking-toggle').exists()).toBe(true)
-    expect(wrapper.get('.reasoning-panel summary').text()).toBe('深度思考')
-    expect(wrapper.get('.reasoning-body').text()).toBe('这里是历史思考内容')
+    expect(wrapper.getComponent({ name: 'ReasoningPanel' }).props('content')).toBe(
+      '这里是历史思考内容',
+    )
     expect(wrapper.findAll('.answer-table')).toHaveLength(1)
     expect(wrapper.findAll('.answer-table th').map((cell) => cell.text())).toEqual([
       '含税总额',
@@ -139,6 +141,76 @@ describe('ConversationView', () => {
     ])
     await wrapper.get('.answer-table .citation').trigger('click')
     expect(wrapper.getComponent({ name: 'SourcePanel' }).props('highlighted')).toBe('S1')
+    expect(wrapper.get('.turn').classes()).not.toContain('is-entering')
+
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    const clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
+    vi.useFakeTimers()
+    try {
+      const copyButton = wrapper.get('.copy-answer')
+      await copyButton.trigger('click')
+      await Promise.resolve()
+      await wrapper.vm.$nextTick()
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('采购审批要求：'))
+      expect(copyButton.attributes('aria-label')).toBe('已复制')
+      expect(copyButton.classes()).toContain('is-copied')
+      await vi.advanceTimersByTimeAsync(1800)
+      expect(copyButton.attributes('aria-label')).toBe('复制回答')
+      expect(copyButton.classes()).not.toContain('is-copied')
+      const viewport = wrapper.get('.message-viewport')
+      Object.defineProperties(viewport.element, {
+        scrollHeight: { configurable: true, value: 1600 },
+        clientHeight: { configurable: true, value: 600 },
+        scrollTop: { configurable: true, writable: true, value: 100 },
+      })
+      const scrollTo = vi.fn()
+      Object.defineProperty(viewport.element, 'scrollTo', { value: scrollTo })
+      await viewport.trigger('scroll')
+      expect(wrapper.get('.latest-button').text()).toContain('返回最新消息')
+      const detail = await vi.mocked(getConversation).mock.results[0]!.value
+      const turn = detail.turns[0]!
+      const store = useConversationGenerationStore()
+      store.tasks.conversation = {
+        conversationId: 'conversation',
+        user: turn.user,
+        assistant: { ...turn.assistantVersions[0]!, status: 'STREAMING' },
+        phase: 'streaming',
+        generationId: 'generation',
+        controller: new AbortController(),
+        serverStarted: true,
+        unread: false,
+      }
+      await wrapper.vm.$nextTick()
+      store.tasks.conversation!.assistant.content += '新的增量'
+      await wrapper.vm.$nextTick()
+      expect(scrollTo).not.toHaveBeenCalled()
+      vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: true }))
+      await wrapper.get('.latest-button').trigger('click')
+      expect(scrollTo).toHaveBeenCalledWith({ top: 1600, behavior: 'auto' })
+      store.tasks.conversation!.assistant.content += '继续生成'
+      await wrapper.vm.$nextTick()
+      await wrapper.vm.$nextTick()
+      expect(scrollTo).toHaveBeenCalledTimes(2)
+
+      writeText.mockRejectedValueOnce(new Error('denied'))
+      await copyButton.trigger('click')
+      await Promise.resolve()
+      await wrapper.vm.$nextTick()
+      expect(copyButton.classes()).not.toContain('is-copied')
+    } finally {
+      wrapper.unmount()
+      vi.unstubAllGlobals()
+      vi.useRealTimers()
+      if (clipboardDescriptor) {
+        Object.defineProperty(navigator, 'clipboard', clipboardDescriptor)
+      } else {
+        Reflect.deleteProperty(navigator, 'clipboard')
+      }
+    }
   })
 
   it('updates the visible title after renaming and resets it after deleting the current conversation', async () => {

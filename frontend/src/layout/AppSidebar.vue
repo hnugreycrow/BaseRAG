@@ -75,7 +75,8 @@ const menuItems = computed(() => [
   margin-bottom: 28px;
 }
 .brand strong {
-  font-size: 23px;
+  white-space: nowrap;
+  font-size: 20px;
   font-weight: 750;
   letter-spacing: -0.4px;
 }
@@ -165,5 +166,15 @@ const menuItems = computed(() => [
 .is-collapsed .workspace-nav a {
   justify-content: center;
   padding: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .sidebar {
+    transition: padding var(--motion-duration-layout) var(--motion-ease);
+  }
+  .workspace-nav a {
+    transition:
+      color var(--motion-duration-fast) ease,
+      background-color var(--motion-duration-fast) ease;
+  }
 }
 </style>

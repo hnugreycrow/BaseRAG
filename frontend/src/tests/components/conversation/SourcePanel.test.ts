@@ -79,6 +79,28 @@ it('shows only cited sources as concise, keyboard accessible cards', async () =>
   wrapper.unmount()
 })
 
+it('clears the highlight and repeats it when the same citation is requested again', async () => {
+  vi.useFakeTimers()
+  const wrapper = mountPanel(message('assistant', ['S1'], [source('S1')]))
+  try {
+    await nextTick()
+    await nextTick()
+    expect(wrapper.get('.source-card').classes()).toContain('highlighted')
+    await vi.advanceTimersByTimeAsync(1600)
+    expect(wrapper.get('.source-card').classes()).not.toContain('highlighted')
+    await wrapper.setProps({ locateRequest: 1 })
+    await nextTick()
+    await nextTick()
+    expect(wrapper.get('.source-card').classes()).toContain('highlighted')
+    await wrapper.setProps({ modelValue: false })
+    await nextTick()
+    expect(wrapper.get('.source-card').classes()).not.toContain('highlighted')
+  } finally {
+    wrapper.unmount()
+    vi.useRealTimers()
+  }
+})
+
 it('renders Markdown blocks and sanitizes untrusted HTML and links', async () => {
   const content =
     '# 标题\n\n- 项目一\n- 项目二\n\n| 名称 | 值 |\n| --- | --- |\n| A | B |\n\n' +
