@@ -1,0 +1,990 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#ffffff" />
+    <title>知识库管理 · BaseRAG</title>
+    <link rel="stylesheet" href="admin.css" />
+  </head>
+  <body>
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      style="position: absolute; width: 0; height: 0; overflow: hidden"
+      aria-hidden="true"
+    >
+      <symbol id="grid" viewBox="0 0 24 24">
+        <rect x="3" y="3" width="7" height="7" rx="1" />
+        <rect x="14" y="3" width="7" height="7" rx="1" />
+        <rect x="3" y="14" width="7" height="7" rx="1" />
+        <rect x="14" y="14" width="7" height="7" rx="1" />
+      </symbol>
+      <symbol id="chat" viewBox="0 0 24 24">
+        <path
+          d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5c-1.3 0-2.5-.3-3.5-.9L4 20l1.5-4.2A7.5 7.5 0 1 1 20 11.5Z"
+        />
+        <path d="M8 11.5h8" />
+      </symbol>
+      <symbol id="books" viewBox="0 0 24 24">
+        <path d="M5 4h5v16H5zM11 6h5v14h-5zM16 4l3-1 3 16-3 1z" />
+      </symbol>
+      <symbol id="nodes" viewBox="0 0 24 24">
+        <circle cx="5" cy="12" r="2" />
+        <circle cx="18" cy="5" r="2" />
+        <circle cx="18" cy="19" r="2" />
+        <path d="m7 11 9-5M7 13l9 5" />
+      </symbol>
+      <symbol id="chart" viewBox="0 0 24 24">
+        <path d="M4 20V4M4 20h16M8 15l4-5 4 3 4-7" />
+      </symbol>
+      <symbol id="cpu" viewBox="0 0 24 24">
+        <rect x="5" y="5" width="14" height="14" rx="2" />
+        <path
+          d="M9 9h6v6H9zM9 2v3m6-3v3M9 19v3m6-3v3M2 9h3m-3 6h3m14-6h3m-3 6h3"
+        />
+      </symbol>
+      <symbol id="user" viewBox="0 0 24 24">
+        <circle cx="12" cy="8" r="4" />
+        <path d="M4 21a8 8 0 0 1 16 0" />
+      </symbol>
+      <symbol id="search" viewBox="0 0 24 24">
+        <circle cx="11" cy="11" r="7" />
+        <path d="m16 16 5 5" />
+      </symbol>
+      <symbol id="arrow" viewBox="0 0 24 24">
+        <path d="M5 12h14m-6-6 6 6-6 6" />
+      </symbol>
+      <symbol id="plus" viewBox="0 0 24 24">
+        <path d="M12 4v16M4 12h16" />
+      </symbol>
+      <symbol id="refresh" viewBox="0 0 24 24">
+        <path d="M20 11a8 8 0 1 0-2 6M20 4v7h-7" />
+      </symbol>
+      <symbol id="menu" viewBox="0 0 24 24">
+        <path d="M4 7h16M4 12h16M4 17h16" />
+      </symbol>
+      <symbol id="empty" viewBox="0 0 24 24">
+        <rect x="4" y="5" width="16" height="15" rx="2" />
+        <path d="M8 10h8M8 14h5" />
+      </symbol>
+    </svg>
+    <div class="app">
+      <div class="mobile-scrim" id="mobile-scrim"></div>
+      <aside class="sidebar" id="sidebar" aria-label="主导航">
+        <div class="brand">
+          <span class="brand-mark"
+            ><svg aria-hidden="true"><use href="#books" /></svg></span
+          >BaseRAG
+        </div>
+        <nav class="nav" aria-label="主导航">
+          <div class="nav-label">工作空间</div>
+          <button type="button" data-page="dashboard">
+            <svg aria-hidden="true"><use href="#grid" /></svg
+            ><span>工作台</span>
+          </button>
+          <button type="button" data-page="knowledge" class="active">
+            <svg aria-hidden="true"><use href="#books" /></svg
+            ><span>知识库管理</span><b class="nav-count">3</b>
+          </button>
+          <button type="button" data-page="intent">
+            <svg aria-hidden="true"><use href="#nodes" /></svg
+            ><span>意图树</span>
+          </button>
+          <button type="button" data-page="traces">
+            <svg aria-hidden="true"><use href="#chart" /></svg
+            ><span>链路追踪</span>
+          </button>
+          <div class="nav-label">系统管理</div>
+          <button type="button" data-page="models">
+            <svg aria-hidden="true"><use href="#cpu" /></svg><span>模型</span>
+          </button>
+          <button type="button" data-page="users">
+            <svg aria-hidden="true"><use href="#user" /></svg
+            ><span>用户管理</span>
+          </button>
+        </nav>
+        <div class="chat-navigation">
+          <button id="new-chat" type="button">＋ 新建对话</button
+          ><small>会话</small
+          ><span class="section-note">新对话将在当前页面显示</span
+          ><button type="button" data-page="knowledge">← 返回管理后台</button>
+        </div>
+        <div class="sidebar-callout">
+          <div>
+            <strong>让知识开始对话</strong>
+            <p>基于知识库提问，获取有据可查的回答。</p>
+            <button type="button" data-page="chat">进入知识问答 ↗</button>
+          </div>
+        </div>
+        <div class="sidebar-foot">
+          <span class="avatar">林</span>
+          <div>林知远<small>空间管理员</small></div>
+        </div>
+      </aside>
+      <div class="workspace">
+        <header class="topbar">
+          <button
+            class="menu-toggle"
+            id="menu-toggle"
+            type="button"
+            aria-label="打开导航"
+          >
+            <svg><use href="#menu" /></svg></button
+          ><span>BaseRAG</span><span>/</span
+          ><strong id="topbar-title">知识库管理</strong>
+          <div class="topbar-tools">
+            <span class="prototype-label">交互原型 · 示例数据</span
+            ><button
+              class="button text topbar-link"
+              type="button"
+              data-page="chat"
+            >
+              进入问答 ↗</button
+            ><span class="avatar">林</span>
+          </div>
+        </header>
+        <main>
+          <section class="page" id="page-dashboard" hidden>
+            <header class="page-head">
+              <h1>工作台</h1>
+              <button class="button primary" type="button" data-page="chat">
+                进入问答
+              </button>
+            </header>
+            <div class="quick-links">
+              <button class="quick-link" type="button" data-page="chat">
+                <svg><use href="#chat" /></svg><span>开始提问</span
+                ><svg><use href="#arrow" /></svg></button
+              ><button class="quick-link" type="button" data-page="knowledge">
+                <svg><use href="#books" /></svg><span>管理知识库</span
+                ><svg><use href="#arrow" /></svg></button
+              ><button class="quick-link" type="button" data-page="traces">
+                <svg><use href="#chart" /></svg><span>查看链路</span
+                ><svg><use href="#arrow" /></svg>
+              </button>
+            </div>
+            <section class="panel">
+              <div class="panel-head"><h2>最近会话</h2></div>
+              <div class="empty">
+                <div>
+                  <svg><use href="#chat" /></svg>
+                  <p>还没有会话</p>
+                </div>
+              </div>
+            </section>
+          </section>
+          <section class="page" id="page-chat" hidden>
+            <div class="chat-empty">
+              <h1>向知识库提问</h1>
+              <p>我会根据已入库资料回答，并标注可核对的来源。</p>
+            </div>
+            <div
+              class="chat-messages"
+              id="chat-messages"
+              aria-live="polite"
+            ></div>
+            <div class="chat-composer">
+              <textarea
+                aria-label="输入问题"
+                placeholder="向知识库提问"
+              ></textarea>
+              <div class="chat-composer-actions">
+                <button class="button" type="button">深度思考</button
+                ><button
+                  class="button primary icon"
+                  type="button"
+                  aria-label="发送问题"
+                  disabled
+                >
+                  <svg><use href="#arrow" /></svg>
+                </button>
+              </div>
+            </div>
+            <p class="chat-hint">Enter 发送 · Shift + Enter 换行</p>
+          </section>
+          <section class="page" id="page-knowledge">
+            <header class="page-head">
+              <h1>知识库</h1>
+              <button
+                class="button primary"
+                type="button"
+                data-dialog="knowledge"
+              >
+                <svg><use href="#plus" /></svg>新建知识库
+              </button>
+            </header>
+            <section class="panel">
+              <div class="toolbar">
+                <label class="search"
+                  ><svg><use href="#search" /></svg
+                  ><input
+                    type="search"
+                    placeholder="搜索知识库或模型"
+                    aria-label="搜索知识库或模型" /></label
+                ><button
+                  class="button icon"
+                  type="button"
+                  aria-label="刷新"
+                  title="刷新"
+                >
+                  <svg><use href="#refresh" /></svg>
+                </button>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>知识库</th>
+                      <th>向量模型</th>
+                      <th>文档</th>
+                      <th>创建时间</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                </table>
+              </div>
+              <div class="empty">
+                <div>
+                  <svg><use href="#books" /></svg>
+                  <p>没有匹配的知识库，请调整搜索或新建知识库。</p>
+                </div>
+              </div>
+              <footer class="pagination">
+                <span>共 3 条</span>
+                <div class="page-controls">
+                  <select aria-label="每页条数">
+                    <option>10 条/页</option>
+                    <option>20 条/页</option>
+                    <option>50 条/页</option></select
+                  ><button type="button" aria-label="上一页" disabled>‹</button
+                  ><strong>1</strong
+                  ><button type="button" aria-label="下一页" disabled>›</button>
+                </div>
+              </footer>
+            </section>
+          </section>
+          <section class="page" id="page-intent" hidden>
+            <header class="page-head">
+              <h1>全局意图树</h1>
+              <button class="button primary" type="button" data-dialog="intent">
+                <svg><use href="#plus" /></svg>新增节点
+              </button>
+            </header>
+            <div class="intent-meta">
+              <span class="dot"></span><span>启用叶子 0 / 32</span
+              ><span>｜</span><span>最多三级</span>
+            </div>
+            <section class="panel">
+              <div class="intent-empty">
+                <svg><use href="#nodes" /></svg>
+                <div>
+                  <h2>还没有意图节点</h2>
+                  <p>
+                    可以先创建分类目录，也可以直接创建一个连接知识库、只读工具或系统直答的叶子节点。
+                  </p>
+                  <p>未配置可用叶子时，会话问答将检索全部公共知识库。</p>
+                  <button class="button" type="button" data-dialog="intent">
+                    创建第一个节点
+                  </button>
+                </div>
+              </div>
+            </section>
+          </section>
+          <section class="page" id="page-traces" hidden>
+            <header class="page-head">
+              <h1>链路追踪</h1>
+              <button class="button" type="button">
+                <svg><use href="#refresh" /></svg>刷新
+              </button>
+            </header>
+            <section class="panel metrics" aria-label="当前筛选范围汇总">
+              <div class="metric">
+                <span class="metric-label">问答运行</span>
+                <div class="metric-value">—</div>
+              </div>
+              <div class="metric">
+                <div class="metric-row">
+                  <span>成功率</span><strong>—</strong>
+                </div>
+                <div class="metric-row">
+                  <span>降级率</span><strong>—</strong>
+                </div>
+              </div>
+              <div class="metric">
+                <div class="metric-subhead">
+                  <span>延迟指标</span><span>P50</span><span>P95</span>
+                </div>
+                <div class="metric-row">
+                  <span>总耗时</span><strong>—</strong><strong>—</strong>
+                </div>
+                <div class="metric-row">
+                  <span>首字耗时（思考或正文）</span><strong>—</strong
+                  ><strong>—</strong>
+                </div>
+                <div class="metric-row">
+                  <span>模型首字耗时（思考或正文）</span><strong>—</strong
+                  ><strong>—</strong>
+                </div>
+              </div>
+            </section>
+            <section class="panel">
+              <div class="panel-head">
+                <h2>筛选运行</h2>
+                <button class="button text" type="button" id="reset-filters">
+                  重置
+                </button>
+              </div>
+              <form class="filter-grid" id="trace-filters">
+                <label class="field"
+                  >时间范围<select aria-label="时间范围">
+                    <option>全部时间</option>
+                    <option>最近 1 小时</option>
+                    <option>最近 24 小时</option>
+                    <option>最近 7 天</option>
+                    <option>自定义</option>
+                  </select></label
+                ><label class="field"
+                  >运行状态<select aria-label="运行状态">
+                    <option>全部状态</option>
+                  </select></label
+                ><label class="field"
+                  >执行模式<select aria-label="执行模式">
+                    <option>全部模式</option>
+                  </select></label
+                ><label class="field"
+                  >模型名称<input placeholder="精确匹配历史模型" /></label
+                ><label class="field"
+                  >所属用户<select aria-label="所属用户">
+                    <option>全部用户</option>
+                  </select></label
+                >
+                <div class="filter-actions">
+                  <button class="button primary" type="submit">应用筛选</button>
+                </div>
+              </form>
+            </section>
+            <section class="panel">
+              <div class="panel-head">
+                <h2>运行记录</h2>
+                <span>0 条记录</span>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>问题</th>
+                      <th>开始时间</th>
+                      <th>状态</th>
+                      <th>用户</th>
+                      <th>路径 / 模型</th>
+                      <th>候选 → 证据</th>
+                      <th>首字耗时</th>
+                      <th>总耗时</th>
+                    </tr>
+                  </thead>
+                </table>
+              </div>
+              <div class="empty">
+                <div>
+                  <svg><use href="#chart" /></svg>
+                  <p>当前筛选范围内没有问答运行</p>
+                </div>
+              </div>
+            </section>
+          </section>
+          <section class="page" id="page-models" hidden>
+            <header class="page-head"><h1>模型</h1></header>
+            <section class="panel model-panel">
+              <span class="model-icon"
+                ><svg><use href="#cpu" /></svg
+              ></span>
+              <div>
+                <h2>配置由后端统一管理</h2>
+                <p>模型状态查询尚未接入。</p>
+              </div>
+              <span class="tag">只读 · 未接入</span>
+            </section>
+          </section>
+          <section class="page" id="page-users" hidden>
+            <header class="page-head">
+              <h1>用户管理</h1>
+              <button class="button primary" type="button" data-dialog="users">
+                <svg><use href="#plus" /></svg>创建用户
+              </button>
+            </header>
+            <section class="panel">
+              <form class="user-search" id="user-search">
+                <label class="search"
+                  ><svg><use href="#search" /></svg
+                  ><input
+                    type="search"
+                    placeholder="搜索姓名或用户名"
+                    aria-label="搜索用户" /></label
+                ><button class="button" type="submit">搜索</button
+                ><button
+                  class="button icon"
+                  type="button"
+                  aria-label="刷新用户"
+                  title="刷新用户"
+                >
+                  <svg><use href="#refresh" /></svg>
+                </button>
+              </form>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>用户</th>
+                      <th>角色</th>
+                      <th>状态</th>
+                      <th>最近登录</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                </table>
+              </div>
+              <div class="empty">
+                <div>
+                  <svg><use href="#user" /></svg>
+                  <p>没有匹配的用户</p>
+                </div>
+              </div>
+              <footer class="pagination">
+                <span>共 0 条</span><span></span>
+              </footer>
+            </section>
+          </section>
+
+          <section class="page" id="page-documents" hidden>
+            <header class="page-head">
+              <div>
+                <button class="button text" type="button" data-page="knowledge">
+                  ← 返回知识库
+                </button>
+                <h1 id="document-library-name">产品使用手册</h1>
+                <p>管理文档、查看解析结果与索引状态。</p>
+              </div>
+              <button class="button primary" type="button" data-dialog="upload">
+                ＋ 上传文档
+              </button>
+            </header>
+            <section class="panel">
+              <div class="knowledge-tabs">
+                <button class="active" type="button">文档管理</button>
+              </div>
+              <div class="toolbar">
+                <label class="search"
+                  ><svg aria-hidden="true"><use href="#search" /></svg
+                  ><input
+                    id="document-search"
+                    placeholder="搜索文档名称"
+                    aria-label="搜索文档名称"
+                    type="search"
+                /></label>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>文档名称</th>
+                      <th>类型</th>
+                      <th>分块数</th>
+                      <th>状态</th>
+                      <th>更新时间</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="document-rows"></tbody>
+                </table>
+              </div>
+              <div class="empty" id="document-empty" hidden>
+                没有匹配的文档，请调整搜索或上传文档。
+              </div>
+              <footer class="pagination">
+                <span id="document-count"></span><span>仅展示部分示例记录</span>
+              </footer>
+            </section>
+          </section>
+        </main>
+      </div>
+    </div>
+    <div class="dialog-backdrop" id="dialog-knowledge" hidden>
+      <div
+        class="dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="knowledge-dialog-title"
+      >
+        <h2 id="knowledge-dialog-title">新建知识库</h2>
+        <label class="field"
+          >名称<input placeholder="例如：产品使用手册" maxlength="200" /></label
+        ><label class="field"
+          >向量模型<select>
+            <option>选择用于检索的向量模型</option></select
+          ><span class="field-help"
+            >创建后向量模型不可更换，以保证分块向量一致。</span
+          ></label
+        >
+        <div class="dialog-actions">
+          <button class="button" type="button" data-close>取消</button
+          ><button class="button primary" type="button" disabled>
+            创建知识库
+          </button>
+        </div>
+      </div>
+    </div>
+    <div class="dialog-backdrop" id="dialog-users" hidden>
+      <div
+        class="dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="users-dialog-title"
+      >
+        <h2 id="users-dialog-title">创建用户</h2>
+        <label class="field">显示名称<input maxlength="100" /></label
+        ><label class="field">用户名<input maxlength="64" /></label
+        ><label class="field"
+          >角色<select>
+            <option>普通用户</option>
+            <option>管理员</option>
+          </select></label
+        ><label class="field"
+          >初始密码<input type="password" /><span class="field-help"
+            >至少 12 个字符，UTF-8 编码不超过 72 字节</span
+          ></label
+        >
+        <div class="dialog-actions">
+          <button class="button" type="button" data-close>取消</button
+          ><button class="button primary" type="button" disabled>
+            创建用户
+          </button>
+        </div>
+      </div>
+    </div>
+    <div class="dialog-backdrop" id="dialog-intent" hidden>
+      <div
+        class="dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="intent-dialog-title"
+      >
+        <h2 id="intent-dialog-title">新增意图节点</h2>
+        <label class="field"
+          >节点名称<input placeholder="例如：人事制度" maxlength="100" /></label
+        ><label class="field"
+          >所属上级<select>
+            <option>无，作为根节点</option>
+          </select></label
+        ><label class="field"
+          >节点用途<select>
+            <option>分类目录</option>
+            <option>知识库检索</option>
+            <option>只读工具</option>
+            <option>系统直答</option>
+          </select></label
+        ><label class="field"
+          >描述<input placeholder="可选：说明这个分类目录包含什么" /></label
+        ><label class="field"
+          >示例问题<textarea
+            placeholder="可选，每行一条，例如：年假怎么申请？"
+          ></textarea>
+        </label>
+        <div class="dialog-actions">
+          <button class="button" type="button" data-close>取消</button
+          ><button class="button primary" type="button" disabled>
+            创建节点
+          </button>
+        </div>
+      </div>
+    </div>
+    <script>
+      const titles = {
+        documents: "文档管理",
+        dashboard: "工作台",
+        chat: "知识问答",
+        knowledge: "知识库管理",
+        intent: "全局意图树",
+        traces: "链路追踪",
+        models: "模型",
+        users: "用户管理",
+      };
+      const sidebar = document.getElementById("sidebar");
+      const scrim = document.getElementById("mobile-scrim");
+      function closeMenu() {
+        sidebar.classList.remove("open");
+        scrim.classList.remove("open");
+      }
+      function showPage(key) {
+        if (!titles[key]) return;
+        document
+          .querySelectorAll("main > .page")
+          .forEach((page) => (page.hidden = page.id !== `page-${key}`));
+        document
+          .querySelectorAll(".nav [data-page]")
+          .forEach((button) =>
+            button.classList.toggle(
+              "active",
+              button.dataset.page === (key === "documents" ? "knowledge" : key),
+            ),
+          );
+        document.getElementById("topbar-title").textContent = titles[key];
+        document.title = `${titles[key]} · BaseRAG`;
+        history.replaceState(null, "", `#${key}`);
+        closeMenu();
+        window.scrollTo(0, 0);
+      }
+      document.querySelectorAll("[data-page]").forEach((button) =>
+        button.addEventListener("click", () => {
+          showPage(button.dataset.page);
+        }),
+      );
+      document.getElementById("menu-toggle").addEventListener("click", () => {
+        sidebar.classList.add("open");
+        scrim.classList.add("open");
+      });
+      scrim.addEventListener("click", closeMenu);
+      document
+        .getElementById("trace-filters")
+        .addEventListener("submit", (event) => event.preventDefault());
+      document
+        .getElementById("reset-filters")
+        .addEventListener("click", () =>
+          document.getElementById("trace-filters").reset(),
+        );
+      document
+        .getElementById("user-search")
+        .addEventListener("submit", (event) => event.preventDefault());
+      if (titles[location.hash.slice(1)]) showPage(location.hash.slice(1));
+    </script>
+    <script>
+      // Static example records used only to show the existing admin layouts.
+      const sampleKnowledge = [
+        [
+          "产品使用手册",
+          "bailian · qwen3.7-text-embedding · 1536 维",
+          "42 份",
+          "2026-09-21 10:30",
+        ],
+        [
+          "人事制度",
+          "bailian · qwen3.7-text-embedding · 1536 维",
+          "18 份",
+          "2026-09-20 16:12",
+        ],
+        [
+          "常见问题",
+          "bailian · qwen3.7-text-embedding · 1536 维",
+          "27 份",
+          "2026-09-18 09:05",
+        ],
+      ];
+      const knowledgeTable = document.querySelector("#page-knowledge table");
+      knowledgeTable.insertAdjacentHTML(
+        "beforeend",
+        "<tbody>" +
+          sampleKnowledge
+            .map(
+              (row) =>
+                '<tr><td><span class="row-name">' +
+                row[0] +
+                "</span></td><td>" +
+                row[1] +
+                "</td><td>" +
+                row[2] +
+                "</td><td>" +
+                row[3] +
+                '</td><td><div class="row-actions"><button class="button text" type="button">打开</button><details class="action-menu"><summary aria-label="管理 ' +
+                row[0] +
+                '">···</summary><div class="action-menu-popover"><button type="button">重命名</button><button type="button">删除</button></div></details></div></td></tr>',
+            )
+            .join("") +
+          "</tbody>",
+      );
+      const knowledgeEmpty = document.querySelector("#page-knowledge .empty");
+      knowledgeEmpty.hidden = true;
+      knowledgeTable.querySelectorAll("tbody tr").forEach((row, index) => {
+        row.cells[1].title = sampleKnowledge[index][1];
+      });
+      document
+        .querySelector("#page-knowledge .search input")
+        .addEventListener("input", (event) => {
+          const query = event.target.value.trim().toLowerCase();
+          let visibleCount = 0;
+          knowledgeTable.querySelectorAll("tbody tr").forEach((row) => {
+            row.hidden = !row.textContent.toLowerCase().includes(query);
+            if (!row.hidden) visibleCount++;
+          });
+          knowledgeEmpty.hidden = visibleCount > 0;
+          document.querySelector(
+            "#page-knowledge .pagination span",
+          ).textContent = "共 " + visibleCount + " 条";
+        });
+      const recentPanel = document.querySelector("#page-dashboard .panel");
+      recentPanel.querySelector(".empty").remove();
+      recentPanel.insertAdjacentHTML(
+        "beforeend",
+        '<div class="recent-row"><svg><use href="#chat"/></svg><span>不同角色的知识库权限如何配置？</span><time>2026-09-23</time></div><div class="recent-row"><svg><use href="#chat"/></svg><span>文档更新后如何重新建立索引？</span><time>2026-09-22</time></div>',
+      );
+      const intentPanel = document.querySelector("#page-intent .panel");
+      intentPanel.querySelector(".intent-empty").remove();
+      intentPanel.insertAdjacentHTML(
+        "beforeend",
+        '<div class="tree-list"><div class="tree-row"><svg><use href="#nodes"/></svg><strong>人事制度</strong><span class="type">分类目录</span><span class="spacer"></span><button class="button text" type="button" data-dialog="intent">添加下级</button><button class="button text" type="button">编辑</button><button class="button text" type="button">删除</button></div><div class="tree-row child"><svg><use href="#books"/></svg><strong>年假申请</strong><span class="type">知识库检索</span><span class="spacer"></span><button class="button text" type="button">编辑</button><button class="button text" type="button">删除</button></div><div class="tree-row child"><svg><use href="#books"/></svg><strong>报销流程</strong><span class="type">知识库检索</span><span class="spacer"></span><button class="button text" type="button">编辑</button><button class="button text" type="button">删除</button></div></div>',
+      );
+      document.querySelector("#page-intent .intent-meta").innerHTML =
+        '<span class="dot"></span><span>启用叶子 2 / 32</span><span>｜</span><span>最多三级</span>';
+      const sampleRuns = [
+        [
+          "不同角色的知识库权限如何配置？",
+          "2026-09-23 09:42",
+          "已完成",
+          "林知远",
+          "完整链路 / qwen",
+          "4 → 2",
+          "1.2 秒",
+          "3.8 秒",
+        ],
+        [
+          "文档更新后如何重新建立索引？",
+          "2026-09-23 09:15",
+          "已完成",
+          "李敏",
+          "完整链路 / qwen",
+          "6 → 3",
+          "1.5 秒",
+          "4.2 秒",
+        ],
+        [
+          "如何上传文档？",
+          "2026-09-22 16:34",
+          "运行中",
+          "王宁",
+          "完整链路 / qwen",
+          "3 → 2",
+          "—",
+          "—",
+        ],
+      ];
+      const traceTable = document.querySelector("#page-traces table");
+      traceTable.insertAdjacentHTML(
+        "beforeend",
+        "<tbody>" +
+          sampleRuns
+            .map(
+              (row) =>
+                '<tr><td><span class="row-name">' +
+                row[0] +
+                "</span></td><td>" +
+                row[1] +
+                '</td><td><span class="status ' +
+                (row[2] === "运行中" ? "running" : "") +
+                '">' +
+                row[2] +
+                "</span></td><td>" +
+                row[3] +
+                "</td><td>" +
+                row[4] +
+                "</td><td>" +
+                row[5] +
+                "</td><td>" +
+                row[6] +
+                "</td><td>" +
+                row[7] +
+                "</td></tr>",
+            )
+            .join("") +
+          "</tbody>",
+      );
+      document.querySelector("#page-traces .panel:last-child .empty").remove();
+      document.querySelector(
+        "#page-traces .panel:last-child .panel-head span",
+      ).textContent = "3 条记录";
+      const metricValues = document.querySelectorAll("#page-traces .metric");
+      metricValues[0].querySelector(".metric-value").textContent = "3";
+      metricValues[1].querySelectorAll("strong")[0].textContent = "67%";
+      metricValues[1].querySelectorAll("strong")[1].textContent = "0%";
+      metricValues[2].querySelectorAll(".metric-row").forEach((row, index) => {
+        const values = [
+          ["3.8 秒", "4.2 秒"],
+          ["1.2 秒", "1.5 秒"],
+          ["0.9 秒", "1.1 秒"],
+        ][index];
+        row
+          .querySelectorAll("strong")
+          .forEach(
+            (item, valueIndex) => (item.textContent = values[valueIndex]),
+          );
+      });
+      const sampleUsers = [
+        [
+          "林知远",
+          "linzhiyuan",
+          "管理员",
+          "已启用",
+          "2026-09-23 09:42",
+          "当前账号",
+        ],
+        ["李敏", "limin", "普通用户", "已启用", "2026-09-23 09:15", "···"],
+        ["王宁", "wangning", "普通用户", "已禁用", "尚未登录", "···"],
+      ];
+      const userTable = document.querySelector("#page-users table");
+      userTable.insertAdjacentHTML(
+        "beforeend",
+        "<tbody>" +
+          sampleUsers
+            .map(
+              (row) =>
+                '<tr><td><span class="row-name">' +
+                row[0] +
+                '</span><span class="row-sub">' +
+                row[1] +
+                "</span></td><td>" +
+                row[2] +
+                '</td><td><span class="status">' +
+                row[3] +
+                "</span></td><td>" +
+                row[4] +
+                "</td><td>" +
+                (row[5] === "当前账号"
+                  ? row[5]
+                  : '<button class="button icon" type="button" aria-label="管理用户 ' +
+                    row[0] +
+                    '">···</button>') +
+                "</td></tr>",
+            )
+            .join("") +
+          "</tbody>",
+      );
+      const userEmpty = document.querySelector("#page-users .empty");
+      userEmpty.hidden = true;
+      document.querySelector("#page-users .pagination span").textContent =
+        "共 3 条";
+      document
+        .querySelector("#page-users .search input")
+        .addEventListener("input", (event) => {
+          const query = event.target.value.trim().toLowerCase();
+          let visibleCount = 0;
+          userTable.querySelectorAll("tbody tr").forEach((row) => {
+            row.hidden = !row.textContent.toLowerCase().includes(query);
+            if (!row.hidden) visibleCount++;
+          });
+          userEmpty.hidden = visibleCount > 0;
+        });
+    </script>
+    <script>
+      const refinedKnowledgeRows = document.querySelectorAll(
+        "#page-knowledge tbody tr",
+      );
+      refinedKnowledgeRows.forEach((tableRow, index) => {
+        const [name, fullModel, documents, createdAt] = sampleKnowledge[index];
+        const [provider, modelName, dimensions] = fullModel.split(" · ");
+        const [datePart, timePart] = createdAt.split(" ");
+        const documentCount = documents.split(" ")[0];
+        tableRow.cells[0].innerHTML =
+          '<div class="resource-cell"><span class="resource-mark"><svg aria-hidden="true"><use href="#books"/></svg></span><span class="resource-copy"><span class="row-name">' +
+          name +
+          "</span></span></div>";
+        tableRow.cells[1].innerHTML =
+          '<div class="model-cell"><span class="model-mark"><svg aria-hidden="true"><use href="#cpu"/></svg></span><span class="model-copy"><strong>' +
+          modelName +
+          "</strong><small>" +
+          provider +
+          " · " +
+          dimensions +
+          "</small></span></div>";
+        tableRow.cells[1].title = fullModel;
+        tableRow.cells[2].innerHTML =
+          '<span class="document-total">' +
+          documentCount +
+          " <small>份</small></span>";
+        tableRow.cells[3].innerHTML =
+          '<time class="date-cell">' +
+          datePart +
+          "<small>" +
+          timePart +
+          "</small></time>";
+      });
+      const moreIcon =
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="19" cy="12" r="1.5" fill="currentColor"/></svg>';
+      document
+        .querySelectorAll("#page-knowledge .action-menu summary")
+        .forEach((summary) => {
+          summary.innerHTML = moreIcon;
+        });
+      document
+        .querySelectorAll("#page-users tbody tr")
+        .forEach((tableRow, index) => {
+          const [displayName, username] = sampleUsers[index];
+          tableRow.cells[0].innerHTML =
+            '<div class="user-identity"><span class="user-mark">' +
+            displayName.slice(0, 1) +
+            '</span><span><span class="row-name">' +
+            displayName +
+            '</span><span class="row-sub">' +
+            username +
+            "</span></span></div>";
+          const actionButton = tableRow.cells[4].querySelector("button");
+          if (actionButton) actionButton.innerHTML = moreIcon;
+        });
+      document.addEventListener("click", (event) => {
+        document.querySelectorAll(".action-menu[open]").forEach((menu) => {
+          if (!menu.contains(event.target)) menu.open = false;
+        });
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape")
+          document.querySelectorAll(".action-menu[open]").forEach((menu) => {
+            menu.open = false;
+          });
+      });
+    </script>
+    <div class="dialog-backdrop" id="dialog-upload" hidden>
+      <div
+        class="dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="upload-title"
+      >
+        <h2 id="upload-title">上传文档</h2>
+        <label class="upload-zone"
+          >选择要加入知识库的文件<input
+            id="upload-files"
+            type="file"
+            multiple
+            accept=".pdf,.txt,.md,.docx"
+          /><span class="field-help"
+            >支持
+            PDF、TXT、Markdown、Word。原型仅展示文件名，不会上传或读取文件内容。</span
+          ></label
+        >
+        <div class="dialog-actions">
+          <button class="button" data-close type="button">取消</button
+          ><button
+            class="button primary"
+            id="upload-confirm"
+            type="button"
+            disabled
+          >
+            添加到文档列表
+          </button>
+        </div>
+      </div>
+    </div>
+    <div class="dialog-backdrop" id="dialog-document-detail" hidden>
+      <div
+        class="dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="document-detail-title"
+      >
+        <h2 id="document-detail-title"></h2>
+        <p id="document-detail-content" class="field-help"></p>
+        <div class="dialog-actions">
+          <button class="button" data-close type="button">关闭</button>
+        </div>
+      </div>
+    </div>
+    <div class="toast" id="prototype-toast" role="status" hidden></div>
+    <script src="admin.js"></script>
+  </body>
+</html>
