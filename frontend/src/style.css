@@ -1,18 +1,23 @@
 :root {
-  --color-ink: #17233c;
-  --color-text: #33405a;
-  --color-muted: #7b879e;
-  --color-primary: #4263eb;
-  --color-primary-soft: #edf1ff;
+  --color-ink: #171c27;
+  --color-text: #424c5e;
+  --color-muted: #7b8496;
+  --color-primary: #3064ff;
+  --color-primary-soft: #edf2ff;
   --color-success: #1a9a73;
   --color-surface: #ffffff;
-  --color-canvas: #f4f7fb;
-  --color-line: #e4e9f1;
-  --font-body: system-ui, sans-serif;
+  --color-canvas: #f5f6f9;
+  --color-line: #e9edf3;
+  --font-body: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   --font-data: var(--font-body);
   --el-font-family: var(--font-body);
-  --el-color-primary: #4263eb;
-  --el-color-primary-light-9: #edf1ff;
+  --el-color-primary: #3064ff;
+  --el-color-primary-light-9: #edf2ff;
+  --el-color-primary-light-3: #6e92ff;
+  --el-color-primary-light-5: #98b1ff;
+  --el-color-primary-light-7: #c1d0ff;
+  --el-color-primary-light-8: #d6e0ff;
+  --el-color-primary-dark-2: #2650cc;
   --el-color-danger: #d96c5f;
   --el-border-radius-base: 8px;
   --el-border-color: #e0e6ef;
@@ -83,6 +88,33 @@ button {
   min-height: 38px;
   font-weight: 500;
 }
+/* Shared management controls; conversation controls keep their own layout. */
+.admin-layout .el-button:not(.is-text):not(.is-link) {
+  border-radius: 20px;
+  font-size: 13px;
+}
+.admin-layout .el-button--primary:not(.is-text):not(.is-link) {
+  box-shadow:
+    0 3px 5px #3064ff25,
+    inset 0 -2px 1px #1944bd30;
+}
+.admin-layout .el-tag {
+  border-color: transparent;
+  border-radius: 5px;
+  font-weight: 400;
+}
+.admin-layout .el-table {
+  --el-table-header-bg-color: #fafbfd;
+  --el-table-row-hover-bg-color: #fafbff;
+  --el-table-border-color: #e9edf3;
+}
+.admin-layout .el-table th.el-table__cell {
+  font-weight: 500;
+  color: #828c9f;
+}
+.admin-layout .el-table td.el-table__cell {
+  border-bottom-style: dashed;
+}
 .el-input__wrapper,
 .el-select__wrapper {
   min-height: 38px;
@@ -90,7 +122,7 @@ button {
 .el-dialog,
 .el-message-box {
   max-width: calc(100vw - 28px);
-  border-radius: 12px;
+  border-radius: 17px;
 }
 .el-dialog {
   padding: 24px;

@@ -502,7 +502,7 @@ onMounted(load)
 <style scoped>
 .intent-page {
   margin: 0 auto;
-  padding: 30px 32px;
+  padding: 29px 30px 45px;
 }
 .intent-header {
   display: flex;
@@ -520,7 +520,7 @@ onMounted(load)
 .intent-header h1 {
   margin: 0;
   color: var(--color-ink);
-  font-size: 22px;
+  font-size: 25px;
   line-height: 1.25;
 }
 .page-description {
@@ -562,7 +562,7 @@ onMounted(load)
   min-height: 170px;
   overflow: hidden;
   border: 1px solid var(--color-line);
-  border-radius: 12px;
+  border-radius: 17px;
   background: var(--color-surface);
 }
 .intent-loading {

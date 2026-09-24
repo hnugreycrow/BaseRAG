@@ -66,9 +66,9 @@ const entries = [
 </template>
 <style scoped>
 .dashboard-page {
-  max-width: 1480px;
+  max-width: 1600px;
   margin: 0 auto;
-  padding: 32px;
+  padding: 29px 30px 45px;
 }
 header {
   display: flex;
@@ -79,7 +79,7 @@ header {
 }
 h1 {
   margin: 0;
-  font-size: 22px;
+  font-size: 25px;
   font-weight: 650;
 }
 header p {
@@ -99,7 +99,7 @@ header p {
   gap: 14px;
   padding: 24px;
   border: 1px solid var(--color-line);
-  border-radius: 12px;
+  border-radius: 17px;
   background: white;
 }
 .quick-links strong {
@@ -114,7 +114,7 @@ header p {
 .recent-panel {
   background: white;
   border: 1px solid var(--color-line);
-  border-radius: 12px;
+  border-radius: 17px;
   overflow: hidden;
 }
 h2 {

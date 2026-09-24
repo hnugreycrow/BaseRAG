@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { Expand, Fold, Menu } from '@element-plus/icons-vue'
+import { ChatDotRound, Expand, Fold, Menu } from '@element-plus/icons-vue'
 import { storeToRefs } from 'pinia'
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useLayoutStore } from '../store'
 import AppSidebar from './AppSidebar.vue'
+import AccountMenu from '../components/auth/AccountMenu.vue'
 const route = useRoute()
 const layout = useLayoutStore()
 const { mobileMenuOpen, sidebarCollapsed } = storeToRefs(layout)
@@ -47,7 +48,19 @@ const collapsed = computed(() => tablet.value || sidebarCollapsed.value)
           aria-label="打开导航"
           @click="layout.openMobileMenu"
         />
-        <span>{{ String(route.meta.title ?? '工作台') }}</span>
+        <nav class="breadcrumb" aria-label="当前位置">
+          <RouterLink to="/admin">BaseRAG</RouterLink>
+          <span aria-hidden="true">/</span>
+          <span class="current-page">{{ String(route.meta.title ?? '工作台') }}</span>
+        </nav>
+        <div class="topbar-actions">
+          <RouterLink class="chat-link" to="/chat">
+            <el-icon aria-hidden="true"><ChatDotRound /></el-icon>
+            <span>知识问答</span>
+          </RouterLink>
+          <span class="account-divider" aria-hidden="true" />
+          <AccountMenu class="topbar-account" />
+        </div>
       </header>
       <main class="main-content"><RouterView /></main>
     </div>
@@ -75,14 +88,14 @@ const collapsed = computed(() => tablet.value || sidebarCollapsed.value)
   flex: 1;
 }
 .topbar {
-  height: 64px;
+  height: 70px;
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 0 32px;
+  padding: 0 30px;
   background: white;
   border-bottom: 1px solid var(--color-line);
-  font-size: 14px;
+  font-size: 12px;
   color: #637086;
 }
 .topbar .el-button {
@@ -91,7 +104,91 @@ const collapsed = computed(() => tablet.value || sidebarCollapsed.value)
   color: #738096;
 }
 .main-content {
-  min-height: calc(100dvh - 64px);
+  min-height: calc(100dvh - 70px);
+}
+.breadcrumb,
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.breadcrumb {
+  min-width: 0;
+  color: var(--color-muted);
+}
+.current-page {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text);
+}
+.topbar-actions {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.chat-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid #e4ebff;
+  border-radius: 8px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.chat-link .el-icon {
+  font-size: 16px;
+}
+.chat-link:hover {
+  border-color: #cbd9ff;
+  background: #e3ebff;
+}
+.account-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--color-line);
+}
+.topbar-account :deep(.profile) {
+  min-height: 40px;
+  gap: 9px;
+  padding: 4px 8px 4px 4px;
+  border-radius: 8px;
+}
+.topbar-account :deep(.profile:hover),
+.topbar-account :deep(.profile[aria-expanded='true']) {
+  background: #f3f5f8;
+}
+.topbar-account :deep(.avatar) {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  background: #edf1f8;
+  color: #536da0;
+}
+.topbar-account :deep(.copy strong) {
+  max-width: 120px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.topbar-account :deep(.copy small) {
+  display: none;
+}
+.topbar-account :deep(.arrow) {
+  margin: 0 0 0 3px;
+  color: #8a95a7;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .chat-link,
+  .topbar-account :deep(.profile) {
+    transition:
+      background-color 0.15s,
+      border-color 0.15s;
+  }
 }
 .mobile-toggle {
   display: none;
@@ -115,6 +212,25 @@ const collapsed = computed(() => tablet.value || sidebarCollapsed.value)
   }
   .main-content {
     min-height: calc(100dvh - 56px);
+  }
+  .breadcrumb > a,
+  .breadcrumb > span[aria-hidden] {
+    display: none;
+  }
+  .topbar-actions {
+    gap: 8px;
+  }
+  .account-divider,
+  .topbar-account :deep(.copy),
+  .topbar-account :deep(.arrow) {
+    display: none;
+  }
+  .topbar-account :deep(.profile) {
+    padding: 4px;
+  }
+  .chat-link {
+    min-height: 40px;
+    padding-inline: 10px;
   }
 }
 </style>

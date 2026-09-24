@@ -23,9 +23,9 @@ import { Cpu } from '@element-plus/icons-vue'
 
 <style scoped>
 .model-page {
-  max-width: 1380px;
+  max-width: 1600px;
   margin: 0 auto;
-  padding: 36px 38px 48px;
+  padding: 29px 30px 45px;
 }
 
 .page-header span {
@@ -37,9 +37,9 @@ import { Cpu } from '@element-plus/icons-vue'
 }
 
 .page-header h1 {
-  margin: 7px 0 0;
+  margin: 0 0 24px;
   color: var(--color-ink);
-  font-size: 28px;
+  font-size: 25px;
   letter-spacing: -0.7px;
 }
 
@@ -57,7 +57,7 @@ import { Cpu } from '@element-plus/icons-vue'
   padding: 24px;
   background: #ffffff;
   border: 1px solid var(--color-line);
-  border-radius: 12px;
+  border-radius: 17px;
 }
 
 .panel-icon {

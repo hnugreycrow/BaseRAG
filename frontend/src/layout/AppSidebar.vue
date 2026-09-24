@@ -1,13 +1,5 @@
 <script setup lang="ts">
-import {
-  ChatDotRound,
-  Collection,
-  Cpu,
-  HomeFilled,
-  Share,
-  User,
-  Connection,
-} from '@element-plus/icons-vue'
+import { Collection, Cpu, HomeFilled, Share, User, Connection } from '@element-plus/icons-vue'
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '../store'
@@ -22,11 +14,10 @@ const activeMenu = computed(() =>
   String(route.meta.activeMenu ?? (route.path.startsWith('/chat') ? '/chat' : route.path)),
 )
 const menuItems = computed(() => [
-  { label: '知识问答', path: '/chat', icon: ChatDotRound },
   ...(auth.user?.role === 'ADMIN'
     ? [
         { label: '工作台', path: '/admin', icon: HomeFilled },
-        { label: '知识库', path: '/admin/knowledge-bases', icon: Collection },
+        { label: '知识库管理', path: '/admin/knowledge-bases', icon: Collection },
         { label: '意图树', path: '/admin/intent-tree', icon: Connection },
         { label: '链路追踪', path: '/admin/observability', icon: Share },
         { label: '模型', path: '/admin/models', icon: Cpu },
@@ -47,6 +38,7 @@ const menuItems = computed(() => [
       ><strong v-if="!collapsed">BaseRAG</strong>
     </RouterLink>
     <nav v-if="mode === 'admin'" class="workspace-nav">
+      <span v-if="!collapsed" class="nav-label">工作空间</span>
       <RouterLink
         v-for="item in menuItems"
         :key="item.path"
@@ -62,7 +54,7 @@ const menuItems = computed(() => [
       </RouterLink>
     </nav>
     <div v-if="$slots.default && !collapsed" class="sidebar-content"><slot /></div>
-    <div class="sidebar-account"><AccountMenu :compact="collapsed" /></div>
+    <div v-if="mode === 'chat'" class="sidebar-account"><AccountMenu :compact="collapsed" /></div>
   </aside>
 </template>
 <style scoped>
@@ -72,7 +64,7 @@ const menuItems = computed(() => [
   display: flex;
   flex-direction: column;
   padding: 26px 16px 16px;
-  background: #fafbfd;
+  background: white;
   border-right: 1px solid var(--color-line);
 }
 .brand {
@@ -83,13 +75,13 @@ const menuItems = computed(() => [
   margin-bottom: 28px;
 }
 .brand strong {
-  font-size: 19px;
-  font-weight: 650;
+  font-size: 23px;
+  font-weight: 750;
   letter-spacing: -0.4px;
 }
 .brand-mark {
-  width: 32px;
-  height: 32px;
+  width: 29px;
+  height: 29px;
   display: grid;
   place-items: center;
   color: white;
@@ -97,6 +89,13 @@ const menuItems = computed(() => [
   border-radius: 9px;
   font-size: 20px;
   flex-shrink: 0;
+  transform: rotate(-8deg);
+}
+.nav-label {
+  padding: 12px 12px 10px;
+  color: #9299a7;
+  font-size: 11px;
+  letter-spacing: 1px;
 }
 .workspace-nav {
   display: grid;
@@ -110,16 +109,27 @@ const menuItems = computed(() => [
   padding: 0 12px;
   border-radius: 8px;
   color: #637086;
-  font-size: 14px;
+  font-size: 13px;
   white-space: nowrap;
 }
 .workspace-nav a:hover {
   background: #f0f3f8;
 }
 .workspace-nav a.active {
+  position: relative;
   background: #eaf0ff;
   color: var(--color-primary);
   font-weight: 600;
+}
+.workspace-nav a.active::before {
+  content: '';
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: -9px;
+  width: 3px;
+  border-radius: 4px;
+  background: var(--color-primary);
 }
 .workspace-nav .el-icon {
   font-size: 18px;

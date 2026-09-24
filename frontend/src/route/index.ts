@@ -50,7 +50,7 @@ export const router = createRouter({
           path: 'knowledge-bases',
           name: 'knowledge-bases',
           component: () => import('../views/KnowledgeBaseView.vue'),
-          meta: { title: '知识库', section: '' },
+          meta: { title: '知识库管理', section: '' },
         },
         {
           path: 'intent-tree',

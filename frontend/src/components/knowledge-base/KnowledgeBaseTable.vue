@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { FolderOpened, MoreFilled } from '@element-plus/icons-vue'
+import { MoreFilled } from '@element-plus/icons-vue'
 
 import type { KnowledgeBase } from '../../api'
 
@@ -37,9 +37,6 @@ function formatDate(value: string) {
       <el-table-column label="知识库" min-width="180">
         <template #default="{ row }">
           <div class="name-cell">
-            <span class="resource-icon"
-              ><el-icon><FolderOpened /></el-icon
-            ></span>
             <div>
               <strong>{{ row.name }}</strong>
             </div>
@@ -49,8 +46,8 @@ function formatDate(value: string) {
       <el-table-column label="向量模型" min-width="180">
         <template #default="{ row }">
           <span v-if="row.embeddingProvider" class="model-name"
-            >{{ row.embeddingProvider }} · {{ row.embeddingModel }} ·
-            {{ row.embeddingDimensions }} 维</span
+            >{{ row.embeddingModel
+            }}<small>{{ row.embeddingProvider }} · {{ row.embeddingDimensions }} 维</small></span
           >
           <span v-else>未绑定</span>
         </template>
@@ -61,10 +58,10 @@ function formatDate(value: string) {
       <el-table-column label="创建时间" width="150">
         <template #default="{ row }">{{ formatDate(row.createdAt) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="110" fixed="right" align="center">
+      <el-table-column label="操作" width="160" fixed="right" align="center">
         <template #default="{ row }">
           <div class="row-actions" @click.stop>
-            <el-button class="open-button" text @click="emit('open', row)">打开</el-button>
+            <el-button class="open-button" text @click="emit('open', row)">管理文档</el-button>
             <el-dropdown
               trigger="click"
               @command="
@@ -99,7 +96,7 @@ function formatDate(value: string) {
       <p v-else>未绑定向量模型</p>
       <p>{{ row.documentCount }} 份文档 · {{ formatDate(row.createdAt) }}</p>
       <div class="card-actions">
-        <el-button text @click="emit('open', row)">打开</el-button
+        <el-button text @click="emit('open', row)">管理文档</el-button
         ><el-button text @click="emit('rename', row)">重命名</el-button
         ><el-button text type="danger" @click="emit('remove', row)">删除</el-button>
       </div>
@@ -119,17 +116,6 @@ function formatDate(value: string) {
   gap: 12px;
 }
 
-.resource-icon {
-  width: 35px;
-  height: 35px;
-  display: grid;
-  flex: 0 0 auto;
-  place-items: center;
-  color: var(--color-primary);
-  background: var(--color-primary-soft);
-  border-radius: 9px;
-}
-
 .name-cell div {
   min-width: 0;
   display: flex;
@@ -146,11 +132,12 @@ function formatDate(value: string) {
   white-space: nowrap;
 }
 
-.name-cell small,
-.model-name {
+.model-name small {
+  display: block;
+  margin-top: 4px;
   color: var(--color-muted);
   font-family: var(--font-data);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .row-actions {

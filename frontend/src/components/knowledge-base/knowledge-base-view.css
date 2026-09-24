@@ -1,7 +1,7 @@
 .knowledge-page {
-  max-width: 1480px;
+  max-width: 1600px;
   margin: 0 auto;
-  padding: 27px 32px 44px;
+  padding: 29px 30px 45px;
 }
 
 .scope-rail {
@@ -72,8 +72,8 @@
   margin: 0;
   overflow: hidden;
   color: var(--color-ink);
-  font-size: 22px;
-  font-weight: 720;
+  font-size: 25px;
+  font-weight: 650;
   letter-spacing: -0.65px;
   text-overflow: ellipsis;
   overflow-wrap: anywhere;
@@ -105,15 +105,15 @@
   overflow: hidden;
   background: #ffffff;
   border: 1px solid var(--color-line);
-  border-radius: 12px;
-  box-shadow: 0 10px 28px rgb(31 46 78 / 3%);
+  border-radius: 17px;
+  box-shadow: 0 2px 2px rgb(24 42 75 / 1%);
 }
 
 .table-toolbar {
-  min-height: 62px;
+  min-height: 74px;
   justify-content: space-between;
   gap: 18px;
-  padding: 12px 16px 12px 20px;
+  padding: 16px 20px;
   border-bottom: 1px solid var(--color-line);
 }
 
@@ -142,7 +142,7 @@
 }
 
 .search-input {
-  width: 240px;
+  width: 310px;
 }
 
 .refresh-button {
@@ -162,12 +162,12 @@
 :deep(.data-table .el-table__header th) {
   height: 43px;
   font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.4px;
+  font-weight: 500;
+  letter-spacing: 0;
 }
 
 :deep(.data-table .el-table__row td) {
-  height: 62px;
+  height: 76px;
 }
 
 :deep(.data-table .clickable-row) {
@@ -186,7 +186,7 @@
 }
 
 :deep(.el-dialog) {
-  border-radius: 12px;
+  border-radius: 17px;
 }
 
 :deep(.el-dialog__title) {
@@ -241,5 +241,34 @@
   .pagination-footer :deep(.el-pagination__sizes),
   .pagination-footer :deep(.el-pagination__jump) {
     display: none;
+  }
+}
+
+.page-description {
+  margin: 8px 0 0;
+  color: var(--color-muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.resource-heading {
+  padding: 18px 21px;
+  border-bottom: 1px solid var(--color-line);
+  color: var(--color-primary);
+  font-size: 13px;
+}
+.resource-heading span {
+  margin-left: 8px;
+  color: var(--color-muted);
+  font-size: 12px;
+}
+:deep(.data-table .el-table__body td.el-table__cell) {
+  border-bottom-style: dashed;
+}
+:deep(.desktop-resource-table) {
+  padding: 0 20px;
+}
+@media (max-width: 600px) {
+  .page-header {
+    flex-wrap: wrap;
   }
 }

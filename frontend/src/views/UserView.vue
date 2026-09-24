@@ -156,7 +156,6 @@ onMounted(load)
         </div>
         <article v-for="user in users" :key="user.id" class="user-row">
           <div class="identity">
-            <span class="avatar">{{ user.displayName.slice(0, 1) }}</span>
             <div>
               <strong>{{ user.displayName }}</strong
               ><small>{{ user.username }}</small>
@@ -255,9 +254,9 @@ onMounted(load)
 </template>
 <style scoped>
 .users-page {
-  max-width: 1480px;
+  max-width: 1600px;
   margin: auto;
-  padding: 32px;
+  padding: 29px 30px 45px;
 }
 header {
   display: flex;
@@ -268,12 +267,12 @@ header {
 }
 h1 {
   margin: 0;
-  font-size: 22px;
+  font-size: 25px;
 }
 .users-panel {
   background: white;
   border: 1px solid var(--color-line);
-  border-radius: 12px;
+  border-radius: 17px;
   overflow: hidden;
 }
 .user-search {
@@ -291,8 +290,8 @@ h1 {
   gap: 16px;
   padding: 18px 24px;
   align-items: center;
-  border-top: 1px solid var(--color-line);
-  font-size: 14px;
+  border-top: 1px dashed var(--color-line);
+  font-size: 13px;
 }
 .table-heading {
   font-size: 12px;
@@ -319,16 +318,6 @@ h1 {
   margin-top: 4px;
   font-size: 12px;
   overflow-wrap: anywhere;
-}
-.avatar {
-  width: 34px;
-  height: 34px;
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: #e6ebf6;
-  color: #4c60a6;
 }
 .el-tag {
   width: fit-content;
@@ -398,7 +387,7 @@ footer {
   }
   .user-role {
     grid-area: 2 / 1;
-    padding-left: 46px;
+    padding-left: 0;
     font-size: 12px;
     color: var(--color-muted);
   }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Files, MoreFilled, RefreshRight, Scissor } from '@element-plus/icons-vue'
+import { MoreFilled, RefreshRight, Scissor } from '@element-plus/icons-vue'
 
 import { ref, watch } from 'vue'
 import type { TableInstance } from 'element-plus'
@@ -114,9 +114,6 @@ function errorMessage(row: KnowledgeDocument) {
       <el-table-column label="文档" min-width="200">
         <template #default="{ row }">
           <div class="document-cell">
-            <span class="document-icon"
-              ><el-icon><Files /></el-icon
-            ></span>
             <div>
               <strong :title="row.name">{{ row.name }}</strong>
               <template v-if="row.errorCode">
@@ -239,17 +236,6 @@ function errorMessage(row: KnowledgeDocument) {
   display: flex;
   align-items: center;
   gap: 12px;
-}
-
-.document-icon {
-  width: 35px;
-  height: 35px;
-  display: grid;
-  flex: 0 0 auto;
-  place-items: center;
-  color: #64738a;
-  background: #f0f3f8;
-  border-radius: 9px;
 }
 
 .document-cell div {
