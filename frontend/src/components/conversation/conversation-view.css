@@ -349,7 +349,6 @@
   white-space: pre;
   background: #202633;
   border-radius: 9px;
-  scrollbar-width: thin;
 }
 .answer-quote {
   margin: 8px 0 13px;
@@ -595,7 +594,6 @@
   font-size: 13px;
   line-height: 1.55;
   box-shadow: none;
-  scrollbar-width: thin;
 }
 .composer-shell :deep(.el-textarea__inner::placeholder) {
   color: #9a9fa8;

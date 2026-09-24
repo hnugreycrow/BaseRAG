@@ -151,6 +151,7 @@ function taskStatusLabel(conversationId: string) {
 .conversation-list {
   min-height: 0;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   flex: 1;
 }
 .conversation-group h2 {
