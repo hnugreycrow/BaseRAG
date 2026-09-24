@@ -49,14 +49,19 @@ describe('chat and management navigation', () => {
       global: { plugins: [pinia, router] },
     })
     const newChat = history.get('.new-chat-button')
-    const management = history.get('.management-link')
+    const management = sidebar.get('.sidebar-account .management-link')
     expect(newChat.text()).toContain('新对话')
     expect(management.text()).toContain('管理后台')
     expect(management.attributes('href')).toBe('/admin')
-    expect(newChat.element.nextElementSibling).toBe(management.element)
+    expect(history.find('.management-link').exists()).toBe(false)
+    expect(newChat.element.nextElementSibling?.classList.contains('search-box')).toBe(true)
     await management.trigger('click')
     await flushPromises()
     expect(router.currentRoute.value.path).toBe('/admin')
+    expect(sidebar.emitted('navigate')).toHaveLength(1)
+    await sidebar.setProps({ collapsed: true })
+    expect(sidebar.get('.management-link').attributes('aria-label')).toBe('管理后台')
+    expect(sidebar.find('.management-link span:not(.el-icon)').exists()).toBe(false)
   })
 
   it('hides management links from a regular user', async () => {

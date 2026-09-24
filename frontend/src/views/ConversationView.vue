@@ -637,7 +637,6 @@ onBeforeUnmount(() => {
           :current-id="currentConversationId"
           :loading="listLoading"
           @new="startNewConversation"
-          @manage="mobileSidebarOpen = false"
           @open="openConversation"
           @rename="editConversation"
           @remove="removeConversation"

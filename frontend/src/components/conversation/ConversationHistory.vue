@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { ChatDotRound, Delete, EditPen, HomeFilled, Plus, Search } from '@element-plus/icons-vue'
+import { ChatDotRound, Delete, EditPen, Plus, Search } from '@element-plus/icons-vue'
 import type { ConversationSummary } from '../../api'
 import { useConversationGenerationStore } from '../../store'
-import { useAuthStore } from '../../store/auth'
 defineProps<{
   groups: { label: string; items: ConversationSummary[] }[]
   currentId: string
@@ -11,13 +10,11 @@ defineProps<{
 const query = defineModel<string>('query', { required: true })
 const emit = defineEmits<{
   new: []
-  manage: []
   open: [id: string]
   rename: [item: ConversationSummary]
   remove: [item: ConversationSummary]
 }>()
 const generationStore = useConversationGenerationStore()
-const auth = useAuthStore()
 function taskStatusLabel(conversationId: string) {
   const phase = generationStore.taskFor(conversationId)?.phase
   if (phase === 'starting' || phase === 'streaming') return '生成中'
@@ -33,16 +30,6 @@ function taskStatusLabel(conversationId: string) {
     <el-icon><Plus /></el-icon>
     新对话
   </button>
-
-  <RouterLink
-    v-if="auth.user?.role === 'ADMIN'"
-    class="management-link"
-    to="/admin"
-    @click="emit('manage')"
-  >
-    <el-icon><HomeFilled /></el-icon>
-    管理后台
-  </RouterLink>
 
   <label class="search-box">
     <el-icon><Search /></el-icon>
@@ -99,6 +86,7 @@ function taskStatusLabel(conversationId: string) {
 </template>
 <style scoped>
 .new-chat-button {
+  flex-shrink: 0;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -110,24 +98,8 @@ function taskStatusLabel(conversationId: string) {
   border-radius: 8px;
   font-size: 13px;
 }
-.management-link {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
-  min-height: 38px;
-  margin-top: 8px;
-  border-radius: 8px;
-  color: #637086;
-  font-size: 13px;
-}
-.management-link:hover,
-.management-link:focus-visible {
-  color: var(--color-primary);
-  background: #f0f3f8;
-}
 .search-box {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -153,11 +125,14 @@ function taskStatusLabel(conversationId: string) {
   overflow-y: auto;
   scrollbar-gutter: stable;
   flex: 1;
+  margin-right: -12px;
+  padding-right: 8px;
+  padding-bottom: 4px;
 }
 .conversation-group h2 {
   font-size: 12px;
   color: var(--color-muted);
-  margin: 16px 8px 8px;
+  margin: 12px 8px 6px;
   font-weight: 500;
 }
 .conversation-item {

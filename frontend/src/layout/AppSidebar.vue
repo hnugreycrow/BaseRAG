@@ -54,7 +54,20 @@ const menuItems = computed(() => [
       </RouterLink>
     </nav>
     <div v-if="$slots.default && !collapsed" class="sidebar-content"><slot /></div>
-    <div v-if="mode === 'chat'" class="sidebar-account"><AccountMenu :compact="collapsed" /></div>
+    <div v-if="mode === 'chat'" class="sidebar-account">
+      <RouterLink
+        v-if="auth.user?.role === 'ADMIN'"
+        class="management-link"
+        to="/admin"
+        title="管理后台"
+        aria-label="管理后台"
+        @click="emit('navigate')"
+      >
+        <el-icon aria-hidden="true"><HomeFilled /></el-icon>
+        <span v-if="!collapsed">管理后台</span>
+      </RouterLink>
+      <AccountMenu :compact="collapsed" />
+    </div>
   </aside>
 </template>
 <style scoped>
@@ -68,6 +81,7 @@ const menuItems = computed(() => [
   border-right: 1px solid var(--color-line);
 }
 .brand {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -151,8 +165,29 @@ const menuItems = computed(() => [
   border-top: 0;
 }
 .sidebar-account {
+  flex-shrink: 0;
   margin-top: auto;
-  padding-top: 18px;
+  padding-top: 8px;
+}
+.management-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  margin-bottom: 8px;
+  padding: 0 8px;
+  border-radius: 8px;
+  color: #637086;
+  font-size: 13px;
+}
+.management-link:hover,
+.management-link:focus-visible {
+  color: var(--color-primary);
+  background: #f0f3f8;
+}
+.is-collapsed .management-link {
+  justify-content: center;
+  padding: 0;
 }
 .sidebar-account :deep(.profile) {
   padding-top: 16px;
