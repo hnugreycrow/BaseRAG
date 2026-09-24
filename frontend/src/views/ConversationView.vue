@@ -701,7 +701,6 @@ onBeforeUnmount(() => {
             </div>
 
             <div v-if="currentAssistant(turn)" class="assistant-row">
-              <div class="assistant-avatar" aria-hidden="true"><span>B</span></div>
               <div class="assistant-content">
                 <div
                   v-if="
