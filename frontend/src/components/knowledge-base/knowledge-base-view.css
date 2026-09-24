@@ -71,7 +71,6 @@
 .title-group h1 {
   margin: 0;
   overflow: hidden;
-  color: var(--color-ink);
   font-size: 25px;
   font-weight: 650;
   letter-spacing: -0.65px;
@@ -244,23 +243,6 @@
   }
 }
 
-.page-description {
-  margin: 8px 0 0;
-  color: var(--color-muted);
-  font-size: 13px;
-  line-height: 1.7;
-}
-.resource-heading {
-  padding: 18px 21px;
-  border-bottom: 1px solid var(--color-line);
-  color: var(--color-primary);
-  font-size: 13px;
-}
-.resource-heading span {
-  margin-left: 8px;
-  color: var(--color-muted);
-  font-size: 12px;
-}
 :deep(.data-table .el-table__body td.el-table__cell) {
   border-bottom-style: dashed;
 }

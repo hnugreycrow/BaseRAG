@@ -120,7 +120,6 @@ function errorMessage(row: KnowledgeDocument) {
                 <small class="error-message">{{ errorMessage(row) }}</small>
                 <small class="error-code">错误代码：{{ row.errorCode }}</small>
               </template>
-              <small v-else>{{ formatDate(row.createdAt) }}</small>
             </div>
           </div>
         </template>

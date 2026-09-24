@@ -109,9 +109,6 @@ function openPreview(row: KnowledgeDocument) {
         />
         <div>
           <h1>{{ level === 'knowledge-bases' ? '知识库管理' : pageTitle }}</h1>
-          <p v-if="level === 'knowledge-bases'" class="page-description">
-            创建知识库，管理文档与向量模型。
-          </p>
           <span
             v-if="selectedKnowledgeBase?.embeddingProvider && level !== 'knowledge-bases'"
             class="model-binding"
@@ -154,16 +151,6 @@ function openPreview(row: KnowledgeDocument) {
     </header>
 
     <section class="table-panel">
-      <div class="resource-heading">
-        {{
-          level === 'knowledge-bases'
-            ? '知识库列表'
-            : level === 'documents'
-              ? '文档管理'
-              : '文档分块'
-        }}
-        <span>{{ loading ? '加载中…' : `${total} 条${query ? '匹配结果' : '记录'}` }}</span>
-      </div>
       <div class="table-toolbar">
         <div v-if="level === 'documents'" class="batch-actions">
           <span v-if="selectedCount > 0">已选 {{ selectedCount }} 篇</span>

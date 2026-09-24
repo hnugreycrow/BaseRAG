@@ -39,7 +39,6 @@
 
 .detail-heading h1 {
   margin: 10px 0 0;
-  color: var(--color-ink);
   font-family: var(--font-data);
   font-size: 25px;
   font-weight: 650;
@@ -587,7 +586,6 @@
 
 .detail-error h1 {
   margin: 15px 0 0;
-  color: var(--color-ink);
   font-size: 20px;
 }
 
