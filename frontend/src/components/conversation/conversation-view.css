@@ -384,30 +384,6 @@
   font-size: 12px;
 }
 
-.reasoning-panel {
-  margin-bottom: 14px;
-  padding: 11px 13px;
-  color: #526080;
-  font-size: 13px;
-  line-height: 1.6;
-  background: #f3f6fc;
-  border: 1px solid #e4eaf7;
-  border-radius: 10px;
-}
-.reasoning-panel summary {
-  cursor: pointer;
-  font-weight: 600;
-}
-.reasoning-panel.is-live strong {
-  font-weight: 600;
-}
-.reasoning-body {
-  max-height: 320px;
-  overflow: auto;
-  margin-top: 8px;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
 .reasoning-unavailable {
   margin-bottom: 10px;
   color: #8b919b;

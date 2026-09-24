@@ -702,21 +702,11 @@ onBeforeUnmount(() => {
 
             <div v-if="currentAssistant(turn)" class="assistant-row">
               <div class="assistant-content">
-                <div
-                  v-if="
-                    currentAssistant(turn)?.reasoningContent &&
-                    ['PENDING', 'STREAMING'].includes(currentAssistant(turn)?.status || '')
-                  "
-                  class="reasoning-panel is-live"
-                  aria-label="正在生成思考内容"
-                >
-                  <strong>深度思考中</strong>
-                  <div class="reasoning-body">{{ currentAssistant(turn)?.reasoningContent }}</div>
-                </div>
                 <ReasoningPanel
-                  v-else-if="currentAssistant(turn)?.reasoningContent"
+                  v-if="currentAssistant(turn)?.reasoningContent"
                   :key="currentAssistant(turn)?.id"
                   :content="currentAssistant(turn)?.reasoningContent || ''"
+                  :live="['PENDING', 'STREAMING'].includes(currentAssistant(turn)?.status || '')"
                 />
                 <div
                   v-else-if="
