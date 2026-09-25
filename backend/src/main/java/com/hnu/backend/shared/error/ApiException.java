@@ -4,13 +4,7 @@ package com.hnu.backend.shared.error;
 public class ApiException extends RuntimeException {
   private final ErrorCode errorCode;
 
-  /**
-   * 创建 API 异常。
-   *
-   * @param code 供客户端识别的稳定错误码
-   * @param message 面向用户的错误信息
-   * @param status 对应的 HTTP 状态
-   */
+  /** 创建使用默认消息的 API 异常。 */
   public ApiException(ErrorCode errorCode) {
     this(errorCode, errorCode.defaultMessage(), null);
   }
