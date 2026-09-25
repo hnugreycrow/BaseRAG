@@ -4,6 +4,7 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '../store'
 import AccountMenu from '../components/auth/AccountMenu.vue'
+const logoUrl = `${import.meta.env.BASE_URL}baserag-logo.svg`
 withDefaults(defineProps<{ collapsed?: boolean; mode?: 'chat' | 'admin' }>(), {
   mode: 'admin',
 })
@@ -33,9 +34,8 @@ const menuItems = computed(() => [
     aria-label="主导航"
   >
     <RouterLink class="brand" to="/chat" aria-label="BaseRAG 首页" @click="emit('navigate')">
-      <span class="brand-mark"
-        ><el-icon><Collection /></el-icon></span
-      ><strong v-if="!collapsed">BaseRAG</strong>
+      <img class="brand-mark" :src="logoUrl" alt="" width="32" height="32" />
+      <strong v-if="!collapsed">BaseRAG</strong>
     </RouterLink>
     <nav v-if="mode === 'admin'" class="workspace-nav">
       <span v-if="!collapsed" class="nav-label">工作空间</span>
@@ -95,16 +95,11 @@ const menuItems = computed(() => [
   letter-spacing: -0.4px;
 }
 .brand-mark {
-  width: 29px;
-  height: 29px;
-  display: grid;
-  place-items: center;
-  color: white;
-  background: var(--color-primary);
-  border-radius: 9px;
-  font-size: 20px;
+  width: 32px;
+  height: 32px;
+  display: block;
+  object-fit: contain;
   flex-shrink: 0;
-  transform: rotate(-8deg);
 }
 .nav-label {
   padding: 12px 12px 10px;
@@ -190,9 +185,7 @@ const menuItems = computed(() => [
   padding: 0;
 }
 .sidebar-account :deep(.profile) {
-  padding-top: 16px;
   border-top: 1px solid var(--color-line);
-  border-radius: 0;
 }
 .is-collapsed {
   padding-inline: 12px;

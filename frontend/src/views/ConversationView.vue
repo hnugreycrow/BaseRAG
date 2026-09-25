@@ -36,6 +36,7 @@ import ReasoningPanel from '../components/conversation/ReasoningPanel.vue'
 import { answerTable } from '../components/conversation/answerTable'
 import { useConversationGenerationStore } from '../store'
 
+const logoUrl = `${import.meta.env.BASE_URL}baserag-logo.svg`
 const route = useRoute()
 const router = useRouter()
 const generationStore = useConversationGenerationStore()
@@ -682,7 +683,7 @@ onBeforeUnmount(() => {
         </div>
 
         <section v-else-if="isEmpty" class="welcome-state">
-          <div class="welcome-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+          <img class="welcome-mark" :src="logoUrl" alt="BaseRAG 助手" width="64" height="64" />
           <h1>向知识库提问</h1>
           <p class="welcome-copy">我会根据已入库资料回答，并标注可核对的来源。</p>
         </section>

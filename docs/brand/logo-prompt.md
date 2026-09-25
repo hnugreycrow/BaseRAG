@@ -1,0 +1,5 @@
+# BaseRAG robot logo
+
+Generated with the built-in image_gen tool.
+
+Use case: logo-brand. Create one polished minimalist monoline robot head avatar logo for BaseRAG, a knowledge retrieval and AI conversation application. Square 1024x1024 composition, single centered symbol occupying 65% of canvas, generous balanced margins. Use the application's existing royal blue #3064FF for all strokes, plain white background. Robot face is a soft rounded rectangle with two short vertical rounded line eyes, a small gentle smile subtly shaped like an open book, and one short centered antenna with a small circular terminal. Small simple rounded side ears. Consistent medium-bold stroke width, rounded caps and joins, extremely clean geometric vector-like contours, friendly intelligent calm expression, strong legibility at 32px. Head only. Flat 2D professional software identity. No text, letters, wordmark, gradients, shadows, 3D, texture, decorative circuitry, extra symbols, mockup, presentation board, or watermark.

@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { ElMessage } from 'element-plus'
-import { Collection } from '@element-plus/icons-vue'
 import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { getErrorMessage } from '../api'
 import { useAuthStore } from '../store'
 
+const logoUrl = `${import.meta.env.BASE_URL}baserag-logo.svg`
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
@@ -40,9 +40,7 @@ async function submit() {
   <main class="login-page">
     <section class="login-card" aria-labelledby="login-title">
       <div class="login-brand">
-        <span class="brand-mark" aria-hidden="true"
-          ><el-icon><Collection /></el-icon
-        ></span>
+        <img class="brand-mark" :src="logoUrl" alt="" width="40" height="40" />
         <strong>BaseRAG</strong>
       </div>
       <h1 id="login-title">登录</h1>
@@ -102,14 +100,11 @@ async function submit() {
 }
 
 .brand-mark {
-  width: 36px;
-  height: 36px;
-  display: grid;
-  place-content: center;
-  background: var(--color-primary);
-  color: white;
-  font-size: 22px;
-  border-radius: 10px;
+  width: 40px;
+  height: 40px;
+  display: block;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 .login-brand {

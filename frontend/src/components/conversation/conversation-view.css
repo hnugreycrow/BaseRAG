@@ -150,29 +150,12 @@
 }
 
 .welcome-mark {
-  position: relative;
-  width: 48px;
-  height: 48px;
-  grid-template-columns: repeat(2, 6px);
-  gap: 4px;
+  display: block;
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+  object-fit: contain;
   margin-bottom: 20px;
-  border-radius: 14px 14px 4px 14px;
-  box-shadow: 0 12px 28px rgb(49 94 231 / 20%);
-}
-.welcome-mark i {
-  width: 6px;
-  height: 6px;
-}
-.welcome-mark::after {
-  position: absolute;
-  right: -3px;
-  bottom: -3px;
-  width: 10px;
-  height: 10px;
-  content: '';
-  background: #50cda0;
-  border: 3px solid #ffffff;
-  border-radius: 50%;
 }
 .welcome-state h1 {
   margin: 0;
@@ -625,16 +608,6 @@
   width: 34px;
   height: 34px;
   border-radius: 6px;
-}
-.welcome-mark {
-  display: grid;
-  grid-template-columns: repeat(2, 6px);
-  place-content: center;
-  background: var(--color-primary);
-}
-.welcome-mark i {
-  background: white;
-  border-radius: 50%;
 }
 @media (max-width: 1000px) {
   .chat-sidebar {
