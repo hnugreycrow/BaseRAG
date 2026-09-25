@@ -50,7 +50,8 @@ public class McpInputSchemaValidator {
         || required.stream().anyMatch(name -> !(name instanceof String))) {
       throw new IllegalArgumentException("MCP input schema required must be a string array");
     }
-    if (!propertyNames.containsAll(required)) {
+    List<String> requiredNames = required.stream().map(String.class::cast).toList();
+    if (!propertyNames.containsAll(requiredNames)) {
       throw new IllegalArgumentException("MCP input schema required references unknown property");
     }
   }
@@ -59,9 +60,15 @@ public class McpInputSchemaValidator {
   public boolean accepts(Map<String, Object> schema, Map<String, Object> arguments) {
     Map<?, ?> properties = (Map<?, ?>) schema.get("properties");
     List<?> required = (List<?>) schema.getOrDefault("required", List.of());
-    if (!arguments.keySet().containsAll(required)
-        || !properties.keySet().containsAll(arguments.keySet())) {
-      return false;
+    for (Object name : required) {
+      if (!(name instanceof String propertyName) || !arguments.containsKey(propertyName)) {
+        return false;
+      }
+    }
+    for (String name : arguments.keySet()) {
+      if (!properties.containsKey(name)) {
+        return false;
+      }
     }
     for (Map.Entry<String, Object> entry : arguments.entrySet()) {
       Map<?, ?> propertySchema = (Map<?, ?>) properties.get(entry.getKey());
@@ -142,7 +149,7 @@ public class McpInputSchemaValidator {
 
   private void requireOnlyKeys(Map<?, ?> value, Set<String> allowed, String location) {
     if (value.keySet().stream()
-        .anyMatch(key -> !(key instanceof String) || !allowed.contains(key))) {
+        .anyMatch(key -> !(key instanceof String name) || !allowed.contains(name))) {
       throw new IllegalArgumentException("Unsupported MCP input schema keyword at " + location);
     }
   }

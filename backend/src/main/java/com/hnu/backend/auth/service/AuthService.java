@@ -72,7 +72,8 @@ public class AuthService {
     limiter.requireAllowed(username, clientAddress);
     User user = userMapper.findByUsername(username);
     String expectedHash = user == null ? dummyHash : user.getPasswordHash();
-    if (!passwords.matches(password == null ? "" : password, expectedHash)) {
+    boolean passwordMatches = passwords.matches(password == null ? "" : password, expectedHash);
+    if (!passwordMatches || user == null) {
       limiter.recordFailure(username, clientAddress);
       throw new ApiException(ErrorCode.INVALID_CREDENTIALS, "用户名或密码错误");
     }

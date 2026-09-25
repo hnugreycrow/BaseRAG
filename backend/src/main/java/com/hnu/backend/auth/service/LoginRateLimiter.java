@@ -8,6 +8,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.HexFormat;
 import java.util.List;
+import org.jspecify.annotations.NonNull;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
@@ -17,7 +18,7 @@ import org.springframework.stereotype.Service;
 public class LoginRateLimiter {
   private static final int MAX_FAILURES = 5;
   private static final Duration WINDOW = Duration.ofMinutes(15);
-  private static final DefaultRedisScript<Long> RECORD_FAILURE =
+  private static final DefaultRedisScript<@NonNull Long> RECORD_FAILURE =
       new DefaultRedisScript<>(
           "local n=redis.call('INCR',KEYS[1]);"
               + "if n==1 then redis.call('EXPIRE',KEYS[1],ARGV[1]); end;"

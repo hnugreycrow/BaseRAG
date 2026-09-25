@@ -26,7 +26,9 @@ public class EmbeddingClient {
       if (this.adapters.putIfAbsent(adapter.protocol(), adapter) != null)
         throw new IllegalArgumentException("Duplicate embedding adapter: " + adapter.protocol());
     }
-    for (AiProperties.ModelTarget target : config.embeddingModels()) adapter(target);
+    if (!config.embeddingModels().isEmpty()) {
+      adapter();
+    }
   }
 
   /**
@@ -50,7 +52,7 @@ public class EmbeddingClient {
   /** 校验默认向量模型是否已完整配置。 */
   public void requireConfigured() {
     AiProperties.ModelTarget target = config.embeddingModel();
-    adapter(target).requireConfigured(target);
+    adapter().requireConfigured(target);
   }
 
   /**
@@ -63,7 +65,7 @@ public class EmbeddingClient {
    */
   public void requireConfigured(String modelId, String provider, String model, int dimensions) {
     AiProperties.ModelTarget target = target(modelId, provider, model, dimensions);
-    adapter(target).requireConfigured(target);
+    adapter().requireConfigured(target);
   }
 
   /**
@@ -124,7 +126,7 @@ public class EmbeddingClient {
    * @return 与输入顺序一致的向量列表
    */
   private List<float[]> embedTarget(AiProperties.ModelTarget target, List<String> texts) {
-    EmbeddingAdapter adapter = adapter(target);
+    EmbeddingAdapter adapter = adapter();
     adapter.requireConfigured(target);
     List<float[]> result = new ArrayList<>();
     int batchSize = config.getEmbedding().getBatchSize();
@@ -136,7 +138,7 @@ public class EmbeddingClient {
     return result;
   }
 
-  private EmbeddingAdapter adapter(AiProperties.ModelTarget target) {
+  private EmbeddingAdapter adapter() {
     EmbeddingAdapter adapter = adapters.get(EmbeddingProtocol.OPENAI_COMPATIBLE);
     if (adapter == null)
       throw new IllegalArgumentException("OpenAI-compatible embedding adapter is unavailable");

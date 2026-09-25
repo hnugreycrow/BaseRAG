@@ -235,11 +235,10 @@ final class DocumentReadService {
   }
 
   /**
-   * 已验证归属的原文件。
+   * 将已验证归属的文档及其最新版本转换为响应。
    *
-   * @param name 下载时使用的文件名
-   * @param mediaType 文件的实际 MIME 类型
-   * @param bytes 文件字节内容
+   * @param document 已验证归属的文档
+   * @return 包含最新版本状态和当前分块数的响应
    */
   DocumentResponse toDocumentResponse(Document document) {
     DocumentVersion version = access.latestVersion(document.getId());

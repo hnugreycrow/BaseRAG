@@ -72,7 +72,7 @@ public class QueryPlanningStage {
         span -> {
           long startedAt = System.nanoTime();
           QueryPlanner.PlanningOutput output = null;
-          String degradedReason = null;
+          String degradedReason;
           String exceptionType = null;
           try {
             int maxSubQuestions = config.getPipeline().getMaxSubQuestions();

@@ -13,6 +13,7 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -65,8 +66,8 @@ public final class RagRunTrace {
    */
   public RagRunTrace(UUID runId, OffsetDateTime startedAt, long startedNanos) {
     this.enabled = true;
-    this.runId = runId;
-    this.startedAt = startedAt;
+    this.runId = Objects.requireNonNull(runId, "runId");
+    this.startedAt = Objects.requireNonNull(startedAt, "startedAt");
     this.startedNanos = startedNanos;
   }
 

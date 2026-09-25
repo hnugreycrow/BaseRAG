@@ -278,7 +278,7 @@ public class MarkdownChunker {
       int end =
           proposed == block.end
               ? proposed
-              : naturalBoundary(text, cursor, proposed, Math.min(cursor + minSize, proposed));
+              : naturalBoundary(text, proposed, Math.min(cursor + minSize, proposed));
       if (end < block.end && Character.isHighSurrogate(text.charAt(end - 1))) end--;
       result.add(new Block(cursor, end, block.heading, block.section, Kind.TEXT));
       if (end == block.end) break;
@@ -473,7 +473,7 @@ public class MarkdownChunker {
         .toArray(String[]::new);
   }
 
-  private static int naturalBoundary(String text, int start, int proposed, int minimum) {
+  private static int naturalBoundary(String text, int proposed, int minimum) {
     for (int i = proposed; i > minimum; i--) {
       char previous = text.charAt(i - 1);
       if (previous == '\n' || SENTENCE_END.indexOf(previous) >= 0) return i;

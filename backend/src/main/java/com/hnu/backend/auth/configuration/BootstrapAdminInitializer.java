@@ -5,6 +5,7 @@ import com.hnu.backend.auth.entity.UserRole;
 import com.hnu.backend.auth.mapper.UserMapper;
 import com.hnu.backend.auth.service.AccountPolicy;
 import java.util.UUID;
+import org.jspecify.annotations.NonNull;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.core.Ordered;
@@ -51,7 +52,7 @@ public class BootstrapAdminInitializer implements ApplicationRunner {
    * @param args 应用启动参数；本初始化器不使用
    */
   @Override
-  public void run(ApplicationArguments args) {
+  public void run(@NonNull ApplicationArguments args) {
     if (userMapper.countRealUsers() > 0) return;
     try {
       tx.executeWithoutResult(ignored -> initialize());

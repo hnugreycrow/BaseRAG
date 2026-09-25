@@ -1,5 +1,6 @@
 package com.hnu.backend.configuration;
 
+import org.jspecify.annotations.NonNull;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.core.env.Environment;
@@ -22,7 +23,7 @@ public class LocalOnly implements ApplicationRunner {
 
   /** {@inheritDoc} */
   @Override
-  public void run(ApplicationArguments args) {
+  public void run(@NonNull ApplicationArguments args) {
     if (!environment.acceptsProfiles(Profiles.of("local"))) {
       throw new IllegalStateException(
           "Stage 1 has no authentication; only the local profile is supported");

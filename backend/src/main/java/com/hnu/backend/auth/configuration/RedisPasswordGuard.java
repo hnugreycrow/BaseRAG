@@ -1,5 +1,6 @@
 package com.hnu.backend.auth.configuration;
 
+import org.jspecify.annotations.NonNull;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -29,7 +30,7 @@ public class RedisPasswordGuard implements ApplicationRunner {
    * @throws IllegalStateException Redis 密码缺失时抛出
    */
   @Override
-  public void run(ApplicationArguments args) {
+  public void run(@NonNull ApplicationArguments args) {
     if (password == null || password.isBlank()) {
       throw new IllegalStateException("必须通过 REDIS_PASSWORD 配置非空 Redis 密码");
     }

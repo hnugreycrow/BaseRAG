@@ -407,7 +407,7 @@ public class ExecutionStage {
   }
 
   /** 根据子问题终态结束其外层阶段。 */
-  private SubQuestionExecution observed(RagRunTrace.Span span, SubQuestionExecution execution) {
+  private void observed(RagRunTrace.Span span, SubQuestionExecution execution) {
     if (execution.status() == SubQuestionExecution.Status.FAILED
         || execution.status() == SubQuestionExecution.Status.TIMEOUT) {
       span.degraded(execution.candidates().size(), execution.reasonCode());
@@ -416,7 +416,6 @@ public class ExecutionStage {
     } else {
       span.success(execution.candidates().size());
     }
-    return execution;
   }
 
   private SubQuestionExecution await(TaskHandle handle, CancellationToken cancellationToken) {

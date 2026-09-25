@@ -21,6 +21,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -98,11 +100,11 @@ public class DocumentController {
    * @return 原文件内容，范围有效时返回部分内容
    */
   @GetMapping("/{documentId}/versions/{versionId}/content")
-  public ResponseEntity<byte[]> content(
+  public ResponseEntity<@NonNull byte[]> content(
       @PathVariable UUID knowledgeBaseId,
       @PathVariable UUID documentId,
       @PathVariable UUID versionId,
-      @RequestHeader(value = HttpHeaders.RANGE, required = false) String range) {
+      @RequestHeader(value = HttpHeaders.RANGE, required = false) @Nullable String range) {
     var file =
         documentService.originalFile(
             managedOwner(knowledgeBaseId), knowledgeBaseId, documentId, versionId);
@@ -111,10 +113,10 @@ public class DocumentController {
 
   /** 返回文档当前版本的原文件；PDF 支持浏览器单段 Range 请求。 */
   @GetMapping("/{documentId}/content")
-  public ResponseEntity<byte[]> currentContent(
+  public ResponseEntity<@NonNull byte[]> currentContent(
       @PathVariable UUID knowledgeBaseId,
       @PathVariable UUID documentId,
-      @RequestHeader(value = HttpHeaders.RANGE, required = false) String range) {
+      @RequestHeader(value = HttpHeaders.RANGE, required = false) @Nullable String range) {
     var file =
         documentService.originalFile(managedOwner(knowledgeBaseId), knowledgeBaseId, documentId);
     return fileResponse(file, range);
@@ -134,8 +136,8 @@ public class DocumentController {
    * @param range 可选 HTTP Range 请求头
    * @return 原文件或部分内容
    */
-  public static ResponseEntity<byte[]> fileResponse(
-      DocumentService.OriginalFile file, String range) {
+  public static ResponseEntity<@NonNull byte[]> fileResponse(
+      DocumentService.OriginalFile file, @Nullable String range) {
     byte[] bytes = file.bytes();
     boolean pdf = "application/pdf".equals(file.mediaType());
     var disposition = pdf ? ContentDisposition.inline() : ContentDisposition.attachment();

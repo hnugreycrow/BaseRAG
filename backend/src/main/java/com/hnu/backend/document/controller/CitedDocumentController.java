@@ -3,6 +3,8 @@ package com.hnu.backend.document.controller;
 import com.hnu.backend.auth.service.CurrentUserService;
 import com.hnu.backend.document.service.CitedDocumentService;
 import java.util.UUID;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
@@ -29,11 +31,11 @@ public class CitedDocumentController {
 
   /** 校验引用并返回原文件；PDF 支持浏览器的单段 Range 请求。 */
   @GetMapping("/{citationId}/content")
-  public ResponseEntity<byte[]> content(
+  public ResponseEntity<@NonNull byte[]> content(
       @PathVariable UUID conversationId,
       @PathVariable UUID messageId,
       @PathVariable String citationId,
-      @RequestHeader(value = HttpHeaders.RANGE, required = false) String range) {
+      @RequestHeader(value = HttpHeaders.RANGE, required = false) @Nullable String range) {
     var file =
         citedDocumentService.originalFile(
             currentUserService.require().getId(), conversationId, messageId, citationId);

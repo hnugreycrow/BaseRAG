@@ -3,6 +3,7 @@ package com.hnu.backend.auth.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -62,6 +63,32 @@ class AdminUserServiceTest {
     assertEquals(UserRole.USER, response.role());
     assertEquals("bcrypt-hash", inserted.get().getPasswordHash());
     verify(userMapper).insert(inserted.get());
+  }
+
+  @Test
+  void rejectsMissingCreateTransactionResult() {
+    doReturn(null).when(tx).execute(any());
+
+    IllegalStateException error =
+        assertThrows(
+            IllegalStateException.class,
+            () -> adminUserService.create("new.user", "新用户", "StrongPass123!", UserRole.USER));
+
+    assertEquals("创建用户事务未返回结果", error.getMessage());
+    verifyNoInteractions(userMapper);
+  }
+
+  @Test
+  void rejectsMissingStatusTransactionResult() {
+    doReturn(null).when(tx).execute(any());
+
+    IllegalStateException error =
+        assertThrows(
+            IllegalStateException.class,
+            () -> adminUserService.setEnabled(UUID.randomUUID(), UUID.randomUUID(), true));
+
+    assertEquals("更新用户状态事务未返回结果", error.getMessage());
+    verifyNoInteractions(userMapper);
   }
 
   @Test

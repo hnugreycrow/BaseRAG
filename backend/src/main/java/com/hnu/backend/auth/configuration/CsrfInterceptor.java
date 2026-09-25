@@ -3,6 +3,7 @@ package com.hnu.backend.auth.configuration;
 import com.hnu.backend.auth.service.CsrfTokenService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.jspecify.annotations.NonNull;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 /** 对有副作用的 API 请求执行双重提交之外的 Session nonce 校验。 */
@@ -28,7 +29,9 @@ final class CsrfInterceptor implements HandlerInterceptor {
    */
   @Override
   public boolean preHandle(
-      HttpServletRequest request, HttpServletResponse response, Object handler) {
+      @NonNull HttpServletRequest request,
+      @NonNull HttpServletResponse response,
+      @NonNull Object handler) {
     String method = request.getMethod();
     if (!("GET".equals(method) || "HEAD".equals(method) || "OPTIONS".equals(method))) {
       csrfTokenService.requireValid(request.getHeader(CsrfTokenService.HEADER));

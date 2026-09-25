@@ -91,7 +91,14 @@ public class AdminUserService {
                 userMapper.insert(user);
                 return user;
               });
-      return AuthService.toResponse(userMapper.find(created.getId()));
+      if (created == null) {
+        throw new IllegalStateException("创建用户事务未返回结果");
+      }
+      User persisted = userMapper.find(created.getId());
+      if (persisted == null) {
+        throw new IllegalStateException("创建用户后未找到持久化记录");
+      }
+      return AuthService.toResponse(persisted);
     } catch (DataIntegrityViolationException error) {
       throw ApiException.conflict(ErrorCode.USERNAME_EXISTS, "用户名已存在");
     }
@@ -128,6 +135,9 @@ public class AdminUserService {
               if (!enabled) sessionRevocationService.revokeAll(targetId);
               return target;
             });
+    if (updated == null) {
+      throw new IllegalStateException("更新用户状态事务未返回结果");
+    }
     return AuthService.toResponse(updated);
   }
 

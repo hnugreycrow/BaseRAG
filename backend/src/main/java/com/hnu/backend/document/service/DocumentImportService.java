@@ -306,7 +306,7 @@ final class DocumentImportService {
                     skipped.add(documentId);
                     continue;
                   }
-                  if (claimVersion(version, true) == 1) {
+                  if (claimVersion(version) == 1) {
                     accepted.add(documentId);
                     continue;
                   }
@@ -327,6 +327,9 @@ final class DocumentImportService {
                 }
                 return new DocumentChunkBatchResponse(List.copyOf(accepted), List.copyOf(skipped));
               });
+      if (result == null) {
+        throw new IllegalStateException("文档入队事务未返回结果");
+      }
     } catch (RuntimeException e) {
       if (reserved.get() > 0) {
         taskSlots.release(reserved.get());
@@ -363,18 +366,16 @@ final class DocumentImportService {
     return result;
   }
 
-  private int claimVersion(DocumentVersion version, boolean allowReady) {
+  private int claimVersion(DocumentVersion version) {
     LambdaUpdateWrapper<DocumentVersion> update =
         new LambdaUpdateWrapper<DocumentVersion>()
             .eq(DocumentVersion::getId, version.getId())
             .in(
                 DocumentVersion::getStatus,
-                allowReady
-                    ? List.of(
-                        DocumentVersionStatus.UPLOADED,
-                        DocumentVersionStatus.FAILED,
-                        DocumentVersionStatus.READY)
-                    : List.of(DocumentVersionStatus.UPLOADED, DocumentVersionStatus.FAILED))
+                List.of(
+                    DocumentVersionStatus.UPLOADED,
+                    DocumentVersionStatus.FAILED,
+                    DocumentVersionStatus.READY))
             .set(DocumentVersion::getStatus, DocumentVersionStatus.PROCESSING)
             .set(DocumentVersion::getErrorCode, null);
     return documentVersionMapper.update(update);
@@ -434,7 +435,7 @@ final class DocumentImportService {
         throw new ApiException(ErrorCode.DOCUMENT_PROCESSING, "文档状态已变化，请稍后刷新");
       }
     } else {
-      int claimed = claimVersion(version, true);
+      int claimed = claimVersion(version);
       if (claimed != 1) {
         throw new ApiException(ErrorCode.DOCUMENT_PROCESSING, "文档正在分块，请稍后刷新");
       }

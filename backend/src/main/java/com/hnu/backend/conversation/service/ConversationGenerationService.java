@@ -207,6 +207,9 @@ public class ConversationGenerationService {
                 conversationMapper.touch(ownerId, conversationId);
                 return new PreparedMessages(user, assistant, trace);
               });
+      if (prepared == null) {
+        throw new IllegalStateException("创建会话消息事务未返回结果");
+      }
       return launch(
           conversation,
           prepared.user(),
@@ -326,6 +329,9 @@ public class ConversationGenerationService {
         throw ApiException.conflict(ErrorCode.RETRY_NOT_ALLOWED, "只能重试失败或已停止的回答");
       }
       Message user = messageMapper.find(ownerId, previous.getReplyToId());
+      if (user == null) {
+        throw ApiException.notFound(ErrorCode.MESSAGE_NOT_FOUND, "原用户消息不存在");
+      }
       PreparedAnswer next =
           tx.execute(
               ignored -> {
@@ -350,6 +356,9 @@ public class ConversationGenerationService {
                 conversationMapper.touch(ownerId, conversationId);
                 return new PreparedAnswer(value, trace);
               });
+      if (next == null) {
+        throw new IllegalStateException("创建回答版本事务未返回结果");
+      }
       return launch(conversation, user, next.assistant(), timing.requestId(), next.trace());
     }
   }
@@ -427,6 +436,9 @@ public class ConversationGenerationService {
    */
   private SseEmitter replayOrConflict(
       Conversation conversation, Message user, Message assistant, String requestId) {
+    if (user == null) {
+      throw ApiException.notFound(ErrorCode.MESSAGE_NOT_FOUND, "原用户消息不存在");
+    }
     if (assistant == null) {
       throw ApiException.conflict(ErrorCode.MESSAGE_INCOMPLETE, "消息尚未创建回答");
     }
@@ -446,8 +458,8 @@ public class ConversationGenerationService {
                   default -> Kind.ERROR;
                 };
             channel.finish(event, terminalPayload(assistant, requestId));
-          } catch (RuntimeException ignored) {
-            channel.completeWithError(ignored);
+          } catch (RuntimeException error) {
+            channel.completeWithError(error);
           }
         });
     return channel.emitter();

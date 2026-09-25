@@ -66,17 +66,25 @@ class DocumentContentTest {
 
     var full = controller.content(kb, document, version, null);
     assertEquals(HttpStatus.OK, full.getStatusCode());
-    assertEquals(10, full.getBody().length);
-    assertTrue(full.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION).startsWith("inline;"));
+    byte[] fullBody = full.getBody();
+    assertNotNull(fullBody);
+    assertEquals(10, fullBody.length);
+    String disposition = full.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION);
+    assertNotNull(disposition);
+    assertTrue(disposition.startsWith("inline;"));
     assertEquals("bytes", full.getHeaders().getFirst(HttpHeaders.ACCEPT_RANGES));
 
     var partial = controller.content(kb, document, version, "bytes=3-5");
     assertEquals(HttpStatus.PARTIAL_CONTENT, partial.getStatusCode());
-    assertEquals("345", new String(partial.getBody(), StandardCharsets.US_ASCII));
+    byte[] partialBody = partial.getBody();
+    assertNotNull(partialBody);
+    assertEquals("345", new String(partialBody, StandardCharsets.US_ASCII));
     assertEquals("bytes 3-5/10", partial.getHeaders().getFirst(HttpHeaders.CONTENT_RANGE));
 
     var suffix = controller.content(kb, document, version, "bytes=-2");
-    assertEquals("89", new String(suffix.getBody(), StandardCharsets.US_ASCII));
+    byte[] suffixBody = suffix.getBody();
+    assertNotNull(suffixBody);
+    assertEquals("89", new String(suffixBody, StandardCharsets.US_ASCII));
     var invalid = controller.content(kb, document, version, "bytes=20-");
     assertEquals(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE, invalid.getStatusCode());
   }
@@ -94,7 +102,9 @@ class DocumentContentTest {
     var response = controller.currentContent(kb, document, "bytes=0-3");
 
     assertEquals(HttpStatus.PARTIAL_CONTENT, response.getStatusCode());
-    assertEquals("0123", new String(response.getBody(), StandardCharsets.US_ASCII));
+    byte[] body = response.getBody();
+    assertNotNull(body);
+    assertEquals("0123", new String(body, StandardCharsets.US_ASCII));
     verify(documentService).originalFile(owner, kb, document);
   }
 }

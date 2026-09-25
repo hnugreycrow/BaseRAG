@@ -8,6 +8,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import cn.dev33.satoken.stp.StpUtil;
@@ -60,6 +61,21 @@ class AuthServiceTest {
     assertEquals("INVALID_CREDENTIALS", error.code());
     verify(passwords).matches("wrong-password", "dummy-hash");
     verify(limiter).recordFailure("alice", "127.0.0.1");
+  }
+
+  @Test
+  void unknownUserCannotAuthenticateEvenWhenDummyHashMatches() {
+    when(passwords.matches("dummy-password-used-for-timing-only", "dummy-hash")).thenReturn(true);
+
+    ApiException error =
+        assertThrows(
+            ApiException.class,
+            () -> authService.login("alice", "dummy-password-used-for-timing-only", "127.0.0.1"));
+
+    assertEquals("INVALID_CREDENTIALS", error.code());
+    verify(passwords).matches("dummy-password-used-for-timing-only", "dummy-hash");
+    verify(limiter).recordFailure("alice", "127.0.0.1");
+    verifyNoInteractions(csrfTokenService);
   }
 
   @Test
