@@ -78,7 +78,9 @@ class MapperXmlTest {
 
   private InputStream resource(String name) throws IOException {
     InputStream input = getClass().getClassLoader().getResourceAsStream(name);
-    if (input == null) throw new IOException("Missing mapper resource: " + name);
+    if (input == null) {
+      throw new IOException("Missing mapper resource: " + name);
+    }
     return input;
   }
 

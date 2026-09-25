@@ -128,7 +128,9 @@ public class ChatAnswerGenerator implements AnswerGenerator {
    * @return 写入生成尝试记录的稳定原因
    */
   private AttemptReason attemptReason(AttemptReason baseReason, String providerReason) {
-    if (baseReason == AttemptReason.CITATION_REPAIR) return baseReason;
+    if (baseReason == AttemptReason.CITATION_REPAIR) {
+      return baseReason;
+    }
     return TraceReasonCatalog.PROVIDER_FALLBACK.code().equals(providerReason)
         ? AttemptReason.PROVIDER_FALLBACK
         : AttemptReason.PRIMARY;

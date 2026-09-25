@@ -6,7 +6,9 @@ import java.util.List;
 public record RoutingPlan(List<IntentRoute> routes) {
   public RoutingPlan {
     routes = List.copyOf(routes);
-    if (routes.isEmpty()) throw new IllegalArgumentException("routes must not be empty");
+    if (routes.isEmpty()) {
+      throw new IllegalArgumentException("routes must not be empty");
+    }
   }
 
   /** 仅当所有子问题都是闲聊时才允许跳过知识检索。 */

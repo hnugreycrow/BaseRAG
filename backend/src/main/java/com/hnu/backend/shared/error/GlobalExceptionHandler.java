@@ -146,7 +146,9 @@ public class GlobalExceptionHandler {
 
   @ExceptionHandler(Exception.class)
   ResponseEntity<@NonNull ApiResponse<Void>> unexpected(Exception e, HttpServletRequest request) {
-    if (isAuthStoreFailure(e)) return redisUnavailableResponse(e, request);
+    if (isAuthStoreFailure(e)) {
+      return redisUnavailableResponse(e, request);
+    }
     // Do not log raw provider responses, SQL values, credentials or document text.
     log.error(
         "requestId={} code={} exceptionType={} safeStack={}",
@@ -168,7 +170,9 @@ public class GlobalExceptionHandler {
     while (current != null) {
       if (current instanceof RedisConnectionFailureException
           || current instanceof RedisSystemException
-          || current instanceof RedisException) return true;
+          || current instanceof RedisException) {
+        return true;
+      }
       current = current.getCause();
     }
     return false;

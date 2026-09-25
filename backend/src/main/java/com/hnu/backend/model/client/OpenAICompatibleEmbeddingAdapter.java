@@ -49,24 +49,38 @@ public class OpenAICompatibleEmbeddingAdapter implements EmbeddingAdapter {
   /** 严格按 index 恢复原输入顺序，并校验数量、维度与向量值。 */
   static List<float[]> parse(JsonNode response, int count, int dimensions) {
     JsonNode data = response.path("data");
-    if (!data.isArray() || data.size() != count) throw invalid();
+    if (!data.isArray() || data.size() != count) {
+      throw invalid();
+    }
     float[][] ordered = new float[count][];
     for (JsonNode row : data) {
       JsonNode index = row.path("index");
-      if (!index.isIntegralNumber() || !index.canConvertToInt()) throw invalid();
+      if (!index.isIntegralNumber() || !index.canConvertToInt()) {
+        throw invalid();
+      }
       int i = index.intValue();
-      if (i < 0 || i >= count || ordered[i] != null) throw invalid();
+      if (i < 0 || i >= count || ordered[i] != null) {
+        throw invalid();
+      }
       JsonNode values = row.path("embedding");
-      if (!values.isArray() || values.size() != dimensions) throw invalid();
+      if (!values.isArray() || values.size() != dimensions) {
+        throw invalid();
+      }
       float[] vector = new float[dimensions];
       boolean nonZero = false;
       for (int j = 0; j < dimensions; j++) {
-        if (!values.get(j).isNumber()) throw invalid();
+        if (!values.get(j).isNumber()) {
+          throw invalid();
+        }
         vector[j] = (float) values.get(j).doubleValue();
-        if (!Float.isFinite(vector[j])) throw invalid();
+        if (!Float.isFinite(vector[j])) {
+          throw invalid();
+        }
         nonZero |= vector[j] != 0;
       }
-      if (!nonZero) throw invalid();
+      if (!nonZero) {
+        throw invalid();
+      }
       ordered[i] = vector;
     }
     return Arrays.asList(ordered);

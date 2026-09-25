@@ -92,7 +92,9 @@ public class AnswerStage {
     }
     control.throwIfCancelled();
     String normalized = Citations.normalize(generation.content());
-    if (!normalized.equals(generation.content())) observer.normalizedAnswer(normalized);
+    if (!normalized.equals(generation.content())) {
+      observer.normalizedAnswer(normalized);
+    }
     control.throwIfCancelled();
     return new AnswerResult(
         normalized,

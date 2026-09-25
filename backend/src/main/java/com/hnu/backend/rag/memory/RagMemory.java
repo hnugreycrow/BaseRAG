@@ -21,8 +21,9 @@ public record RagMemory(
   /** 校验记忆边界并对轮次列表进行防御性复制。 */
   public RagMemory {
     summary = Objects.requireNonNull(summary, "summary");
-    if (summaryRevision < 0)
+    if (summaryRevision < 0) {
       throw new IllegalArgumentException("summaryRevision must not be negative");
+    }
     unsummarizedTurns = List.copyOf(unsummarizedTurns);
     recentTurns = List.copyOf(recentTurns);
     if (loadedThroughTurn < 0) {

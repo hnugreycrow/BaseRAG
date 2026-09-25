@@ -131,7 +131,9 @@ public interface AnswerGenerator {
      * @throws ApiException 请求已取消时抛出
      */
     default void throwIfCancelled() {
-      if (cancelled() || Thread.currentThread().isInterrupted()) throw ApiException.cancelled();
+      if (cancelled() || Thread.currentThread().isInterrupted()) {
+        throw ApiException.cancelled();
+      }
     }
 
     /** 主动关闭底层响应流并把控制器标记为已取消。 */

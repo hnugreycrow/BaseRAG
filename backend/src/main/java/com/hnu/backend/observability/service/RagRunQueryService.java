@@ -151,7 +151,9 @@ public class RagRunQueryService {
   public RagRunResponses.Detail get(User actor, UUID id) {
     UUID ownerScope = actor.getRole() == UserRole.ADMIN ? null : actor.getId();
     RagRunViewRow run = ragRunMapper.findView(id, ownerScope);
-    if (run == null) throw ApiException.notFound(ErrorCode.RAG_RUN_NOT_FOUND, "问答运行记录不存在");
+    if (run == null) {
+      throw ApiException.notFound(ErrorCode.RAG_RUN_NOT_FOUND, "问答运行记录不存在");
+    }
     List<RagStageRun> storedStages = ragStageRunMapper.listByRun(id);
     List<RagRunResponses.Stage> stageResponses = storedStages.stream().map(this::stage).toList();
     LinkedHashSet<String> reasons = new LinkedHashSet<>();
@@ -268,7 +270,9 @@ public class RagRunQueryService {
 
   /** 判断阶段原因是否属于 run 级降级口径。 */
   private boolean isDegradation(RagStageRun value) {
-    if (value.getStatus() == RagStageStatus.DEGRADED) return true;
+    if (value.getStatus() == RagStageStatus.DEGRADED) {
+      return true;
+    }
     return value.getStageName() == RagStageName.ANSWER_MODEL
         && (TraceReasonCatalog.PROVIDER_FALLBACK.code().equals(value.getReasonCode())
             || TraceReasonCatalog.CITATION_REPAIR.code().equals(value.getReasonCode()));

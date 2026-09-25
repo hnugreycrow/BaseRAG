@@ -55,7 +55,9 @@ final class ConversationMessagePresenter {
    * @return 空列表或反序列化后的不可变列表
    */
   private <T> List<T> readArray(String encoded, Class<T[]> type) {
-    if (encoded == null || encoded.isBlank()) return List.of();
+    if (encoded == null || encoded.isBlank()) {
+      return List.of();
+    }
     return List.of(json.readValue(encoded, type));
   }
 }

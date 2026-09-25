@@ -23,8 +23,9 @@ public class EmbeddingClient {
     this.config = config;
     this.adapters = new EnumMap<>(EmbeddingProtocol.class);
     for (EmbeddingAdapter adapter : adapters) {
-      if (this.adapters.putIfAbsent(adapter.protocol(), adapter) != null)
+      if (this.adapters.putIfAbsent(adapter.protocol(), adapter) != null) {
         throw new IllegalArgumentException("Duplicate embedding adapter: " + adapter.protocol());
+      }
     }
     if (!config.embeddingModels().isEmpty()) {
       adapter();
@@ -140,8 +141,9 @@ public class EmbeddingClient {
 
   private EmbeddingAdapter adapter() {
     EmbeddingAdapter adapter = adapters.get(EmbeddingProtocol.OPENAI_COMPATIBLE);
-    if (adapter == null)
+    if (adapter == null) {
       throw new IllegalArgumentException("OpenAI-compatible embedding adapter is unavailable");
+    }
     return adapter;
   }
 

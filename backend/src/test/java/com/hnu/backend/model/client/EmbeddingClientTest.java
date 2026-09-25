@@ -34,10 +34,11 @@ class EmbeddingClientTest {
           "{\"data\":[{\"index\":0,\"embedding\":[1,2]}]}",
           "{\"data\":[{\"index\":-1,\"embedding\":[1]}]}",
           "{\"data\":[{\"index\":0.5,\"embedding\":[1]}]}"
-        })
+        }) {
       assertThrows(
           ApiException.class,
           () -> OpenAICompatibleEmbeddingAdapter.parse(json.readTree(body), 1, 1));
+    }
   }
 
   @Test

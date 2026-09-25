@@ -113,8 +113,9 @@ public class AiProperties {
       throw new IllegalArgumentException("Unknown or incomplete AI candidate: " + id);
     }
     Provider provider = providers.get(candidate.provider);
-    if (provider == null)
+    if (provider == null) {
       throw new IllegalArgumentException("Unknown AI provider: " + candidate.provider);
+    }
     String path =
         switch (capability) {
           case "chat" -> provider.endpoints.chat;
@@ -140,7 +141,9 @@ public class AiProperties {
           || uri.getHost() == null
           || uri.getUserInfo() != null
           || uri.getQuery() != null
-          || uri.getFragment() != null) throw new IllegalArgumentException();
+          || uri.getFragment() != null) {
+        throw new IllegalArgumentException();
+      }
     } catch (IllegalArgumentException e) {
       throw new IllegalArgumentException("Invalid AI provider URL: " + candidate.provider);
     }

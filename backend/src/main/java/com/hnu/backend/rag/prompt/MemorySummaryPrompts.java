@@ -14,7 +14,9 @@ public final class MemorySummaryPrompts {
    * @return 不包含任何会话数据的可信系统指令
    */
   public static String system(int maxChars) {
-    if (maxChars < 1) throw new IllegalArgumentException("maxChars must be positive");
+    if (maxChars < 1) {
+      throw new IllegalArgumentException("maxChars must be positive");
+    }
     return SYSTEM.replace("{summary_max_chars}", Integer.toString(maxChars));
   }
 }

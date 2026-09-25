@@ -30,7 +30,7 @@ public class S3FileStorage implements FileStorage {
     if (storage.getAccessKey().isBlank() || storage.getSecretKey().isBlank()) {
       throw ApiException.bad(ErrorCode.STORAGE_NOT_CONFIGURED, "请配置 RustFS 访问凭据");
     }
-    if (client == null)
+    if (client == null) {
       client =
           S3Client.builder()
               .endpointOverride(URI.create(storage.getEndpoint()))
@@ -45,11 +45,14 @@ public class S3FileStorage implements FileStorage {
                       .socketTimeout(Duration.ofSeconds(30)))
               .overrideConfiguration(c -> c.apiCallTimeout(Duration.ofSeconds(60)))
               .build();
+    }
     if (!bucketReady) {
       try {
         client.headBucket(b -> b.bucket(storage.getBucket()));
       } catch (S3Exception e) {
-        if (e.statusCode() != 404) throw e;
+        if (e.statusCode() != 404) {
+          throw e;
+        }
         try {
           client.createBucket(b -> b.bucket(storage.getBucket()));
         } catch (BucketAlreadyOwnedByYouException ignored) {
@@ -102,6 +105,8 @@ public class S3FileStorage implements FileStorage {
 
   @PreDestroy
   public synchronized void close() {
-    if (client != null) client.close();
+    if (client != null) {
+      client.close();
+    }
   }
 }

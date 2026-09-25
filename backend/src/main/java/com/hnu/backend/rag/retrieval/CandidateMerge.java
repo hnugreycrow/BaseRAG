@@ -21,7 +21,9 @@ public class CandidateMerge {
   public List<EvidenceCandidate> mergeAndSelect(
       List<EvidenceCandidate> input, List<String> orderedSubQuestionIds, int limit) {
     List<EvidenceCandidate> merged = mergeByChunk(input);
-    if (limit <= 0 || merged.size() <= limit) return List.copyOf(merged);
+    if (limit <= 0 || merged.size() <= limit) {
+      return List.copyOf(merged);
+    }
 
     Map<UUID, EvidenceCandidate> selected = new LinkedHashMap<>();
     // 先按问题规划顺序预留一条证据，避免高频问题把较弱但必要的子问题完全挤出候选池。
@@ -30,10 +32,14 @@ public class CandidateMerge {
           .filter(candidate -> candidate.sourceSubQuestionIds().contains(subQuestionId))
           .findFirst()
           .ifPresent(candidate -> selected.putIfAbsent(candidate.candidateId(), candidate));
-      if (selected.size() == limit) break;
+      if (selected.size() == limit) {
+        break;
+      }
     }
     for (EvidenceCandidate candidate : merged) {
-      if (selected.size() == limit) break;
+      if (selected.size() == limit) {
+        break;
+      }
       selected.putIfAbsent(candidate.candidateId(), candidate);
     }
     return selected.values().stream().sorted(ORDER).toList();

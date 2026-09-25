@@ -53,7 +53,9 @@ public class BootstrapAdminInitializer implements ApplicationRunner {
    */
   @Override
   public void run(@NonNull ApplicationArguments args) {
-    if (userMapper.countRealUsers() > 0) return;
+    if (userMapper.countRealUsers() > 0) {
+      return;
+    }
     try {
       tx.executeWithoutResult(ignored -> initialize());
     } catch (RuntimeException error) {
@@ -68,7 +70,9 @@ public class BootstrapAdminInitializer implements ApplicationRunner {
     if (userMapper.lockLegacyOwner() == null) {
       throw new IllegalStateException("遗留所有者不存在，数据库迁移状态不完整");
     }
-    if (userMapper.countRealUsers() > 0) return;
+    if (userMapper.countRealUsers() > 0) {
+      return;
+    }
     String username = policy.username(properties.getUsername());
     String displayName = policy.displayName(properties.getDisplayName());
     String password = policy.password(properties.getPassword());

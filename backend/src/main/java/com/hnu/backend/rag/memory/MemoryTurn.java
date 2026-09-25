@@ -12,7 +12,9 @@ import java.util.Objects;
 public record MemoryTurn(int turnIndex, String userContent, String assistantContent) {
   /** 校验并创建一轮会话记忆。 */
   public MemoryTurn {
-    if (turnIndex < 1) throw new IllegalArgumentException("turnIndex must be positive");
+    if (turnIndex < 1) {
+      throw new IllegalArgumentException("turnIndex must be positive");
+    }
     userContent = Objects.requireNonNull(userContent, "userContent");
     assistantContent = Objects.requireNonNull(assistantContent, "assistantContent");
   }

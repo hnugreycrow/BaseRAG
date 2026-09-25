@@ -161,7 +161,9 @@ public class McpToolExecutor {
 
   private String safeSubstring(String value, int limit) {
     int end = limit;
-    if (end > 0 && Character.isHighSurrogate(value.charAt(end - 1))) end--;
+    if (end > 0 && Character.isHighSurrogate(value.charAt(end - 1))) {
+      end--;
+    }
     return value.substring(0, end);
   }
 

@@ -83,7 +83,9 @@ public class QueryPlanningStage {
             logPlan(trace, originalQuestion, plan, "SUCCESS", null, null, output, startedAt);
             return plan;
           } catch (PlanValidationException e) {
-            if (output != null) span.model(output.modelId(), output.provider(), output.model());
+            if (output != null) {
+              span.model(output.modelId(), output.provider(), output.model());
+            }
             span.degraded(1, e.reason.code());
             degradedReason = e.reason.code();
           } catch (RuntimeException e) {
@@ -119,7 +121,9 @@ public class QueryPlanningStage {
     RagDecisionLog.emit(
         () -> {
           boolean fallback = "FALLBACK".equals(status);
-          if (fallback ? !log.isWarnEnabled() : !log.isInfoEnabled()) return;
+          if (fallback ? !log.isWarnEnabled() : !log.isInfoEnabled()) {
+            return;
+          }
           String message =
               "query planning result runId="
                   + trace.runId()
@@ -152,8 +156,11 @@ public class QueryPlanningStage {
                     + " subQuestionsDetail="
                     + json.writeValueAsString(plan.subQuestions());
           }
-          if (fallback) log.warn(message);
-          else log.info(message);
+          if (fallback) {
+            log.warn(message);
+          } else {
+            log.info(message);
+          }
         });
   }
 
@@ -250,7 +257,9 @@ public class QueryPlanningStage {
    */
   private String stripFence(String rawContent) {
     String content = rawContent.strip();
-    if (!content.startsWith("```")) return content;
+    if (!content.startsWith("```")) {
+      return content;
+    }
     int firstLine = content.indexOf('\n');
     if (firstLine < 0 || !content.endsWith("```")) {
       throw invalid(TraceReasonCatalog.INVALID_JSON);

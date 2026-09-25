@@ -17,7 +17,9 @@ public final class SourceSnapshotDecoder {
    * @return 可由当前前端统一展示的文档来源视图
    */
   public List<SourceResponse> decode(String encoded) {
-    if (encoded == null || encoded.isBlank()) return List.of();
+    if (encoded == null || encoded.isBlank()) {
+      return List.of();
+    }
     JsonNode array = json.readTree(encoded);
     List<SourceResponse> sources = new ArrayList<>();
     for (JsonNode item : array) {

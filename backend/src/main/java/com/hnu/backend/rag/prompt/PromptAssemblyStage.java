@@ -251,7 +251,9 @@ public class PromptAssemblyStage {
     List<String> referenceIds = new ArrayList<>();
     for (SubQuestionExecution result : execution.subQuestions()) {
       ToolObservation observation = result.toolObservation();
-      if (observation == null) continue;
+      if (observation == null) {
+        continue;
+      }
       String referenceId = "T" + (referenceIds.size() + 1);
       LinkedHashMap<String, Object> value = new LinkedHashMap<>();
       value.put("referenceId", referenceId);

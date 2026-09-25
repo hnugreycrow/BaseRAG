@@ -19,6 +19,8 @@ public record RerankDecision(
         && relevanceScore != -1) {
       throw new IllegalArgumentException("Invalid rerank relevance score");
     }
-    if (rank < 1) throw new IllegalArgumentException("Invalid rerank position");
+    if (rank < 1) {
+      throw new IllegalArgumentException("Invalid rerank position");
+    }
   }
 }

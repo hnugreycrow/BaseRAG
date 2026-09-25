@@ -61,9 +61,15 @@ public enum DocumentFormat {
    */
   public static DocumentFormat fromName(String name) {
     String lower = name.toLowerCase(Locale.ROOT);
-    if (lower.endsWith(".md") || lower.endsWith(".markdown")) return MARKDOWN;
-    if (lower.endsWith(".pdf")) return PDF;
-    if (lower.endsWith(".docx")) return DOCX;
+    if (lower.endsWith(".md") || lower.endsWith(".markdown")) {
+      return MARKDOWN;
+    }
+    if (lower.endsWith(".pdf")) {
+      return PDF;
+    }
+    if (lower.endsWith(".docx")) {
+      return DOCX;
+    }
     throw ApiException.bad(ErrorCode.INVALID_FILE, "仅支持 Markdown、PDF 和 DOCX 文件");
   }
 }

@@ -205,7 +205,9 @@ public class ConversationMemoryProvider implements MemoryProvider {
 
   /** 将摘要异常归一化为不包含异常正文的稳定原因码。 */
   private String summaryErrorCode(RuntimeException error) {
-    if (error instanceof ApiException api) return api.code();
+    if (error instanceof ApiException api) {
+      return api.code();
+    }
     if (error instanceof IllegalArgumentException) {
       return TraceReasonCatalog.SUMMARY_INVALID_OUTPUT.code();
     }
@@ -277,6 +279,7 @@ public class ConversationMemoryProvider implements MemoryProvider {
   }
 
   /** 兼容根 Trace 入口；内部显式传递父节点上下文。 */
+  @Override
   public RagMemory load(UUID ownerId, UUID conversationId, int beforeTurn, RagRunTrace trace) {
     return load(ownerId, conversationId, beforeTurn, trace.context());
   }

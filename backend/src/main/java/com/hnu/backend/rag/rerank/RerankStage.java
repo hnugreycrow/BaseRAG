@@ -163,7 +163,9 @@ public class RerankStage {
                     startedAt));
           } catch (ApiException error) {
             if (cancellationToken.cancelled()
-                || ErrorCode.GENERATION_CANCELLED.code().equals(error.code())) throw error;
+                || ErrorCode.GENERATION_CANCELLED.code().equals(error.code())) {
+              throw error;
+            }
             return observed(
                 span,
                 fallback(
@@ -178,7 +180,9 @@ public class RerankStage {
                     output,
                     startedAt));
           } catch (RuntimeException error) {
-            if (cancellationToken.cancelled()) throw ApiException.cancelled();
+            if (cancellationToken.cancelled()) {
+              throw ApiException.cancelled();
+            }
             return observed(
                 span,
                 fallback(
@@ -234,7 +238,9 @@ public class RerankStage {
         throw ApiException.cancelled();
       } catch (ExecutionException error) {
         Throwable cause = error.getCause();
-        if (cause instanceof RuntimeException runtime) throw runtime;
+        if (cause instanceof RuntimeException runtime) {
+          throw runtime;
+        }
         throw new IllegalStateException(cause);
       }
     }
@@ -305,10 +311,14 @@ public class RerankStage {
           .filter(candidate -> candidate.sourceSubQuestionIds().contains(questionId))
           .findFirst()
           .ifPresent(candidate -> selected.putIfAbsent(candidate.candidateId(), true));
-      if (selected.size() == limit) break;
+      if (selected.size() == limit) {
+        break;
+      }
     }
     for (RerankDecision decision : ranking) {
-      if (selected.size() == limit) break;
+      if (selected.size() == limit) {
+        break;
+      }
       selected.putIfAbsent(decision.candidate().candidateId(), true);
     }
     return selected.keySet();

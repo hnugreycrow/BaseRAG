@@ -71,7 +71,9 @@ public class DeduplicationStage {
     for (Group group : groups) {
       String key = keyFunction.apply(group);
       // 空正文不能共享同一个哈希分组，否则所有空分块都会被误判为相同证据。
-      if (keepBlankSeparate && key.isEmpty()) key = "#blank-" + blankIndex++;
+      if (keepBlankSeparate && key.isEmpty()) {
+        key = "#blank-" + blankIndex++;
+      }
       merged.merge(key, group, Group::merge);
     }
     return new ArrayList<>(merged.values());
@@ -96,12 +98,16 @@ public class DeduplicationStage {
   private boolean overlaps(Group left, Group right, double threshold) {
     for (EvidenceCandidate first : left.members) {
       for (EvidenceCandidate second : right.members) {
-        if (!hasAdjacentSource(first.sources(), second.sources())) continue;
+        if (!hasAdjacentSource(first.sources(), second.sources())) {
+          continue;
+        }
         String firstText = normalize(first.content());
         String secondText = normalize(second.content());
         if (!firstText.isEmpty()
             && !secondText.isEmpty()
-            && trigramOverlap(firstText, secondText) >= threshold) return true;
+            && trigramOverlap(firstText, secondText) >= threshold) {
+          return true;
+        }
       }
     }
     return false;
@@ -112,7 +118,9 @@ public class DeduplicationStage {
       for (EvidenceSource second : right) {
         if (first.documentId().equals(second.documentId())
             && first.versionId().equals(second.versionId())
-            && Math.abs(first.chunkIndex() - second.chunkIndex()) == 1) return true;
+            && Math.abs(first.chunkIndex() - second.chunkIndex()) == 1) {
+          return true;
+        }
       }
     }
     return false;
@@ -121,7 +129,9 @@ public class DeduplicationStage {
   private double trigramOverlap(String left, String right) {
     Set<String> leftTrigrams = trigrams(left);
     Set<String> rightTrigrams = trigrams(right);
-    if (leftTrigrams.isEmpty() || rightTrigrams.isEmpty()) return 0;
+    if (leftTrigrams.isEmpty() || rightTrigrams.isEmpty()) {
+      return 0;
+    }
     Set<String> smaller =
         leftTrigrams.size() <= rightTrigrams.size() ? leftTrigrams : rightTrigrams;
     Set<String> larger = smaller == leftTrigrams ? rightTrigrams : leftTrigrams;
@@ -132,7 +142,9 @@ public class DeduplicationStage {
 
   private Set<String> trigrams(String value) {
     int[] codePoints = value.codePoints().toArray();
-    if (codePoints.length < 3) return Set.of();
+    if (codePoints.length < 3) {
+      return Set.of();
+    }
     Set<String> result = new HashSet<>();
     for (int index = 0; index <= codePoints.length - 3; index++) {
       result.add(new String(codePoints, index, 3));
@@ -142,7 +154,9 @@ public class DeduplicationStage {
 
   private String normalizedHash(Group group) {
     String normalized = normalize(group.representative().content());
-    if (normalized.isEmpty()) return "";
+    if (normalized.isEmpty()) {
+      return "";
+    }
     try {
       byte[] digest =
           MessageDigest.getInstance("SHA-256").digest(normalized.getBytes(StandardCharsets.UTF_8));
@@ -235,18 +249,24 @@ public class DeduplicationStage {
 
     private UnionFind(int size) {
       parent = new int[size];
-      for (int index = 0; index < size; index++) parent[index] = index;
+      for (int index = 0; index < size; index++) {
+        parent[index] = index;
+      }
     }
 
     private int root(int value) {
-      if (parent[value] != value) parent[value] = root(parent[value]);
+      if (parent[value] != value) {
+        parent[value] = root(parent[value]);
+      }
       return parent[value];
     }
 
     private void join(int left, int right) {
       int leftRoot = root(left);
       int rightRoot = root(right);
-      if (leftRoot != rightRoot) parent[rightRoot] = leftRoot;
+      if (leftRoot != rightRoot) {
+        parent[rightRoot] = leftRoot;
+      }
     }
   }
 }

@@ -180,7 +180,9 @@ public class RetrievalService {
     long remainingSearchNanos = TimeUnit.MILLISECONDS.toNanos(budget.timeoutMs());
     for (var binding : bindings) {
       cancellationToken.throwIfCancelled();
-      if (remainingSearchNanos <= 0) throw channelTimeout();
+      if (remainingSearchNanos <= 0) {
+        throw channelTimeout();
+      }
       float[] vector =
           trace.execute(
               RagStageName.EMBEDDING,
@@ -422,7 +424,9 @@ public class RetrievalService {
       int recallBudget,
       long remainingNanos,
       CancellationToken cancellationToken) {
-    if (remainingNanos <= 0) throw channelTimeout();
+    if (remainingNanos <= 0) {
+      throw channelTimeout();
+    }
     String literal = EmbeddingClient.literal(vector);
     Future<List<SearchHit>> future =
         searchExecutor.submit(
@@ -450,7 +454,9 @@ public class RetrievalService {
       while (true) {
         cancellationToken.throwIfCancelled();
         long waitNanos = deadline - System.nanoTime();
-        if (waitNanos <= 0) throw channelTimeout();
+        if (waitNanos <= 0) {
+          throw channelTimeout();
+        }
         try {
           return future.get(
               Math.min(waitNanos, TimeUnit.MILLISECONDS.toNanos(CANCELLATION_POLL_MS)),
@@ -464,10 +470,14 @@ public class RetrievalService {
       throw ApiException.cancelled();
     } catch (ExecutionException error) {
       Throwable cause = error.getCause();
-      if (cause instanceof RuntimeException runtime) throw runtime;
+      if (cause instanceof RuntimeException runtime) {
+        throw runtime;
+      }
       throw new IllegalStateException(cause);
     } finally {
-      if (!future.isDone()) future.cancel(true);
+      if (!future.isDone()) {
+        future.cancel(true);
+      }
     }
   }
 

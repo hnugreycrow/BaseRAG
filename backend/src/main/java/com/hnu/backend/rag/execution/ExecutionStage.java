@@ -371,8 +371,11 @@ public class ExecutionStage {
                 observation.status() == ToolObservation.Status.SUCCESS
                     ? SubQuestionExecution.Status.SUCCESS
                     : SubQuestionExecution.Status.FAILED;
-            if (status == SubQuestionExecution.Status.SUCCESS) toolSpan.success(1);
-            else toolSpan.degraded(0, observation.reasonCode());
+            if (status == SubQuestionExecution.Status.SUCCESS) {
+              toolSpan.success(1);
+            } else {
+              toolSpan.degraded(0, observation.reasonCode());
+            }
             return result(
                 question,
                 route,
@@ -383,7 +386,9 @@ public class ExecutionStage {
                 startedAt);
           });
     } catch (ApiException error) {
-      if (ErrorCode.GENERATION_CANCELLED.code().equals(error.code())) throw error;
+      if (ErrorCode.GENERATION_CANCELLED.code().equals(error.code())) {
+        throw error;
+      }
       return result(
           question,
           route,
@@ -427,7 +432,9 @@ public class ExecutionStage {
       cancellationToken.throwIfCancelled();
       try {
         // 先读取已经完成的结果，避免等待前序任务后把早已结束的后序任务误判为超时。
-        if (handle.future().isDone()) return enforceTimeout(handle, handle.future().get());
+        if (handle.future().isDone()) {
+          return enforceTimeout(handle, handle.future().get());
+        }
         long remaining = deadline - System.nanoTime();
         if (remaining <= 0) {
           handle.observation().timeout();
@@ -451,14 +458,18 @@ public class ExecutionStage {
         throw ApiException.cancelled();
       } catch (ExecutionException error) {
         Throwable cause = error.getCause();
-        if (cause instanceof RuntimeException runtime) throw runtime;
+        if (cause instanceof RuntimeException runtime) {
+          throw runtime;
+        }
         throw new IllegalStateException(cause);
       }
     }
   }
 
   private SubQuestionExecution enforceTimeout(TaskHandle handle, SubQuestionExecution completed) {
-    if (handle.timeoutMs() == 0 || completed.elapsedMs() <= handle.timeoutMs()) return completed;
+    if (handle.timeoutMs() == 0 || completed.elapsedMs() <= handle.timeoutMs()) {
+      return completed;
+    }
     return result(
         handle.question(),
         handle.route(),
@@ -503,7 +514,9 @@ public class ExecutionStage {
 
   private int indexOf(List<SubQuestion> questions, String subQuestionId) {
     for (int index = 0; index < questions.size(); index++) {
-      if (questions.get(index).id().equals(subQuestionId)) return index;
+      if (questions.get(index).id().equals(subQuestionId)) {
+        return index;
+      }
     }
     return Integer.MAX_VALUE;
   }

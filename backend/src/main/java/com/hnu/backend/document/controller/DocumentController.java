@@ -148,30 +148,39 @@ public class DocumentController {
                 HttpHeaders.CONTENT_DISPOSITION,
                 disposition.filename(file.name(), StandardCharsets.UTF_8).build().toString())
             .header(HttpHeaders.ACCEPT_RANGES, "bytes");
-    if (range == null) return response.contentLength(bytes.length).body(bytes);
+    if (range == null) {
+      return response.contentLength(bytes.length).body(bytes);
+    }
     // 仅 PDF 支持单段范围；无效范围统一返回 416 和文件总长度。
-    if (!pdf || !range.startsWith("bytes=") || range.indexOf(',') >= 0)
+    if (!pdf || !range.startsWith("bytes=") || range.indexOf(',') >= 0) {
       return ResponseEntity.status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
           .header(HttpHeaders.CONTENT_RANGE, "bytes */" + bytes.length)
           .build();
+    }
     try {
       String spec = range.substring(6);
       int separator = spec.indexOf('-');
-      if (separator < 0 || spec.indexOf('-', separator + 1) >= 0) throw new NumberFormatException();
+      if (separator < 0 || spec.indexOf('-', separator + 1) >= 0) {
+        throw new NumberFormatException();
+      }
       String first = spec.substring(0, separator);
       String last = spec.substring(separator + 1);
       long start;
       long end;
       if (first.isEmpty()) {
         long suffix = Long.parseLong(last);
-        if (suffix <= 0) throw new NumberFormatException();
+        if (suffix <= 0) {
+          throw new NumberFormatException();
+        }
         start = Math.max(0, bytes.length - suffix);
         end = bytes.length - 1L;
       } else {
         start = Long.parseLong(first);
         end = last.isEmpty() ? bytes.length - 1L : Long.parseLong(last);
       }
-      if (start < 0 || start >= bytes.length || end < start) throw new NumberFormatException();
+      if (start < 0 || start >= bytes.length || end < start) {
+        throw new NumberFormatException();
+      }
       end = Math.min(end, bytes.length - 1L);
       return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
           .contentType(MediaType.APPLICATION_PDF)

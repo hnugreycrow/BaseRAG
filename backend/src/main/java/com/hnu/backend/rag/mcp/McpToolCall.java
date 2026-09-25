@@ -9,6 +9,8 @@ public record McpToolCall(String toolName, Map<String, Object> arguments) {
   public McpToolCall {
     toolName = Objects.requireNonNull(toolName, "toolName").strip();
     arguments = JsonValues.immutableObject(arguments == null ? Map.of() : arguments);
-    if (toolName.isEmpty()) throw new IllegalArgumentException("MCP tool name must not be blank");
+    if (toolName.isEmpty()) {
+      throw new IllegalArgumentException("MCP tool name must not be blank");
+    }
   }
 }

@@ -72,10 +72,16 @@ public class RagTraceManager {
    */
   public void finish(RagRunTrace trace, RagRunStatus status, String errorCode) {
     RagRunTrace.RunSnapshot snapshot = trace.finish(status, errorCode);
-    if (snapshot.runId() == null) return;
-    if (ragRunMapper.finish(snapshot) == 0) return;
+    if (snapshot.runId() == null) {
+      return;
+    }
+    if (ragRunMapper.finish(snapshot) == 0) {
+      return;
+    }
     List<RagStageRun> entities = snapshot.stages().stream().map(this::stage).toList();
-    if (!entities.isEmpty()) ragStageRunMapper.insertBatch(entities);
+    if (!entities.isEmpty()) {
+      ragStageRunMapper.insertBatch(entities);
+    }
   }
 
   /**

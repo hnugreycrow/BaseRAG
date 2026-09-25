@@ -59,7 +59,9 @@ public class DocumentCleanupService {
             new LambdaQueryWrapper<DocumentVersion>()
                 .eq(DocumentVersion::getKnowledgeBaseId, knowledgeBaseId)
                 .eq(DocumentVersion::getStatus, DocumentVersionStatus.PROCESSING))
-        > 0) throw ApiException.conflict(ErrorCode.DOCUMENT_PROCESSING, "知识库中有文档正在分块，完成后才能删除");
+        > 0) {
+      throw ApiException.conflict(ErrorCode.DOCUMENT_PROCESSING, "知识库中有文档正在分块，完成后才能删除");
+    }
     documentMapper.update(
         new LambdaUpdateWrapper<Document>()
             .eq(Document::getKnowledgeBaseId, knowledgeBaseId)

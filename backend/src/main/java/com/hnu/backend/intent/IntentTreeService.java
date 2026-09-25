@@ -219,7 +219,9 @@ public class IntentTreeService {
   private boolean enabledPath(IntentNode node, Map<UUID, IntentNode> byId) {
     IntentNode current = node;
     while (current != null) {
-      if (!current.enabled()) return false;
+      if (!current.enabled()) {
+        return false;
+      }
       current = current.parentId() == null ? null : byId.get(current.parentId());
     }
     return true;

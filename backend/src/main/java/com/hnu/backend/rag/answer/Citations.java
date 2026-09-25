@@ -48,7 +48,9 @@ public final class Citations {
     var matcher = KNOWLEDGE_REFERENCE.matcher(prose);
     while (matcher.find()) {
       String id = matcher.group(1);
-      if (!allowed.contains(id)) throw new IllegalArgumentException("Invalid citation");
+      if (!allowed.contains(id)) {
+        throw new IllegalArgumentException("Invalid citation");
+      }
       used.add(id);
     }
     Set<String> allowedTools = new HashSet<>(toolReferenceIds);
@@ -56,7 +58,9 @@ public final class Citations {
     var toolMatcher = TOOL_REFERENCE.matcher(prose);
     while (toolMatcher.find()) {
       String id = toolMatcher.group(1);
-      if (!allowedTools.contains(id)) throw new IllegalArgumentException("Invalid tool reference");
+      if (!allowedTools.contains(id)) {
+        throw new IllegalArgumentException("Invalid tool reference");
+      }
       usedTools.add(id);
     }
     return new Validation(List.copyOf(used), List.copyOf(usedTools));
@@ -89,7 +93,9 @@ public final class Citations {
         appendBlock(result, block);
         result.append(line);
       } else {
-        if (LIST_ITEM.matcher(line.stripTrailing()).matches()) appendBlock(result, block);
+        if (LIST_ITEM.matcher(line.stripTrailing()).matches()) {
+          appendBlock(result, block);
+        }
         block.append(line);
       }
     }
@@ -125,7 +131,9 @@ public final class Citations {
 
   /** 仅移除知识引用；保留块内文字、工具标记和换行。 */
   private static void appendBlock(StringBuilder result, StringBuilder block) {
-    if (block.isEmpty()) return;
+    if (block.isEmpty()) {
+      return;
+    }
     String raw = block.toString();
     var matcher = KNOWLEDGE_REFERENCE.matcher(raw);
     Set<String> references = new LinkedHashSet<>();
@@ -148,14 +156,20 @@ public final class Citations {
     } else {
       String content = clean.toString();
       int tail = content.length();
-      while (tail > 0 && Character.isWhitespace(content.charAt(tail - 1))) tail--;
+      while (tail > 0 && Character.isWhitespace(content.charAt(tail - 1))) {
+        tail--;
+      }
       result.append(content, 0, tail);
       result.append(' ');
-      for (String reference : references) result.append('[').append(reference).append(']');
+      for (String reference : references) {
+        result.append('[').append(reference).append(']');
+      }
       // 被移除引用前的空格不能遗留在块尾；仅保留结构性换行。
       for (int index = tail; index < content.length(); index++) {
         char value = content.charAt(index);
-        if (value == '\n' || value == '\r') result.append(value);
+        if (value == '\n' || value == '\r') {
+          result.append(value);
+        }
       }
     }
     block.setLength(0);

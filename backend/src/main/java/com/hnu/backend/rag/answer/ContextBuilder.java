@@ -111,7 +111,9 @@ public class ContextBuilder {
               content.toString(),
               location(primary),
               locations));
-      if (!evidence.isEmpty()) evidence.append("\n\n");
+      if (!evidence.isEmpty()) {
+        evidence.append("\n\n");
+      }
       evidence.append("<content ref=\"").append(citationId).append("\">\n");
       evidence.append(content).append("\n</content>");
     }

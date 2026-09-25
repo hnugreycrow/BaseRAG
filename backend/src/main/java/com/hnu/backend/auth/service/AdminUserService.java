@@ -132,7 +132,9 @@ public class AdminUserService {
               target.setUpdatedAt(OffsetDateTime.now());
               userMapper.updateById(target);
               // Redis 撤销失败会向上传播，使数据库事务回滚，禁止保留无法撤销的旧会话。
-              if (!enabled) sessionRevocationService.revokeAll(targetId);
+              if (!enabled) {
+                sessionRevocationService.revokeAll(targetId);
+              }
               return target;
             });
     if (updated == null) {
@@ -188,7 +190,9 @@ public class AdminUserService {
    */
   private User require(UUID id) {
     User user = userMapper.find(id);
-    if (user == null) throw ApiException.notFound(ErrorCode.USER_NOT_FOUND, "用户不存在");
+    if (user == null) {
+      throw ApiException.notFound(ErrorCode.USER_NOT_FOUND, "用户不存在");
+    }
     return user;
   }
 }

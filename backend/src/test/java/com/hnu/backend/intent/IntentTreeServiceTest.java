@@ -32,7 +32,9 @@ class IntentTreeServiceTest {
   @Test
   void refusesThirtyThirdEnabledLeaf() {
     List<IntentNodeEntity> existing = new ArrayList<>();
-    for (int index = 0; index < 32; index++) existing.add(systemEntity());
+    for (int index = 0; index < 32; index++) {
+      existing.add(systemEntity());
+    }
     when(intentNodeMapper.selectList(null)).thenReturn(existing);
     when(intentBindingMapper.selectList(null)).thenReturn(List.of());
     IntentNodeRequest request =

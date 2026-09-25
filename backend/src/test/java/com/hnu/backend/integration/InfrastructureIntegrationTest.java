@@ -948,8 +948,9 @@ class InfrastructureIntegrationTest {
         .thenAnswer(
             invocation -> {
               started.countDown();
-              if (!release.await(5, java.util.concurrent.TimeUnit.SECONDS))
+              if (!release.await(5, java.util.concurrent.TimeUnit.SECONDS)) {
                 throw new IllegalStateException("embedding test timed out");
+              }
               List<String> inputs = invocation.getArgument(4);
               return inputs.stream().map(ignored -> new float[] {1, 0}).toList();
             });
@@ -993,8 +994,9 @@ class InfrastructureIntegrationTest {
               maximum.accumulateAndGet(count, Math::max);
               started.countDown();
               try {
-                if (!release.await(10, java.util.concurrent.TimeUnit.SECONDS))
+                if (!release.await(10, java.util.concurrent.TimeUnit.SECONDS)) {
                   throw new IllegalStateException("embedding test timed out");
+                }
                 List<String> inputs = invocation.getArgument(4);
                 return inputs.stream().map(ignored -> new float[] {1, 0}).toList();
               } finally {
@@ -1123,8 +1125,9 @@ class InfrastructureIntegrationTest {
     when(embedding.embed(anyString(), anyString(), anyString(), anyInt(), anyList()))
         .thenAnswer(
             invocation -> {
-              if (!release.await(5, java.util.concurrent.TimeUnit.SECONDS))
+              if (!release.await(5, java.util.concurrent.TimeUnit.SECONDS)) {
                 throw new IllegalStateException("embedding test timed out");
+              }
               List<String> inputs = invocation.getArgument(4);
               return inputs.stream().map(ignored -> new float[] {1, 0}).toList();
             });
@@ -1180,8 +1183,9 @@ class InfrastructureIntegrationTest {
         .thenAnswer(
             invocation -> {
               started.countDown();
-              if (!release.await(5, java.util.concurrent.TimeUnit.SECONDS))
+              if (!release.await(5, java.util.concurrent.TimeUnit.SECONDS)) {
                 throw new IllegalStateException("embedding test timed out");
+              }
               List<String> inputs = invocation.getArgument(4);
               return inputs.stream().map(ignored -> new float[] {1, 0}).toList();
             });
@@ -1261,8 +1265,9 @@ class InfrastructureIntegrationTest {
       throws InterruptedException {
     long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
     while (System.nanoTime() < deadline) {
-      if (expected.equals(documentService.get(ownerId, knowledgeBaseId, documentId).status()))
+      if (expected.equals(documentService.get(ownerId, knowledgeBaseId, documentId).status())) {
         return;
+      }
       Thread.sleep(25);
     }
     fail("Document did not reach status " + expected);

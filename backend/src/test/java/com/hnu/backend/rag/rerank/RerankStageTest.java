@@ -66,7 +66,9 @@ class RerankStageTest {
     CandidateReranker reranker = mock(CandidateReranker.class);
     RagProperties rag = new RagProperties();
     List<EvidenceCandidate> candidates = new ArrayList<>();
-    for (int index = 1; index <= 45; index++) candidates.add(candidate(index, "Q1", 1.0 / index));
+    for (int index = 1; index <= 45; index++) {
+      candidates.add(candidate(index, "Q1", 1.0 / index));
+    }
     when(reranker.rerank(eq("组合问题"), anyList()))
         .thenAnswer(
             invocation -> {

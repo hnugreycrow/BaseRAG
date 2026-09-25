@@ -38,7 +38,9 @@ public class McpToolRegistry {
 
   /** 返回当前特性开关和白名单共同允许暴露给分类模型的只读工具。 */
   public List<McpToolDefinition> availableReadOnlyTools() {
-    if (!config.getPipeline().getMcp().isEnabled()) return List.of();
+    if (!config.getPipeline().getMcp().isEnabled()) {
+      return List.of();
+    }
     Set<String> allowList = Set.copyOf(config.getPipeline().getMcp().getAllowList());
     List<McpToolDefinition> available = new ArrayList<>();
     tools.values().stream()
@@ -51,12 +53,16 @@ public class McpToolRegistry {
 
   /** 对模型建议的工具和参数执行服务端安全检查。 */
   public RoutingCheck check(String toolName, Map<String, Object> arguments) {
-    if (!config.getPipeline().getMcp().isEnabled()) return RoutingCheck.MCP_DISABLED;
+    if (!config.getPipeline().getMcp().isEnabled()) {
+      return RoutingCheck.MCP_DISABLED;
+    }
     RegisteredTool registered = tools.get(toolName);
     if (registered == null || !config.getPipeline().getMcp().getAllowList().contains(toolName)) {
       return RoutingCheck.TOOL_NOT_ALLOWED;
     }
-    if (!registered.definition().readOnly()) return RoutingCheck.TOOL_NOT_READ_ONLY;
+    if (!registered.definition().readOnly()) {
+      return RoutingCheck.TOOL_NOT_READ_ONLY;
+    }
     if (!schemas.accepts(registered.definition().inputSchema(), arguments)) {
       return RoutingCheck.INVALID_ARGUMENTS;
     }

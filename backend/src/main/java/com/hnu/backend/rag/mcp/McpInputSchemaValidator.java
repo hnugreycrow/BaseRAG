@@ -72,7 +72,9 @@ public class McpInputSchemaValidator {
     }
     for (Map.Entry<String, Object> entry : arguments.entrySet()) {
       Map<?, ?> propertySchema = (Map<?, ?>) properties.get(entry.getKey());
-      if (!acceptsValue(propertySchema, entry.getValue())) return false;
+      if (!acceptsValue(propertySchema, entry.getValue())) {
+        return false;
+      }
     }
     return true;
   }
@@ -119,10 +121,16 @@ public class McpInputSchemaValidator {
   }
 
   private boolean acceptsValue(Map<?, ?> schema, Object value) {
-    if (value == null) return false;
+    if (value == null) {
+      return false;
+    }
     String type = (String) schema.get("type");
-    if (!matchesType(type, value)) return false;
-    if (schema.get("enum") instanceof List<?> values && !values.contains(value)) return false;
+    if (!matchesType(type, value)) {
+      return false;
+    }
+    if (schema.get("enum") instanceof List<?> values && !values.contains(value)) {
+      return false;
+    }
     if (value instanceof String text) {
       int length = text.codePointCount(0, text.length());
       if (schema.get("minLength") instanceof Number minimum && length < minimum.longValue()) {
@@ -140,9 +148,13 @@ public class McpInputSchemaValidator {
         return false;
       }
       if (schema.get("minimum") instanceof Number minimum
-          && decimal.compareTo(new BigDecimal(minimum.toString())) < 0) return false;
+          && decimal.compareTo(new BigDecimal(minimum.toString())) < 0) {
+        return false;
+      }
       if (schema.get("maximum") instanceof Number maximum
-          && decimal.compareTo(new BigDecimal(maximum.toString())) > 0) return false;
+          && decimal.compareTo(new BigDecimal(maximum.toString())) > 0) {
+        return false;
+      }
     }
     return true;
   }

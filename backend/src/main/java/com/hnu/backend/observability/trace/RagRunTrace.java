@@ -210,7 +210,9 @@ public final class RagRunTrace {
    * @param mode 执行模式
    */
   public synchronized void executionMode(RagExecutionMode mode) {
-    if (enabled && !sealed) executionMode = mode;
+    if (enabled && !sealed) {
+      executionMode = mode;
+    }
   }
 
   /**
@@ -219,7 +221,9 @@ public final class RagRunTrace {
    * @param count 候选数量
    */
   public synchronized void candidateCount(int count) {
-    if (enabled && !sealed) candidateCount = Math.max(0, count);
+    if (enabled && !sealed) {
+      candidateCount = Math.max(0, count);
+    }
   }
 
   /**
@@ -228,17 +232,23 @@ public final class RagRunTrace {
    * @param count 证据数量
    */
   public synchronized void evidenceCount(int count) {
-    if (enabled && !sealed) evidenceCount = Math.max(0, count);
+    if (enabled && !sealed) {
+      evidenceCount = Math.max(0, count);
+    }
   }
 
   /** 将本次运行标记为发生过可恢复降级。 */
   public synchronized void markDegraded() {
-    if (enabled && !sealed) degraded = true;
+    if (enabled && !sealed) {
+      degraded = true;
+    }
   }
 
   /** 在第一条非空思考或正文增量成功写入 SSE 后记录端到端首内容。 */
   public synchronized void endToEndDeltaSent() {
-    if (enabled && !sealed && firstDeltaNanos == null) firstDeltaNanos = System.nanoTime();
+    if (enabled && !sealed && firstDeltaNanos == null) {
+      firstDeltaNanos = System.nanoTime();
+    }
   }
 
   /**
@@ -250,7 +260,9 @@ public final class RagRunTrace {
    * @param model 模型名称
    */
   public synchronized void finalAnswer(Span span, String modelId, String provider, String model) {
-    if (!enabled || sealed || span == null || span.trace != this) return;
+    if (!enabled || sealed || span == null || span.trace != this) {
+      return;
+    }
     this.finalAnswerSpan = span;
     this.modelId = modelId;
     this.provider = provider;
@@ -265,8 +277,12 @@ public final class RagRunTrace {
    * @return 可一次性持久化的不可变快照
    */
   public synchronized RunSnapshot finish(RagRunStatus status, String errorCode) {
-    if (!enabled) return RunSnapshot.noop();
-    if (terminalSnapshot != null) return terminalSnapshot;
+    if (!enabled) {
+      return RunSnapshot.noop();
+    }
+    if (terminalSnapshot != null) {
+      return terminalSnapshot;
+    }
     long completedNanos = System.nanoTime();
     RagStageStatus unfinishedStatus =
         status == RagRunStatus.CANCELLED ? RagStageStatus.CANCELLED : RagStageStatus.FAILED;
@@ -319,7 +335,9 @@ public final class RagRunTrace {
       String reasonCode,
       String errorCode,
       long completedNanos) {
-    if (span.finished || !openSpans.remove(span)) return;
+    if (span.finished || !openSpans.remove(span)) {
+      return;
+    }
     if (status == RagStageStatus.SUCCESS && span.childDegraded) {
       status = RagStageStatus.DEGRADED;
       if (reasonCode == null) {
@@ -338,7 +356,9 @@ public final class RagRunTrace {
       parent.childDegraded = true;
       parent.childReason = reasonCode != null ? reasonCode : errorCode;
     }
-    if (status == RagStageStatus.DEGRADED) degraded = true;
+    if (status == RagStageStatus.DEGRADED) {
+      degraded = true;
+    }
     stages.add(
         new StageSnapshot(
             span.id,
@@ -544,7 +564,9 @@ public final class RagRunTrace {
      * @return 当前句柄
      */
     public Span model(String modelId, String provider, String model) {
-      if (trace == null) return this;
+      if (trace == null) {
+        return this;
+      }
       synchronized (trace) {
         if (!finished && !trace.sealed) {
           this.modelId = modelId;
@@ -557,7 +579,9 @@ public final class RagRunTrace {
 
     /** 记录模型返回第一段非空内容的时刻。 */
     public void firstContent() {
-      if (trace == null) return;
+      if (trace == null) {
+        return;
+      }
       synchronized (trace) {
         if (!finished && !trace.sealed && firstContentNanos == null) {
           firstContentNanos = System.nanoTime();
@@ -625,7 +649,9 @@ public final class RagRunTrace {
     /** 按指定字段原子结束阶段。 */
     private void finish(
         RagStageStatus status, Integer outputCount, String reasonCode, String errorCode) {
-      if (trace == null) return;
+      if (trace == null) {
+        return;
+      }
       synchronized (trace) {
         if (!trace.sealed) {
           trace.finishSpan(this, status, outputCount, reasonCode, errorCode, System.nanoTime());

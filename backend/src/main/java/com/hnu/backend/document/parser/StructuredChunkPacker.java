@@ -46,7 +46,9 @@ public class StructuredChunkPacker {
       if (!buffer.isEmpty()) {
         // 小于最小长度时允许继续填充到硬上限，否则以目标长度为优先预算。
         int limit = contentLength(buffer) < minSize ? maxSize : targetSize;
-        if (!canJoin(buffer, unit, limit)) flush(buffer, packed);
+        if (!canJoin(buffer, unit, limit)) {
+          flush(buffer, packed);
+        }
       }
       buffer.addAll(unit);
     }
@@ -54,7 +56,9 @@ public class StructuredChunkPacker {
 
     List<Chunk> result = new ArrayList<>();
     for (List<StructuredBlock> group : packed) {
-      if (group.stream().allMatch(block -> block.kind() == Kind.HEADING)) continue;
+      if (group.stream().allMatch(block -> block.kind() == Kind.HEADING)) {
+        continue;
+      }
       result.add(assemble(group));
     }
     return result;
@@ -75,12 +79,16 @@ public class StructuredChunkPacker {
   }
 
   private void addSection(List<StructuredBlock> section, List<List<StructuredBlock>> units) {
-    if (section.isEmpty()) return;
+    if (section.isEmpty()) {
+      return;
+    }
     // 未切开的完整小节先作为候选单元；标题只帮助确定单元，不阻止跨节打包。
     if (contentLength(section) <= maxSize && section.stream().noneMatch(StructuredBlock::piece)) {
       units.add(List.copyOf(section));
     } else {
-      for (StructuredBlock block : section) units.add(List.of(block));
+      for (StructuredBlock block : section) {
+        units.add(List.of(block));
+      }
     }
   }
 
@@ -142,7 +150,9 @@ public class StructuredChunkPacker {
   }
 
   private void flush(List<StructuredBlock> buffer, List<List<StructuredBlock>> result) {
-    if (buffer.isEmpty()) return;
+    if (buffer.isEmpty()) {
+      return;
+    }
     // 末尾短块优先回并到前一块，仍受配置的硬上限和片段规则约束。
     if (!result.isEmpty()
         && contentLength(buffer) < minSize
@@ -206,21 +216,29 @@ public class StructuredChunkPacker {
   private static String withHeading(String body, List<String> outline) {
     List<String> missing = new ArrayList<>();
     for (String level : outline) {
-      if (!body.contains(level)) missing.add(level);
+      if (!body.contains(level)) {
+        missing.add(level);
+      }
     }
     return missing.isEmpty() ? body : String.join(" / ", missing) + "\n" + body;
   }
 
   private static void append(StringBuilder target, String value) {
-    if (value.isBlank()) return;
-    if (!target.isEmpty()) target.append(SEPARATOR);
+    if (value.isBlank()) {
+      return;
+    }
+    if (!target.isEmpty()) {
+      target.append(SEPARATOR);
+    }
     target.append(value);
   }
 
   private static int contentLength(List<StructuredBlock> blocks) {
     int length = 0;
     for (StructuredBlock block : blocks) {
-      if (length != 0) length += SEPARATOR.length();
+      if (length != 0) {
+        length += SEPARATOR.length();
+      }
       length += block.content().length();
     }
     return length;

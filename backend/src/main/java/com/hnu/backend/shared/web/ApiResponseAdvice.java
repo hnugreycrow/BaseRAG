@@ -33,12 +33,16 @@ public class ApiResponseAdvice implements ResponseBodyAdvice<@NonNull Object> {
       @NonNull Class<? extends HttpMessageConverter<?>> selectedConverterType,
       @NonNull ServerHttpRequest request,
       @NonNull ServerHttpResponse response) {
-    if (!MediaType.APPLICATION_JSON.isCompatibleWith(selectedContentType)) return body;
+    if (!MediaType.APPLICATION_JSON.isCompatibleWith(selectedContentType)) {
+      return body;
+    }
     if (response instanceof ServletServerHttpResponse servletResponse
         && servletResponse.getServletResponse().getStatus() == HttpStatus.NO_CONTENT.value()) {
       return body;
     }
-    if (body instanceof ApiResponse<?>) return body;
+    if (body instanceof ApiResponse<?>) {
+      return body;
+    }
     String requestId = null;
     if (request instanceof ServletServerHttpRequest servletRequest) {
       requestId =

@@ -31,6 +31,8 @@ public class RagTraceCleanupService {
   @Scheduled(cron = "${observability.cleanup-cron:0 15 3 * * *}", zone = "UTC")
   public void deleteExpired() {
     int deleted = ragRunMapper.deleteExpired(config.getRetentionDays());
-    if (deleted > 0) log.info("Deleted expired RAG traces count={}", deleted);
+    if (deleted > 0) {
+      log.info("Deleted expired RAG traces count={}", deleted);
+    }
   }
 }

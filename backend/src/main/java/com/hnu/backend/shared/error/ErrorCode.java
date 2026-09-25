@@ -142,7 +142,9 @@ public enum ErrorCode {
 
   /** 兼容读取数据库中已存在的错误码。 */
   public static Optional<ErrorCode> fromCode(String code) {
-    if (code == null || code.isBlank()) return Optional.empty();
+    if (code == null || code.isBlank()) {
+      return Optional.empty();
+    }
     return Arrays.stream(values()).filter(value -> value.code().equals(code)).findFirst();
   }
 

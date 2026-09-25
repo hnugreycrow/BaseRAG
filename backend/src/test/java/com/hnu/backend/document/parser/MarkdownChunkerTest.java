@@ -47,7 +47,9 @@ class MarkdownChunkerTest {
     var pieces = chunker(40, 8).split(source);
     assertEquals(source.substring(32, 40), pieces.get(1).content().substring(0, 8));
     StringBuilder rebuilt = new StringBuilder(pieces.getFirst().content());
-    for (int i = 1; i < pieces.size(); i++) rebuilt.append(pieces.get(i).content().substring(8));
+    for (int i = 1; i < pieces.size(); i++) {
+      rebuilt.append(pieces.get(i).content().substring(8));
+    }
     assertEquals(source, rebuilt.toString());
     assertTrue(
         pieces.stream()
@@ -150,8 +152,9 @@ class MarkdownChunkerTest {
   @Test
   void businessCorpusProducesBoundedTraceableChunks() throws IOException {
     Path corpus = Path.of("..", "evaluation", "datasets", "business-simulation");
-    if (!Files.isDirectory(corpus))
+    if (!Files.isDirectory(corpus)) {
       corpus = Path.of("evaluation", "datasets", "business-simulation");
+    }
     try (var files = Files.list(corpus)) {
       var documents =
           files

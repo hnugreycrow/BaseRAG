@@ -11,6 +11,8 @@ public interface CancellationToken {
 
   /** 在外部取消或工作线程被中断时统一抛出既有的生成取消异常。 */
   default void throwIfCancelled() {
-    if (cancelled() || Thread.currentThread().isInterrupted()) throw ApiException.cancelled();
+    if (cancelled() || Thread.currentThread().isInterrupted()) {
+      throw ApiException.cancelled();
+    }
   }
 }

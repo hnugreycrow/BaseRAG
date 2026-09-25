@@ -36,7 +36,9 @@ public class RerankClient {
     }
     ApiException last = null;
     for (AiProperties.ModelTarget target : config.rerankModels()) {
-      if (Thread.currentThread().isInterrupted()) throw ApiException.cancelled();
+      if (Thread.currentThread().isInterrupted()) {
+        throw ApiException.cancelled();
+      }
       if ("noop".equals(target.provider())) {
         // noop 只表达“使用确定性融合排序”，不能伪造模型相关性分数。
         return Generation.noop(target.id());
@@ -48,7 +50,9 @@ public class RerankClient {
             response -> parse(target, response, documents.size()));
       } catch (ApiException error) {
         if (ErrorCode.REQUEST_INTERRUPTED.code().equals(error.code())
-            || ErrorCode.GENERATION_CANCELLED.code().equals(error.code())) throw error;
+            || ErrorCode.GENERATION_CANCELLED.code().equals(error.code())) {
+          throw error;
+        }
         log.warn(
             "rerank model failed modelId={} provider={} code={}",
             target.id(),
@@ -80,14 +84,17 @@ public class RerankClient {
 
   private Generation parse(AiProperties.ModelTarget target, JsonNode response, int documentCount) {
     JsonNode results = response.path("results");
-    if (!results.isArray() || results.size() != documentCount) throw invalid();
+    if (!results.isArray() || results.size() != documentCount) {
+      throw invalid();
+    }
     List<Rank> ranks = new ArrayList<>();
     Set<Integer> seen = new HashSet<>();
     for (JsonNode item : results) {
       JsonNode indexNode = item.path("index");
       JsonNode scoreNode = item.path("relevance_score");
-      if (!item.isObject() || !indexNode.isIntegralNumber() || !scoreNode.isNumber())
+      if (!item.isObject() || !indexNode.isIntegralNumber() || !scoreNode.isNumber()) {
         throw invalid();
+      }
       int index = indexNode.asInt();
       double score = scoreNode.asDouble();
       if (index < 0
@@ -95,10 +102,14 @@ public class RerankClient {
           || !seen.add(index)
           || !Double.isFinite(score)
           || score < 0
-          || score > 1) throw invalid();
+          || score > 1) {
+        throw invalid();
+      }
       ranks.add(new Rank(index, score));
     }
-    if (seen.size() != documentCount) throw invalid();
+    if (seen.size() != documentCount) {
+      throw invalid();
+    }
     String requestId = response.path("id").isString() ? response.path("id").asString() : null;
     String model =
         response.path("model").isString() ? response.path("model").asString() : target.model();

@@ -91,7 +91,9 @@ public class KnowledgeBaseService {
             Wrappers.<KnowledgeBase>lambdaQuery()
                 .eq(KnowledgeBase::getId, id)
                 .eq(KnowledgeBase::getOwnerId, ownerId));
-    if (kb == null) throw new ApiException(ErrorCode.KNOWLEDGE_BASE_NOT_FOUND, "知识库不存在");
+    if (kb == null) {
+      throw new ApiException(ErrorCode.KNOWLEDGE_BASE_NOT_FOUND, "知识库不存在");
+    }
     return kb;
   }
 
@@ -103,7 +105,9 @@ public class KnowledgeBaseService {
    */
   public KnowledgeBase requireAdminOwned(UUID id) {
     KnowledgeBase kb = knowledgeBaseMapper.findAdminOwned(id);
-    if (kb == null) throw new ApiException(ErrorCode.KNOWLEDGE_BASE_NOT_FOUND, "知识库不存在");
+    if (kb == null) {
+      throw new ApiException(ErrorCode.KNOWLEDGE_BASE_NOT_FOUND, "知识库不存在");
+    }
     return kb;
   }
 
@@ -218,8 +222,9 @@ public class KnowledgeBaseService {
    */
   private String normalizeName(String rawName) {
     String name = rawName == null ? "" : rawName.trim();
-    if (name.isEmpty() || name.length() > 200 || name.chars().anyMatch(Character::isISOControl))
+    if (name.isEmpty() || name.length() > 200 || name.chars().anyMatch(Character::isISOControl)) {
       throw ApiException.bad(ErrorCode.INVALID_KNOWLEDGE_BASE_NAME, "知识库名称应为 1 到 200 个有效字符");
+    }
     return name;
   }
 
@@ -230,7 +235,9 @@ public class KnowledgeBaseService {
    * @return 搜索词；空白输入返回 {@code null}
    */
   private String normalizeQuery(String rawQuery) {
-    if (rawQuery == null || rawQuery.isBlank()) return null;
+    if (rawQuery == null || rawQuery.isBlank()) {
+      return null;
+    }
     return rawQuery.trim();
   }
 
@@ -242,8 +249,9 @@ public class KnowledgeBaseService {
    * @return 行偏移
    */
   private long offset(int page, int pageSize) {
-    if (page < 1 || pageSize < 1 || pageSize > 100)
+    if (page < 1 || pageSize < 1 || pageSize > 100) {
       throw ApiException.bad(ErrorCode.INVALID_PAGE, "页码应大于 0，每页数量应为 1 到 100");
+    }
     return (long) (page - 1) * pageSize;
   }
 
@@ -273,8 +281,9 @@ public class KnowledgeBaseService {
     }
     if (!configured.provider().equals(provider)
         || !configured.model().equals(model)
-        || configured.dimension() != dimensions)
+        || configured.dimension() != dimensions) {
       throw new ApiException(ErrorCode.EMBEDDING_BINDING_CHANGED, "向量模型配置已变更，请恢复原供应商、模型和维度");
+    }
   }
 
   /**
@@ -291,7 +300,9 @@ public class KnowledgeBaseService {
   public KnowledgeBase lockAndBindModel(
       UUID ownerId, UUID id, String modelId, String provider, String model, int dimensions) {
     KnowledgeBase kb = knowledgeBaseMapper.lock(ownerId, id);
-    if (kb == null) throw new ApiException(ErrorCode.KNOWLEDGE_BASE_NOT_FOUND, "知识库不存在");
+    if (kb == null) {
+      throw new ApiException(ErrorCode.KNOWLEDGE_BASE_NOT_FOUND, "知识库不存在");
+    }
     checkModel(kb, modelId, provider, model, dimensions);
     if (kb.getEmbeddingModel() == null) {
       kb.setEmbeddingModelId(modelId);
@@ -322,7 +333,8 @@ public class KnowledgeBaseService {
   }
 
   private void requireAvailable(AiProperties.ModelTarget model) {
-    if (model.apiKey() == null || model.apiKey().isBlank())
+    if (model.apiKey() == null || model.apiKey().isBlank()) {
       throw ApiException.bad(ErrorCode.MODEL_NOT_CONFIGURED, "所选向量模型未配置 API Key");
+    }
   }
 }

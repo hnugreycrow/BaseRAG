@@ -17,7 +17,9 @@ public final class SafeExceptionLog {
 
   private static void append(
       StringBuilder output, Throwable error, String prefix, Set<Throwable> visited) {
-    if (error == null) return;
+    if (error == null) {
+      return;
+    }
     if (!visited.add(error)) {
       output.append(prefix).append("[circular cause]");
       return;

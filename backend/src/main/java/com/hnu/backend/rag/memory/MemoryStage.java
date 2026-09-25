@@ -31,7 +31,9 @@ public final class MemoryStage {
   public RagMemory execute(UUID ownerId, UUID conversationId, int beforeTurn) {
     Objects.requireNonNull(ownerId, "ownerId");
     Objects.requireNonNull(conversationId, "conversationId");
-    if (beforeTurn < 1) throw new IllegalArgumentException("beforeTurn must be positive");
+    if (beforeTurn < 1) {
+      throw new IllegalArgumentException("beforeTurn must be positive");
+    }
     return Objects.requireNonNull(
         provider.load(ownerId, conversationId, beforeTurn), "MemoryProvider returned null");
   }
@@ -48,7 +50,9 @@ public final class MemoryStage {
   public RagMemory execute(UUID ownerId, UUID conversationId, int beforeTurn, TraceContext trace) {
     Objects.requireNonNull(ownerId, "ownerId");
     Objects.requireNonNull(conversationId, "conversationId");
-    if (beforeTurn < 1) throw new IllegalArgumentException("beforeTurn must be positive");
+    if (beforeTurn < 1) {
+      throw new IllegalArgumentException("beforeTurn must be positive");
+    }
     return Objects.requireNonNull(
         provider.load(ownerId, conversationId, beforeTurn, trace), "MemoryProvider returned null");
   }

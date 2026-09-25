@@ -110,7 +110,9 @@ public class MarkdownChunker {
     String text = markdown.replace("\r\n", "\n").replace('\r', '\n');
     String[] lines = text.split("\n", -1);
     int[] offsets = new int[lines.length];
-    for (int i = 1; i < lines.length; i++) offsets[i] = offsets[i - 1] + lines[i - 1].length() + 1;
+    for (int i = 1; i < lines.length; i++) {
+      offsets[i] = offsets[i - 1] + lines[i - 1].length() + 1;
+    }
     List<Block> blocks = new ArrayList<>();
     // 每次遇到标题都记录真实的层级路径；打包器据此计算跨小节块的公共标题。
     List<List<String>> sectionPaths = new ArrayList<>();
@@ -136,7 +138,9 @@ public class MarkdownChunker {
       }
       var heading = HEADING.matcher(lines[i]);
       if (heading.matches()) {
-        if (start >= 0) blocks.add(new Block(start, offsets[i] - 1, path, section, Kind.TEXT));
+        if (start >= 0) {
+          blocks.add(new Block(start, offsets[i] - 1, path, section, Kind.TEXT));
+        }
         section++;
         int level = heading.group(1).length() - 1;
         headings[level] = heading.group(2);
@@ -148,18 +152,25 @@ public class MarkdownChunker {
             new Block(offsets[i], offsets[i] + lines[i].length(), path, section, Kind.HEADING));
         start = -1;
       } else if (fenceMatch.matches()) {
-        if (start >= 0) blocks.add(new Block(start, offsets[i] - 1, path, section, Kind.TEXT));
+        if (start >= 0) {
+          blocks.add(new Block(start, offsets[i] - 1, path, section, Kind.TEXT));
+        }
         start = offsets[i];
         fence = fenceMatch.group(1).charAt(0);
         fenceLength = fenceMatch.group(1).length();
       } else if (lines[i].isBlank()) {
-        if (start >= 0) blocks.add(new Block(start, offsets[i] - 1, path, section, Kind.TEXT));
+        if (start >= 0) {
+          blocks.add(new Block(start, offsets[i] - 1, path, section, Kind.TEXT));
+        }
         start = -1;
-      } else if (start < 0) start = offsets[i];
+      } else if (start < 0) {
+        start = offsets[i];
+      }
     }
-    if (start >= 0)
+    if (start >= 0) {
       blocks.add(
           new Block(start, text.length(), path, section, fence == 0 ? Kind.TEXT : Kind.CODE));
+    }
 
     blocks = structure(blocks, lines, offsets);
 
@@ -211,20 +222,26 @@ public class MarkdownChunker {
         if (isTableStart(lines, cursor, last)) {
           kind = Kind.TABLE;
           cursor += 2;
-          while (cursor <= last && lines[cursor].contains("|")) cursor++;
+          while (cursor <= last && lines[cursor].contains("|")) {
+            cursor++;
+          }
         } else if (LIST_MARKER.matcher(lines[cursor]).matches()) {
           kind = Kind.LIST;
           cursor++;
           while (cursor <= last
               && (LIST_MARKER.matcher(lines[cursor]).matches()
                   || lines[cursor].startsWith("  ")
-                  || lines[cursor].startsWith("\t"))) cursor++;
+                  || lines[cursor].startsWith("\t"))) {
+            cursor++;
+          }
         } else {
           kind = Kind.TEXT;
           cursor++;
           while (cursor <= last
               && !isTableStart(lines, cursor, last)
-              && !LIST_MARKER.matcher(lines[cursor]).matches()) cursor++;
+              && !LIST_MARKER.matcher(lines[cursor]).matches()) {
+            cursor++;
+          }
         }
         int start = offsets[begin];
         int end = offsets[cursor - 1] + lines[cursor - 1].length();
@@ -249,7 +266,9 @@ public class MarkdownChunker {
           case TABLE -> splitTable(block, text, offsets);
           case LIST -> splitList(block, text, offsets);
         };
-    if (pieces.size() <= 1) return pieces;
+    if (pieces.size() <= 1) {
+      return pieces;
+    }
     // 同一原子块被切成多个片段后显式标记，防止打包阶段消除结构边界或文本重叠。
     return pieces.stream()
         .map(
@@ -271,7 +290,9 @@ public class MarkdownChunker {
   }
 
   private List<Block> splitText(Block block, String text, int overlapChars) {
-    if (block.end - block.start <= targetSize) return List.of(block);
+    if (block.end - block.start <= targetSize) {
+      return List.of(block);
+    }
     List<Block> result = new ArrayList<>();
     for (int cursor = block.start; cursor < block.end; ) {
       int proposed = Math.min(cursor + targetSize, block.end);
@@ -279,27 +300,39 @@ public class MarkdownChunker {
           proposed == block.end
               ? proposed
               : naturalBoundary(text, proposed, Math.min(cursor + minSize, proposed));
-      if (end < block.end && Character.isHighSurrogate(text.charAt(end - 1))) end--;
+      if (end < block.end && Character.isHighSurrogate(text.charAt(end - 1))) {
+        end--;
+      }
       result.add(new Block(cursor, end, block.heading, block.section, Kind.TEXT));
-      if (end == block.end) break;
+      if (end == block.end) {
+        break;
+      }
       int next = Math.max(cursor + 1, end - overlapChars);
-      if (next < text.length() && Character.isLowSurrogate(text.charAt(next))) next++;
+      if (next < text.length() && Character.isLowSurrogate(text.charAt(next))) {
+        next++;
+      }
       cursor = next;
     }
     return result;
   }
 
   private List<Block> splitList(Block block, String text, int[] offsets) {
-    if (block.end - block.start <= targetSize) return List.of(block);
+    if (block.end - block.start <= targetSize) {
+      return List.of(block);
+    }
     List<Block> result = new ArrayList<>();
     int first = lineAt(offsets, block.start) - 1;
     int last = lineAt(offsets, block.end - 1) - 1;
     List<Integer> itemLines = new ArrayList<>();
     for (int line = first; line <= last; line++) {
       int end = line < last ? offsets[line + 1] - 1 : block.end;
-      if (LIST_MARKER.matcher(text.substring(offsets[line], end)).matches()) itemLines.add(line);
+      if (LIST_MARKER.matcher(text.substring(offsets[line], end)).matches()) {
+        itemLines.add(line);
+      }
     }
-    if (itemLines.isEmpty()) return splitText(block, text, 0);
+    if (itemLines.isEmpty()) {
+      return splitText(block, text, 0);
+    }
     int groupStart = itemLines.getFirst();
     for (int i = 1; i < itemLines.size(); i++) {
       int next = itemLines.get(i);
@@ -347,12 +380,15 @@ public class MarkdownChunker {
   }
 
   private List<Block> splitCode(Block block, String text) {
-    if (block.end - block.start <= maxSize) return List.of(block);
+    if (block.end - block.start <= maxSize) {
+      return List.of(block);
+    }
     String raw = text.substring(block.start, block.end);
     int firstNewline = raw.indexOf('\n');
-    if (firstNewline < 0)
+    if (firstNewline < 0) {
       return splitText(
           new Block(block.start, block.end, block.heading, block.section, Kind.TEXT), text, 0);
+    }
     String opening = raw.substring(0, firstNewline);
     var fenceMatch = FENCE.matcher(opening);
     String marker = fenceMatch.matches() ? fenceMatch.group(1) : "```";
@@ -362,9 +398,10 @@ public class MarkdownChunker {
     String closing = closed ? tail : marker;
     int bodyStart = block.start + firstNewline + 1;
     int bodyEnd = closed ? block.start + lastNewline : block.end;
-    if (bodyStart >= bodyEnd || opening.length() + closing.length() + 4 >= maxSize)
+    if (bodyStart >= bodyEnd || opening.length() + closing.length() + 4 >= maxSize) {
       return splitText(
           new Block(block.start, block.end, block.heading, block.section, Kind.TEXT), text, 0);
+    }
     int budget =
         Math.max(2, Math.min(targetSize, maxSize) - opening.length() - closing.length() - 2);
     List<Block> result = new ArrayList<>();
@@ -373,9 +410,13 @@ public class MarkdownChunker {
       int end = proposed;
       if (end < bodyEnd) {
         int newline = text.lastIndexOf('\n', end - 1);
-        if (newline >= cursor + Math.min(16, budget / 2)) end = newline;
+        if (newline >= cursor + Math.min(16, budget / 2)) {
+          end = newline;
+        }
       }
-      if (end < bodyEnd && Character.isHighSurrogate(text.charAt(end - 1))) end--;
+      if (end < bodyEnd && Character.isHighSurrogate(text.charAt(end - 1))) {
+        end--;
+      }
       String body = text.substring(cursor, end);
       // 每个代码续块补可读围栏；偏移仍取该片段实际覆盖的代码行。
       result.add(
@@ -395,12 +436,15 @@ public class MarkdownChunker {
   private List<Block> splitTable(Block block, String text, int[] offsets) {
     String raw = text.substring(block.start, block.end);
     String[] rows = raw.split("\n", -1);
-    if (rows.length < 3) return List.of(block);
+    if (rows.length < 3) {
+      return List.of(block);
+    }
     String header = rows[0];
     String delimiter = rows[1];
-    if (header.length() + delimiter.length() + 5 >= maxSize)
+    if (header.length() + delimiter.length() + 5 >= maxSize) {
       return splitText(
           new Block(block.start, block.end, block.heading, block.section, Kind.TEXT), text, 0);
+    }
     String[] columns = cells(header);
     List<Block> result = new ArrayList<>();
     int row = 2;
@@ -419,7 +463,9 @@ public class MarkdownChunker {
         String[] values = cells(rows[i]);
         for (int c = 0; c < Math.min(columns.length, values.length); c++) {
           if (!values[c].isBlank()) {
-            if (!search.isEmpty()) search.append("; ");
+            if (!search.isEmpty()) {
+              search.append("; ");
+            }
             search.append(columns[c]).append(": ").append(values[c]);
           }
         }
@@ -435,7 +481,9 @@ public class MarkdownChunker {
         for (int cursor = 0; cursor < longRow.length(); ) {
           int sliceEnd = Math.min(cursor + budget, longRow.length());
           if (sliceEnd < longRow.length()
-              && Character.isHighSurrogate(longRow.charAt(sliceEnd - 1))) sliceEnd--;
+              && Character.isHighSurrogate(longRow.charAt(sliceEnd - 1))) {
+            sliceEnd--;
+          }
           String fragment = longRow.substring(cursor, sliceEnd);
           result.add(
               new Block(
@@ -466,8 +514,12 @@ public class MarkdownChunker {
 
   private static String[] cells(String row) {
     String trimmed = row.strip();
-    if (trimmed.startsWith("|")) trimmed = trimmed.substring(1);
-    if (trimmed.endsWith("|")) trimmed = trimmed.substring(0, trimmed.length() - 1);
+    if (trimmed.startsWith("|")) {
+      trimmed = trimmed.substring(1);
+    }
+    if (trimmed.endsWith("|")) {
+      trimmed = trimmed.substring(0, trimmed.length() - 1);
+    }
     return Arrays.stream(trimmed.split("(?<!\\\\)\\|", -1))
         .map(String::strip)
         .toArray(String[]::new);
@@ -476,10 +528,14 @@ public class MarkdownChunker {
   private static int naturalBoundary(String text, int proposed, int minimum) {
     for (int i = proposed; i > minimum; i--) {
       char previous = text.charAt(i - 1);
-      if (previous == '\n' || SENTENCE_END.indexOf(previous) >= 0) return i;
+      if (previous == '\n' || SENTENCE_END.indexOf(previous) >= 0) {
+        return i;
+      }
     }
     for (int i = proposed; i > minimum; i--) {
-      if (Character.isWhitespace(text.charAt(i - 1))) return i;
+      if (Character.isWhitespace(text.charAt(i - 1))) {
+        return i;
+      }
     }
     return proposed;
   }
