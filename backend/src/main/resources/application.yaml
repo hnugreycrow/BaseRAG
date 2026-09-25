@@ -55,8 +55,9 @@ mybatis-plus:
     banner: false
 
 ai:
-  # Shared HTTP boundary for embedding and rerank requests; neither has a stage-specific timeout.
-  request-timeout-ms: 60000
+  # 单次模型连接上限；Embedding 与重排共用单次请求上限，不代表阶段总预算。
+  connect-timeout-ms: 5000
+  request-timeout-ms: 30000
   providers:
     bailian:
       url: https://llm-vu96ssm0fo582moc.cn-beijing.maas.aliyuncs.com
@@ -79,7 +80,8 @@ ai:
   selection:
     failure-threshold: 2
     open-duration-ms: 30000
-    max-retries: 2
+    # 首次失败后最多再尝试一次，之后按候选顺序降级。
+    max-retries: 1
 
   stream:
     message-chunk-size: 1
@@ -146,7 +148,7 @@ rag:
 
     routing:
       confidence-threshold: 0.65
-      timeout-ms: 5000
+      timeout-ms: 10000
 
     mcp:
       enabled: false

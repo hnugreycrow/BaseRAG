@@ -79,7 +79,7 @@ public class RagProperties {
   @Data
   public static class Routing {
     private double confidenceThreshold = 0.70;
-    private int timeoutMs = 5000;
+    private int timeoutMs = 10_000;
   }
 
   @Data
@@ -117,7 +117,7 @@ public class RagProperties {
 
   @Data
   public static class Channels {
-    private int timeoutMs = 15_000;
+    private int timeoutMs = 5_000;
     private Vector vector = new Vector();
   }
 

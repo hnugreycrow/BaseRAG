@@ -86,3 +86,20 @@ Remove-Item Env:RAG_INTEGRATION
 - [产品需求](REQUIREMENTS.md)、[架构说明](docs/architecture.md)、[演示步骤](docs/demo.md)：范围、实现和使用示例。
 
 API 除登录外均要求认证；管理接口要求管理员权限，写请求还需要 `X-CSRF-Token`。本项目仅面向本地环境，示例密码应在个人 `.env` 中修改。
+
+### 模型与检索超时
+
+默认配置面向交互式问答，各项单位为毫秒：
+
+| 配置 | 默认值 | 作用范围 |
+| --- | ---: | --- |
+| `ai.connect-timeout-ms` | 5000 | 模型 HTTP 建立连接 |
+| `ai.request-timeout-ms` | 30000 | Embedding、重排的单次 HTTP 请求 |
+| `ai.chat.tiers.standard.timeout-ms` | 30000 | 对话模型单次 HTTP 请求，不等于完整流式回答总时限 |
+| `rag.pipeline.routing.timeout-ms` | 10000 | 意图判断等待预算，超时回退知识检索 |
+| `rag.search.channels.timeout-ms` | 5000 | 每个子问题的数据库召回预算，不含 Embedding |
+| `rag.pipeline.mcp.timeout-ms` | 3000 | MCP 工具执行，目前默认关闭 |
+
+`ai.selection.max-retries` 默认为 1，即首次请求失败后最多重试一次；候选模型切换还会增加总耗时。
+Embedding 与重排目前共用请求超时，文档批量向量化也受此值影响。批量任务若频繁超时，应结合实际批次大小和耗时调整。
+上述配置尚未提供整次问答截止时间或流式首内容、空闲读取的独立超时。修改配置后需重启后端。

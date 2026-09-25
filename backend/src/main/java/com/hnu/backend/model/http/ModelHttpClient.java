@@ -31,7 +31,7 @@ public class ModelHttpClient {
     this.config = config;
     this.client =
         HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(10))
+            .connectTimeout(Duration.ofMillis(config.getConnectTimeoutMs()))
             .followRedirects(HttpClient.Redirect.NEVER)
             .build();
   }

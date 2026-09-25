@@ -8,6 +8,16 @@ import org.junit.jupiter.api.Test;
 
 class AiPropertiesRerankTest {
   @Test
+  void rejectsNonPositiveConnectionTimeoutBeforeResolvingModels() {
+    for (int timeout : new int[] {0, -1}) {
+      AiProperties config = new AiProperties();
+      config.setConnectTimeoutMs(timeout);
+      var error = assertThrows(IllegalArgumentException.class, config::validate);
+      assertEquals("Invalid AI selection, stream or batch configuration", error.getMessage());
+    }
+  }
+
+  @Test
   void putsDefaultFirstThenOrdersRemainingCandidatesByPriority() {
     AiProperties config = configured();
     config.getRerank().setDefaultModel("secondary");

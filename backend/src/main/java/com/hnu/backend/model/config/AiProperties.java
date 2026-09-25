@@ -17,7 +17,12 @@ public class AiProperties {
   private Chat chat = new Chat();
   private Embedding embedding = new Embedding();
   private Rerank rerank = new Rerank();
-  private int requestTimeoutMs = 60_000;
+
+  /** 单次 HTTP 建立连接的超时上限，单位毫秒。 */
+  private int connectTimeoutMs = 5_000;
+
+  /** Embedding 和重排的单次 HTTP 请求上限，单位毫秒，不包含重试总耗时。 */
+  private int requestTimeoutMs = 30_000;
 
   @PostConstruct
   void validate() {
@@ -28,6 +33,7 @@ public class AiProperties {
         || stream.messageChunkSize < 1
         || embedding.batchSize < 1
         || embedding.batchSize > 128
+        || connectTimeoutMs < 1
         || requestTimeoutMs < 1) {
       throw new IllegalArgumentException("Invalid AI selection, stream or batch configuration");
     }
@@ -193,7 +199,7 @@ public class AiProperties {
   public static class Selection {
     private int failureThreshold = 2;
     private long openDurationMs = 30_000;
-    private int maxRetries = 2;
+    private int maxRetries = 1;
   }
 
   @Data
