@@ -2,6 +2,7 @@ package com.hnu.backend.rag.execution;
 
 import com.hnu.backend.configuration.RagProperties;
 import com.hnu.backend.observability.RagStageName;
+import com.hnu.backend.observability.TraceReasonCatalog;
 import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.observability.trace.TraceContext;
 import com.hnu.backend.rag.mcp.McpToolCall;
@@ -176,7 +177,10 @@ public class ExecutionStage {
         SubQuestion question = plan.subQuestions().get(index);
         IntentRoute route = routing.routes().get(index);
         if (route.intent() == IntentType.SYSTEM_CHAT) {
-          trace.skipped(RagStageName.SUBQUESTION_EXECUTION, question.id(), "SYSTEM_CHAT_ROUTED");
+          trace.skipped(
+              RagStageName.SUBQUESTION_EXECUTION,
+              question.id(),
+              TraceReasonCatalog.SYSTEM_CHAT_ROUTED.code());
           results.add(
               new SubQuestionExecution(
                   question.id(),
@@ -184,7 +188,7 @@ public class ExecutionStage {
                   SubQuestionExecution.Status.SKIPPED,
                   List.of(),
                   null,
-                  "SYSTEM_CHAT_ROUTED",
+                  TraceReasonCatalog.SYSTEM_CHAT_ROUTED.code(),
                   0));
           continue;
         }

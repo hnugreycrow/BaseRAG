@@ -213,31 +213,9 @@ export function visibleTraceRows(roots: TraceTreeNode[], expanded: Set<string>):
   return rows
 }
 
-const REASON_LABELS: Record<string, string> = {
-  PRIMARY: '使用主模型',
-  PROVIDER_FALLBACK: '切换至备用模型',
-  CITATION_REPAIR: '重新生成以修复引用',
-  SUMMARY_NOT_DUE: '尚未达到摘要生成条件',
-  INTENT_TREE_INVALID_OUTPUT: '路由输出不符合结构要求，回退到公共知识库检索',
-  INTENT_TREE_LOW_CONFIDENCE: '意图识别置信度不足，回退到公共知识库检索',
-  INTENT_TREE_EMPTY: '未配置意图树，使用公共知识库检索',
-  INTENT_TREE_TIMEOUT: '路由超时，回退到公共知识库检索',
-  INTENT_TREE_CLASSIFICATION_FAILED: '路由分类失败，回退到公共知识库检索',
-  INTENT_TREE_PARTIAL_FALLBACK: '部分子问题路由降级',
-  SYSTEM_CHAT: '系统闲聊无需检索证据',
-  SYSTEM_CHAT_ROUTED: '子问题路由为系统闲聊',
-  RERANK_DISABLED: '未启用重排',
-  NO_RERANK_INPUT: '无可重排的候选',
-  NO_EVIDENCE: '证据不足，返回固定回答',
-  VECTOR_DISABLED: '未启用向量检索',
-  EMPTY_KNOWLEDGE_SCOPE: '知识库范围为空',
-  NO_EMBEDDING_BINDINGS: '没有可用的向量模型绑定',
-  SUBQUESTION_TIMEOUT: '子问题超过执行预算',
-  INVALID_CITATIONS: '回答包含无效引用',
-}
-
-export function reasonLabel(code: string): string {
-  return REASON_LABELS[code] ?? '未收录的原因'
+/** 使用服务端统一目录；兼容旧接口和未知原因码。 */
+export function reasonLabel(reason: { reasonLabel?: string | null }): string {
+  return reason.reasonLabel?.trim() || '暂无说明'
 }
 
 export function reasonKind(stage: Pick<RagStageRun, 'status' | 'reasonCode'>): string {

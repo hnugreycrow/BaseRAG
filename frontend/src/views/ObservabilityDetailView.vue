@@ -66,6 +66,15 @@ const modelAttempts = computed(() =>
     (stage) => stage.stageName === 'ANSWER_MODEL' && stage.status !== 'SKIPPED',
   ),
 )
+const degradationReasons = computed(
+  () =>
+    detail.value?.degradationReasonDetails ??
+    (detail.value?.degradationReasons ?? []).map((reasonCode) => ({
+      reasonCode,
+      stageName: undefined,
+      reasonLabel: undefined,
+    })),
+)
 const candidateStages = computed(() =>
   (detail.value?.stages ?? []).filter((stage) =>
     ['CANDIDATE_MERGE', 'DEDUPLICATION', 'RERANK', 'PROMPT_ASSEMBLY'].includes(stage.stageName),
@@ -307,9 +316,7 @@ onMounted(loadDetail)
               v-if="stage.reasonCode || stage.errorCode || stage.ttftMs != null"
               class="stage-note"
             >
-              <span v-if="stage.reasonCode"
-                >{{ reasonKind(stage) }}：{{ reasonLabel(stage.reasonCode) }}</span
-              >
+              <span v-if="stage.reasonCode">{{ reasonKind(stage) }}：{{ reasonLabel(stage) }}</span>
               <span v-if="stage.errorCode">
                 {{ stage.errorMessage || '处理失败，请根据请求 ID 查询日志' }}
                 <code>{{ stage.errorCode }}</code>
@@ -366,7 +373,7 @@ onMounted(loadDetail)
               <div v-if="stage.reasonCode">
                 <dt>{{ reasonKind(stage) }}</dt>
                 <dd>
-                  {{ reasonLabel(stage.reasonCode) }} <code>{{ stage.reasonCode }}</code>
+                  {{ reasonLabel(stage) }} <code>{{ stage.reasonCode }}</code>
                 </dd>
               </div>
               <div v-if="stage.errorCode">
@@ -382,7 +389,7 @@ onMounted(loadDetail)
       </section>
 
       <section
-        v-if="detail.degradationReasons.length"
+        v-if="degradationReasons.length"
         class="degradation-panel"
         aria-labelledby="degradation-title"
       >
@@ -392,8 +399,12 @@ onMounted(loadDetail)
           </div>
         </div>
         <ul>
-          <li v-for="reason in detail.degradationReasons" :key="reason">
-            {{ reasonLabel(reason) }} <code>{{ reason }}</code>
+          <li
+            v-for="reason in degradationReasons"
+            :key="`${reason.stageName}:${reason.reasonCode}:${reason.reasonLabel}`"
+          >
+            <span v-if="reason.stageName">{{ STAGE_NAME_LABELS[reason.stageName] }}： </span>
+            {{ reasonLabel(reason) }} <code>{{ reason.reasonCode }}</code>
           </li>
         </ul>
       </section>
@@ -417,8 +428,8 @@ onMounted(loadDetail)
               <dl>
                 <div>
                   <dt>{{ reasonKind(attempt) }}</dt>
-                  <dd :title="attempt.reasonCode ? reasonLabel(attempt.reasonCode) : undefined">
-                    {{ attempt.reasonCode ? reasonLabel(attempt.reasonCode) : '—' }}
+                  <dd :title="attempt.reasonCode ? reasonLabel(attempt) : undefined">
+                    {{ attempt.reasonCode ? reasonLabel(attempt) : '—' }}
                     <code v-if="attempt.reasonCode">{{ attempt.reasonCode }}</code>
                   </dd>
                 </div>

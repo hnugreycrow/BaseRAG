@@ -1,5 +1,6 @@
 package com.hnu.backend.rag.answer;
 
+import com.hnu.backend.observability.TraceReasonCatalog;
 import com.hnu.backend.rag.prompt.AssembledPrompt;
 import com.hnu.backend.rag.prompt.PromptAssemblyStage;
 import com.hnu.backend.shared.error.ApiException;
@@ -58,7 +59,7 @@ public class AnswerStage {
       boolean thinkingEnabled) {
     control.throwIfCancelled();
     if (!prompt.shouldGenerate()) {
-      observer.generationSkipped("NO_EVIDENCE");
+      observer.generationSkipped(TraceReasonCatalog.NO_EVIDENCE.code());
       return new AnswerResult(INSUFFICIENT_EVIDENCE, prompt.sources(), List.of(), List.of(), null);
     }
     AnswerGenerator.Generation generation =

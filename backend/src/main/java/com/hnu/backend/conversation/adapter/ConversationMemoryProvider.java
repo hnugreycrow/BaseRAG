@@ -9,6 +9,7 @@ import com.hnu.backend.conversation.mapper.ConversationMapper;
 import com.hnu.backend.conversation.mapper.MessageMapper;
 import com.hnu.backend.model.client.ChatClient;
 import com.hnu.backend.observability.RagStageName;
+import com.hnu.backend.observability.TraceReasonCatalog;
 import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.observability.trace.TraceContext;
 import com.hnu.backend.rag.memory.MemoryProvider;
@@ -90,7 +91,7 @@ public class ConversationMemoryProvider implements MemoryProvider {
                 if (error instanceof ApiException) {
                   span.error(error);
                 } else {
-                  span.failed("MEMORY_LOAD_FAILED");
+                  span.failed(TraceReasonCatalog.MEMORY_LOAD_FAILED.code());
                 }
                 throw error;
               }
@@ -138,12 +139,12 @@ public class ConversationMemoryProvider implements MemoryProvider {
       Conversation conversation, List<MemoryTurn> turns, TraceContext trace) {
     int recentStart = turns.size() - config.getRecentTurns();
     if (recentStart <= 0) {
-      trace.skipped(RagStageName.MEMORY_SUMMARY, null, "SUMMARY_NOT_DUE");
+      trace.skipped(RagStageName.MEMORY_SUMMARY, null, TraceReasonCatalog.SUMMARY_NOT_DUE.code());
       return conversation;
     }
     int covered = conversation.getSummarizedThroughTurn();
     if (covered >= turns.get(recentStart).turnIndex()) {
-      trace.skipped(RagStageName.MEMORY_SUMMARY, null, "SUMMARY_NOT_DUE");
+      trace.skipped(RagStageName.MEMORY_SUMMARY, null, TraceReasonCatalog.SUMMARY_NOT_DUE.code());
       return conversation;
     }
     int cutoff = Math.min(turns.size(), recentStart + config.getSummaryBatchTurns());
@@ -153,7 +154,7 @@ public class ConversationMemoryProvider implements MemoryProvider {
     int batchSize =
         covered == 0 ? config.getSummaryBatchTurns() + 1 : config.getSummaryBatchTurns();
     if (pending.size() < config.getSummaryBatchTurns()) {
-      trace.skipped(RagStageName.MEMORY_SUMMARY, null, "SUMMARY_NOT_DUE");
+      trace.skipped(RagStageName.MEMORY_SUMMARY, null, TraceReasonCatalog.SUMMARY_NOT_DUE.code());
       return conversation;
     }
     List<MemoryTurn> batch = pending.subList(0, Math.min(pending.size(), batchSize));
@@ -205,8 +206,10 @@ public class ConversationMemoryProvider implements MemoryProvider {
   /** 将摘要异常归一化为不包含异常正文的稳定原因码。 */
   private String summaryErrorCode(RuntimeException error) {
     if (error instanceof ApiException api) return api.code();
-    if (error instanceof IllegalArgumentException) return "SUMMARY_INVALID_OUTPUT";
-    return "SUMMARY_FAILED";
+    if (error instanceof IllegalArgumentException) {
+      return TraceReasonCatalog.SUMMARY_INVALID_OUTPUT.code();
+    }
+    return TraceReasonCatalog.SUMMARY_FAILED.code();
   }
 
   /**

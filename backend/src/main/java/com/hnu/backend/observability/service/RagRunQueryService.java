@@ -6,6 +6,7 @@ import com.hnu.backend.observability.RagExecutionMode;
 import com.hnu.backend.observability.RagRunStatus;
 import com.hnu.backend.observability.RagStageName;
 import com.hnu.backend.observability.RagStageStatus;
+import com.hnu.backend.observability.TraceReasonCatalog;
 import com.hnu.backend.observability.entity.RagStageRun;
 import com.hnu.backend.observability.mapper.RagRunFilter;
 import com.hnu.backend.observability.mapper.RagRunMapper;
@@ -203,8 +204,8 @@ public class RagRunQueryService {
   private boolean isDegradation(RagStageRun value) {
     if (value.getStatus() == RagStageStatus.DEGRADED) return true;
     return value.getStageName() == RagStageName.ANSWER_MODEL
-        && ("PROVIDER_FALLBACK".equals(value.getReasonCode())
-            || "CITATION_REPAIR".equals(value.getReasonCode()));
+        && (TraceReasonCatalog.PROVIDER_FALLBACK.code().equals(value.getReasonCode())
+            || TraceReasonCatalog.CITATION_REPAIR.code().equals(value.getReasonCode()));
   }
 
   /** 转换阶段实体。 */

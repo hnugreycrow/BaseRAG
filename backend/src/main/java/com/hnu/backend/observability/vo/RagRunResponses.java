@@ -1,10 +1,12 @@
 package com.hnu.backend.observability.vo;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.hnu.backend.observability.RagExecutionMode;
 import com.hnu.backend.observability.RagRunStatus;
 import com.hnu.backend.observability.RagStageName;
 import com.hnu.backend.observability.RagStageStatus;
+import com.hnu.backend.observability.TraceReasonCatalog;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -127,7 +129,22 @@ public final class RagRunResponses {
       UUID attemptId,
       Integer attemptIndex,
       Long firstReasoningMs,
-      Long firstAnswerMs) {}
+      Long firstAnswerMs) {
+    /** 返回按阶段和状态解析的安全原因说明，未采集原因时为空。 */
+    @JsonProperty("reasonLabel")
+    public String reasonLabel() {
+      return TraceReasonCatalog.label(stageName, status, reasonCode);
+    }
+  }
+
+  /**
+   * 运行降级摘要中的原因说明，同一代码可以属于不同阶段。
+   *
+   * @param stageName 原因所属阶段
+   * @param reasonCode 原始稳定代码
+   * @param reasonLabel 与阶段详情一致的安全说明
+   */
+  public record DegradationReason(RagStageName stageName, String reasonCode, String reasonLabel) {}
 
   /**
    * 单次运行详情。
@@ -136,7 +153,28 @@ public final class RagRunResponses {
    * @param stages 阶段瀑布
    * @param degradationReasons 去重且保持首次出现顺序的降级原因
    */
-  public record Detail(Summary run, List<Stage> stages, List<String> degradationReasons) {}
+  public record Detail(Summary run, List<Stage> stages, List<String> degradationReasons) {
+    /** 返回按阶段和说明去重的原因详情，保留旧原因码数组的兼容性。 */
+    @JsonProperty("degradationReasonDetails")
+    public List<DegradationReason> degradationReasonDetails() {
+      return stages.stream()
+          .filter(stage -> stage.reasonCode() != null)
+          .filter(stage -> degradationReasons.contains(stage.reasonCode()))
+          .filter(
+              stage ->
+                  stage.status() == RagStageStatus.DEGRADED
+                      || (stage.stageName() == RagStageName.ANSWER_MODEL
+                          && (TraceReasonCatalog.PROVIDER_FALLBACK.code().equals(stage.reasonCode())
+                              || TraceReasonCatalog.CITATION_REPAIR
+                                  .code()
+                                  .equals(stage.reasonCode()))))
+          .map(
+              stage ->
+                  new DegradationReason(stage.stageName(), stage.reasonCode(), stage.reasonLabel()))
+          .distinct()
+          .toList();
+    }
+  }
 
   /**
    * 一项延迟的 P50/P95。

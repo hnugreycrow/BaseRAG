@@ -5,6 +5,7 @@ import com.hnu.backend.knowledgebase.entity.KnowledgeBase;
 import com.hnu.backend.knowledgebase.mapper.KnowledgeBaseMapper;
 import com.hnu.backend.model.client.EmbeddingClient;
 import com.hnu.backend.observability.RagStageName;
+import com.hnu.backend.observability.TraceReasonCatalog;
 import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.observability.trace.TraceContext;
 import com.hnu.backend.rag.execution.CancellationToken;
@@ -160,11 +161,11 @@ public class RetrievalService {
     List<UUID> scope =
         knowledgeBaseIds == null ? null : knowledgeBaseIds.stream().distinct().toList();
     if (scope != null && scope.isEmpty()) {
-      skipVectorStages(trace, subQuestionId, "EMPTY_KNOWLEDGE_SCOPE");
+      skipVectorStages(trace, subQuestionId, TraceReasonCatalog.EMPTY_KNOWLEDGE_SCOPE.code());
       return List.of();
     }
     if (!budget.vectorEnabled()) {
-      skipVectorStages(trace, subQuestionId, "VECTOR_DISABLED");
+      skipVectorStages(trace, subQuestionId, TraceReasonCatalog.VECTOR_DISABLED.code());
       return List.of();
     }
     List<EvidenceCandidate> candidates = new ArrayList<>();
@@ -173,7 +174,7 @@ public class RetrievalService {
             ? retrievalMapper.activeModelBindings(ownerId)
             : retrievalMapper.activeModelBindingsIn(ownerId, scope);
     if (bindings.isEmpty()) {
-      skipVectorStages(trace, subQuestionId, "NO_EMBEDDING_BINDINGS");
+      skipVectorStages(trace, subQuestionId, TraceReasonCatalog.NO_EMBEDDING_BINDINGS.code());
       return List.of();
     }
     long remainingSearchNanos = TimeUnit.MILLISECONDS.toNanos(budget.timeoutMs());
@@ -281,7 +282,7 @@ public class RetrievalService {
           ownerId, subQuestionId, question, null, budget, cancellationToken, trace);
     }
     if (!budget.vectorEnabled()) {
-      skipVectorStages(trace, subQuestionId, "VECTOR_DISABLED");
+      skipVectorStages(trace, subQuestionId, TraceReasonCatalog.VECTOR_DISABLED.code());
       return List.of();
     }
     List<UUID> primary = primaryKnowledgeBaseIds.stream().distinct().toList();
@@ -298,7 +299,7 @@ public class RetrievalService {
     List<EvidenceCandidate> candidates = new ArrayList<>();
     var modelBindings = retrievalMapper.activeModelBindings(ownerId);
     if (modelBindings.isEmpty()) {
-      skipVectorStages(trace, subQuestionId, "NO_EMBEDDING_BINDINGS");
+      skipVectorStages(trace, subQuestionId, TraceReasonCatalog.NO_EMBEDDING_BINDINGS.code());
       return List.of();
     }
     long remainingSearchNanos = TimeUnit.MILLISECONDS.toNanos(budget.timeoutMs());

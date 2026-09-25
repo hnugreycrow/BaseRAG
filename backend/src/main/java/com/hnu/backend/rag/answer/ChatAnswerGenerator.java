@@ -4,6 +4,7 @@ import com.hnu.backend.model.client.ChatClient;
 import com.hnu.backend.model.client.ChatGenerationRequest;
 import com.hnu.backend.model.config.AiProperties;
 import com.hnu.backend.model.http.ModelHttpClient;
+import com.hnu.backend.observability.TraceReasonCatalog;
 import com.hnu.backend.shared.error.ApiException;
 import org.springframework.stereotype.Component;
 
@@ -128,7 +129,7 @@ public class ChatAnswerGenerator implements AnswerGenerator {
    */
   private AttemptReason attemptReason(AttemptReason baseReason, String providerReason) {
     if (baseReason == AttemptReason.CITATION_REPAIR) return baseReason;
-    return "PROVIDER_FALLBACK".equals(providerReason)
+    return TraceReasonCatalog.PROVIDER_FALLBACK.code().equals(providerReason)
         ? AttemptReason.PROVIDER_FALLBACK
         : AttemptReason.PRIMARY;
   }

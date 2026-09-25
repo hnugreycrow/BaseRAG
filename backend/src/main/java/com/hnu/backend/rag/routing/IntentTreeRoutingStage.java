@@ -7,6 +7,7 @@ import com.hnu.backend.intent.IntentTreeSnapshotProvider;
 import com.hnu.backend.model.client.ChatClient;
 import com.hnu.backend.observability.RagDecisionLog;
 import com.hnu.backend.observability.RagStageName;
+import com.hnu.backend.observability.TraceReasonCatalog;
 import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.observability.trace.TraceContext;
 import com.hnu.backend.rag.mcp.McpToolRegistry;
@@ -73,11 +74,14 @@ public class IntentTreeRoutingStage {
             List<IntentNode> leaves = snapshot.activeLeaves();
             if (leaves.isEmpty()) {
               String reason =
-                  snapshot.nodes().isEmpty() ? "INTENT_TREE_EMPTY" : "INTENT_TREE_NO_VALID_LEAVES";
+                  snapshot.nodes().isEmpty()
+                      ? TraceReasonCatalog.INTENT_TREE_EMPTY.code()
+                      : TraceReasonCatalog.INTENT_TREE_NO_VALID_LEAVES.code();
               return knowledgeFallback(plan, span, trace, reason);
             }
             if (leaves.size() > 32) {
-              return knowledgeFallback(plan, span, trace, "INTENT_TREE_NO_VALID_LEAVES");
+              return knowledgeFallback(
+                  plan, span, trace, TraceReasonCatalog.INTENT_TREE_NO_VALID_LEAVES.code());
             }
             Map<UUID, IntentNode> byId = snapshot.activeLeavesById();
             Map<UUID, String> paths = snapshot.paths();
@@ -102,14 +106,16 @@ public class IntentTreeRoutingStage {
               throw ApiException.cancelled();
             } catch (TimeoutException error) {
               future.cancel(true);
-              return knowledgeFallback(plan, span, trace, "INTENT_TREE_TIMEOUT");
+              return knowledgeFallback(
+                  plan, span, trace, TraceReasonCatalog.INTENT_TREE_TIMEOUT.code());
             } catch (ExecutionException error) {
               future.cancel(true);
               if (isCancelled(error.getCause())) {
                 span.cancelled(ErrorCode.GENERATION_CANCELLED.code());
                 throw ApiException.cancelled();
               }
-              return knowledgeFallback(plan, span, trace, "INTENT_TREE_CLASSIFICATION_FAILED");
+              return knowledgeFallback(
+                  plan, span, trace, TraceReasonCatalog.INTENT_TREE_CLASSIFICATION_FAILED.code());
             }
             span.model(generation.id(), generation.provider(), generation.model());
             ParsedRouting parsed;
@@ -120,7 +126,8 @@ public class IntentTreeRoutingStage {
                 span.cancelled(ErrorCode.GENERATION_CANCELLED.code());
                 throw ApiException.cancelled();
               }
-              return knowledgeFallback(plan, span, trace, "INTENT_TREE_INVALID_OUTPUT");
+              return knowledgeFallback(
+                  plan, span, trace, TraceReasonCatalog.INTENT_TREE_INVALID_OUTPUT.code());
             }
             if (Thread.currentThread().isInterrupted()) {
               span.cancelled(ErrorCode.GENERATION_CANCELLED.code());
@@ -145,13 +152,15 @@ public class IntentTreeRoutingStage {
               span.cancelled(error.code());
               throw error;
             }
-            return knowledgeFallback(plan, span, trace, "INTENT_TREE_CLASSIFICATION_FAILED");
+            return knowledgeFallback(
+                plan, span, trace, TraceReasonCatalog.INTENT_TREE_CLASSIFICATION_FAILED.code());
           } catch (RuntimeException error) {
             if (Thread.currentThread().isInterrupted()) {
               span.cancelled(ErrorCode.GENERATION_CANCELLED.code());
               throw ApiException.cancelled();
             }
-            return knowledgeFallback(plan, span, trace, "INTENT_TREE_CLASSIFICATION_FAILED");
+            return knowledgeFallback(
+                plan, span, trace, TraceReasonCatalog.INTENT_TREE_CLASSIFICATION_FAILED.code());
           }
         });
   }
@@ -226,14 +235,22 @@ public class IntentTreeRoutingStage {
       try {
         resolved.add(parseRoute(subQuestionId, nodes, routes.get(index)));
       } catch (LowConfidenceException error) {
-        addRouteFallback(resolved, fallbacks, subQuestionId, "INTENT_TREE_LOW_CONFIDENCE");
+        addRouteFallback(
+            resolved,
+            fallbacks,
+            subQuestionId,
+            TraceReasonCatalog.INTENT_TREE_LOW_CONFIDENCE.code());
       } catch (ToolValidationException error) {
         addRouteFallback(resolved, fallbacks, subQuestionId, error.reason());
       } catch (RuntimeException error) {
         if (isCancelled(error)) {
           throw error;
         }
-        addRouteFallback(resolved, fallbacks, subQuestionId, "INTENT_TREE_INVALID_OUTPUT");
+        addRouteFallback(
+            resolved,
+            fallbacks,
+            subQuestionId,
+            TraceReasonCatalog.INTENT_TREE_INVALID_OUTPUT.code());
       }
     }
     return new ParsedRouting(new RoutingPlan(resolved), List.copyOf(fallbacks));
@@ -335,10 +352,10 @@ public class IntentTreeRoutingStage {
 
   private String toolFallbackReason(McpToolRegistry.RoutingCheck check) {
     return switch (check) {
-      case MCP_DISABLED -> "INTENT_TREE_MCP_DISABLED";
-      case TOOL_NOT_ALLOWED -> "INTENT_TREE_TOOL_NOT_ALLOWED";
-      case TOOL_NOT_READ_ONLY -> "INTENT_TREE_TOOL_NOT_READ_ONLY";
-      case INVALID_ARGUMENTS -> "INTENT_TREE_INVALID_TOOL_ARGUMENTS";
+      case MCP_DISABLED -> TraceReasonCatalog.INTENT_TREE_MCP_DISABLED.code();
+      case TOOL_NOT_ALLOWED -> TraceReasonCatalog.INTENT_TREE_TOOL_NOT_ALLOWED.code();
+      case TOOL_NOT_READ_ONLY -> TraceReasonCatalog.INTENT_TREE_TOOL_NOT_READ_ONLY.code();
+      case INVALID_ARGUMENTS -> TraceReasonCatalog.INTENT_TREE_INVALID_TOOL_ARGUMENTS.code();
       case ALLOWED -> throw new IllegalArgumentException("Allowed tool cannot be a fallback");
     };
   }
@@ -365,7 +382,9 @@ public class IntentTreeRoutingStage {
       for (RouteFallback fallback : fallbacks) {
         reasons.add(fallback.reason());
       }
-      return reasons.size() == 1 ? reasons.iterator().next() : "INTENT_TREE_PARTIAL_FALLBACK";
+      return reasons.size() == 1
+          ? reasons.iterator().next()
+          : TraceReasonCatalog.INTENT_TREE_PARTIAL_FALLBACK.code();
     }
   }
 

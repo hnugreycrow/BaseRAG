@@ -1,6 +1,7 @@
 package com.hnu.backend.rag.rerank;
 
 import com.hnu.backend.observability.RagStageName;
+import com.hnu.backend.observability.TraceReasonCatalog;
 import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.observability.trace.TraceContext;
 import com.hnu.backend.rag.execution.CancellationToken;
@@ -109,7 +110,7 @@ public class RerankStage {
                     List.of(),
                     List.of(),
                     RerankResult.Status.EMPTY,
-                    "NO_RERANK_INPUT",
+                    TraceReasonCatalog.NO_RERANK_INPUT.code(),
                     null,
                     startedAt));
           }
@@ -121,7 +122,7 @@ public class RerankStage {
                     knowledgeQuestionIds,
                     budget.selectedEvidenceLimit(),
                     RerankResult.Status.DISABLED,
-                    "RERANK_DISABLED",
+                    TraceReasonCatalog.RERANK_DISABLED.code(),
                     null,
                     startedAt));
           }

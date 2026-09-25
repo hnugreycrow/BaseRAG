@@ -4,6 +4,7 @@ import com.hnu.backend.configuration.ObservabilityProperties;
 import com.hnu.backend.configuration.RagProperties;
 import com.hnu.backend.observability.RagDecisionLog;
 import com.hnu.backend.observability.RagStageName;
+import com.hnu.backend.observability.TraceReasonCatalog;
 import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.observability.trace.TraceContext;
 import com.hnu.backend.rag.memory.RagMemory;
@@ -83,12 +84,12 @@ public class QueryPlanningStage {
             return plan;
           } catch (PlanValidationException e) {
             if (output != null) span.model(output.modelId(), output.provider(), output.model());
-            span.degraded(1, e.reason.name());
-            degradedReason = e.reason.name();
+            span.degraded(1, e.reason.code());
+            degradedReason = e.reason.code();
           } catch (RuntimeException e) {
-            DegradedReason reason = failureReason(e);
-            span.degraded(1, reason.name());
-            degradedReason = reason.name();
+            TraceReasonCatalog reason = failureReason(e);
+            span.degraded(1, reason.code());
+            degradedReason = reason.code();
             exceptionType = e.getClass().getSimpleName();
           }
           // 规划是增强能力而非问答前置条件，失败时保留原始问题继续执行。
@@ -165,27 +166,29 @@ public class QueryPlanningStage {
    */
   private QueryPlan parse(String rawContent, int maxSubQuestions) {
     if (rawContent == null || rawContent.isBlank()) {
-      throw invalid(DegradedReason.EMPTY_OUTPUT);
+      throw invalid(TraceReasonCatalog.EMPTY_OUTPUT);
     }
     JsonNode root;
     try {
       root = json.readTree(stripFence(rawContent));
     } catch (RuntimeException e) {
-      throw invalid(DegradedReason.INVALID_JSON);
+      throw invalid(TraceReasonCatalog.INVALID_JSON);
     }
     if (root == null
         || !root.isObject()
         || root.size() != 2
         || !root.path("standaloneQuestion").isString()
         || !root.path("subQuestions").isArray()) {
-      throw invalid(DegradedReason.INVALID_SCHEMA);
+      throw invalid(TraceReasonCatalog.INVALID_SCHEMA);
     }
 
     String standaloneQuestion = validQuestion(root.path("standaloneQuestion").asString());
     JsonNode subQuestionsNode = root.path("subQuestions");
-    if (subQuestionsNode.isEmpty()) throw invalid(DegradedReason.EMPTY_SUBQUESTIONS);
+    if (subQuestionsNode.isEmpty()) {
+      throw invalid(TraceReasonCatalog.EMPTY_SUBQUESTIONS);
+    }
     if (subQuestionsNode.size() > maxSubQuestions) {
-      throw invalid(DegradedReason.TOO_MANY_SUBQUESTIONS);
+      throw invalid(TraceReasonCatalog.TOO_MANY_SUBQUESTIONS);
     }
 
     List<SubQuestion> subQuestions = new ArrayList<>();
@@ -196,16 +199,16 @@ public class QueryPlanningStage {
           || node.size() != 2
           || !node.path("id").isString()
           || !node.path("question").isString()) {
-        throw invalid(DegradedReason.INVALID_SCHEMA);
+        throw invalid(TraceReasonCatalog.INVALID_SCHEMA);
       }
       // 强制使用连续 Q1、Q2……，使后续执行结果可以稳定关联到子问题。
       String expectedId = "Q" + index;
       if (!expectedId.equals(node.path("id").asString())) {
-        throw invalid(DegradedReason.INVALID_SUBQUESTION_ID);
+        throw invalid(TraceReasonCatalog.INVALID_SUBQUESTION_ID);
       }
       String question = validQuestion(node.path("question").asString());
       if (!normalizedQuestions.add(normalizeForDuplicateCheck(question))) {
-        throw invalid(DegradedReason.DUPLICATE_SUBQUESTION);
+        throw invalid(TraceReasonCatalog.DUPLICATE_SUBQUESTION);
       }
       subQuestions.add(new SubQuestion(expectedId, question));
       index++;
@@ -224,7 +227,7 @@ public class QueryPlanningStage {
     if (question.isEmpty()
         || question.length() > config.getMaxQuestionChars()
         || question.codePoints().anyMatch(Character::isISOControl)) {
-      throw invalid(DegradedReason.INVALID_QUESTION);
+      throw invalid(TraceReasonCatalog.INVALID_QUESTION);
     }
     return question;
   }
@@ -250,15 +253,15 @@ public class QueryPlanningStage {
     if (!content.startsWith("```")) return content;
     int firstLine = content.indexOf('\n');
     if (firstLine < 0 || !content.endsWith("```")) {
-      throw invalid(DegradedReason.INVALID_JSON);
+      throw invalid(TraceReasonCatalog.INVALID_JSON);
     }
     String opener = content.substring(0, firstLine).strip();
     if (!("```".equals(opener) || "```json".equalsIgnoreCase(opener))) {
-      throw invalid(DegradedReason.INVALID_JSON);
+      throw invalid(TraceReasonCatalog.INVALID_JSON);
     }
     String body = content.substring(firstLine + 1, content.length() - 3).strip();
     if (body.isEmpty() || body.contains("```")) {
-      throw invalid(DegradedReason.INVALID_JSON);
+      throw invalid(TraceReasonCatalog.INVALID_JSON);
     }
     return body;
   }
@@ -269,11 +272,11 @@ public class QueryPlanningStage {
    * @param error 规划异常
    * @return 降级原因
    */
-  private DegradedReason failureReason(RuntimeException error) {
+  private TraceReasonCatalog failureReason(RuntimeException error) {
     if (error instanceof ApiException api && ErrorCode.MODEL_TIMEOUT.code().equals(api.code())) {
-      return DegradedReason.MODEL_TIMEOUT;
+      return TraceReasonCatalog.MODEL_TIMEOUT;
     }
-    return DegradedReason.MODEL_ERROR;
+    return TraceReasonCatalog.MODEL_ERROR;
   }
 
   /**
@@ -292,34 +295,20 @@ public class QueryPlanningStage {
    * @param reason 降级原因
    * @return 计划校验异常
    */
-  private PlanValidationException invalid(DegradedReason reason) {
+  private PlanValidationException invalid(TraceReasonCatalog reason) {
     return new PlanValidationException(reason);
-  }
-
-  /** 查询规划降级原因，仅用于日志分类。 */
-  private enum DegradedReason {
-    MODEL_ERROR,
-    MODEL_TIMEOUT,
-    EMPTY_OUTPUT,
-    INVALID_JSON,
-    INVALID_SCHEMA,
-    INVALID_QUESTION,
-    EMPTY_SUBQUESTIONS,
-    TOO_MANY_SUBQUESTIONS,
-    INVALID_SUBQUESTION_ID,
-    DUPLICATE_SUBQUESTION
   }
 
   /** 在解析流程中传递降级原因的轻量内部异常。 */
   private static final class PlanValidationException extends RuntimeException {
-    private final DegradedReason reason;
+    private final TraceReasonCatalog reason;
 
     /**
      * 创建计划校验异常。
      *
      * @param reason 降级原因
      */
-    private PlanValidationException(DegradedReason reason) {
+    private PlanValidationException(TraceReasonCatalog reason) {
       this.reason = reason;
     }
   }

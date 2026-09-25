@@ -4,6 +4,7 @@ import com.hnu.backend.observability.RagExecutionMode;
 import com.hnu.backend.observability.RagRunStatus;
 import com.hnu.backend.observability.RagStageName;
 import com.hnu.backend.observability.RagStageStatus;
+import com.hnu.backend.observability.TraceReasonCatalog;
 import com.hnu.backend.shared.error.ApiException;
 import com.hnu.backend.shared.error.ErrorCode;
 import java.time.OffsetDateTime;
@@ -329,9 +330,10 @@ public final class RagRunTrace {
     if (parent != null
         && (status == RagStageStatus.DEGRADED
             || status == RagStageStatus.FAILED
-            || "PROVIDER_FALLBACK".equals(reasonCode)
-            || "CITATION_REPAIR".equals(reasonCode)
-            || (status == RagStageStatus.CANCELLED && "SUBQUESTION_TIMEOUT".equals(errorCode)))) {
+            || TraceReasonCatalog.PROVIDER_FALLBACK.code().equals(reasonCode)
+            || TraceReasonCatalog.CITATION_REPAIR.code().equals(reasonCode)
+            || (status == RagStageStatus.CANCELLED
+                && TraceReasonCatalog.SUBQUESTION_TIMEOUT.code().equals(errorCode)))) {
       parent.childDegraded = true;
       parent.childReason = reasonCode != null ? reasonCode : errorCode;
     }

@@ -8,6 +8,7 @@ import {
   initiallyExpanded,
   visibleTraceRows,
   reasonKind,
+  reasonLabel,
 } from '../../../components/observability/tracePresentation'
 
 function stage(overrides: Partial<RagStageRun>): RagStageRun {
@@ -24,6 +25,12 @@ function stage(overrides: Partial<RagStageRun>): RagStageRun {
 }
 
 describe('trace presentation', () => {
+  it('uses server labels and tolerates missing legacy labels without inferring severity', () => {
+    expect(reasonLabel({ reasonLabel: '服务端原因说明' })).toBe('服务端原因说明')
+    expect(reasonLabel({ reasonLabel: null })).toBe('暂无说明')
+    expect(reasonLabel({})).toBe('暂无说明')
+    expect(reasonKind({ status: 'DEGRADED', reasonCode: 'NEW_CODE' })).toBe('降级原因')
+  })
   it('anchors the axis to request start and does not sum nested or parallel durations', () => {
     const layout = buildWaterfall(
       [stage({ id: 'parent' }), stage({ id: 'child', parentStageId: 'parent', sequenceNo: 2 })],

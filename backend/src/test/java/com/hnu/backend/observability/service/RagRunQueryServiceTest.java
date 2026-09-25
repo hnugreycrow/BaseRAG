@@ -120,13 +120,44 @@ class RagRunQueryServiceTest {
         stage(RagStageName.ANSWER_MODEL, RagStageStatus.SUCCESS, "PROVIDER_FALLBACK");
     RagStageRun summary =
         stage(RagStageName.MEMORY_SUMMARY, RagStageStatus.DEGRADED, "MODEL_TIMEOUT");
+    RagStageRun normal = stage(RagStageName.MEMORY_LOAD, RagStageStatus.SUCCESS, null);
     when(ragRunMapper.findView(row.getId(), null)).thenReturn(row);
     when(ragStageRunMapper.listByRun(row.getId()))
-        .thenReturn(List.of(fallback, duplicate, summary));
+        .thenReturn(List.of(fallback, duplicate, summary, normal));
 
     var detail = ragRunQueryService.get(admin, row.getId());
 
     assertEquals(List.of("PROVIDER_FALLBACK", "MODEL_TIMEOUT"), detail.degradationReasons());
+    assertEquals(2, detail.degradationReasonDetails().size());
+    assertEquals("切换至备用模型", detail.stages().getFirst().reasonLabel());
+    assertEquals("模型请求超时，保留现有会话记忆继续", detail.degradationReasonDetails().getLast().reasonLabel());
+    var json = tools.jackson.databind.json.JsonMapper.builder().build().valueToTree(detail);
+    assertEquals("切换至备用模型", json.path("stages").get(0).path("reasonLabel").asString());
+    assertEquals(2, json.path("degradationReasonDetails").size());
+  }
+
+  @Test
+  void keepsSameCodeInDifferentStagesAndUnknownHistoricalReasonsReadable() {
+    User admin = user(UserRole.ADMIN);
+    RagRunViewRow row = run(UUID.randomUUID());
+    when(ragRunMapper.findView(row.getId(), null)).thenReturn(row);
+    when(ragStageRunMapper.listByRun(row.getId()))
+        .thenReturn(
+            List.of(
+                stage(RagStageName.QUERY_PLANNING, RagStageStatus.DEGRADED, "MODEL_TIMEOUT"),
+                stage(RagStageName.MEMORY_SUMMARY, RagStageStatus.DEGRADED, "MODEL_TIMEOUT"),
+                stage(
+                    RagStageName.INTENT_ROUTING,
+                    RagStageStatus.DEGRADED,
+                    "INTENT_TREE_LOW_CONFIDENCE"),
+                stage(RagStageName.RERANK, RagStageStatus.DEGRADED, "LEGACY_UNKNOWN")));
+    var detail = ragRunQueryService.get(admin, row.getId());
+    assertEquals(3, detail.degradationReasons().size());
+    assertEquals(4, detail.degradationReasonDetails().size());
+    assertNotEquals(detail.stages().get(0).reasonLabel(), detail.stages().get(1).reasonLabel());
+    assertEquals("意图识别置信度不足，回退到公共知识库检索", detail.stages().get(2).reasonLabel());
+    assertEquals("暂无说明", detail.stages().getLast().reasonLabel());
+    assertEquals("LEGACY_UNKNOWN", detail.degradationReasonDetails().getLast().reasonCode());
   }
 
   @Test

@@ -15,6 +15,7 @@ import com.hnu.backend.conversation.vo.ConversationResponses;
 import com.hnu.backend.observability.RagExecutionMode;
 import com.hnu.backend.observability.RagRunStatus;
 import com.hnu.backend.observability.RagStageName;
+import com.hnu.backend.observability.TraceReasonCatalog;
 import com.hnu.backend.observability.service.RagTraceManager;
 import com.hnu.backend.observability.trace.AnswerTraceObserver;
 import com.hnu.backend.observability.trace.RagRunTrace;
@@ -856,8 +857,8 @@ public class ConversationService {
                               .skipped(
                                   RagStageName.SUBQUESTION_EXECUTION,
                                   question.id(),
-                                  "SYSTEM_CHAT_ROUTED"));
-              span.skipped(0, "SYSTEM_CHAT");
+                                  TraceReasonCatalog.SYSTEM_CHAT_ROUTED.code()));
+              span.skipped(0, TraceReasonCatalog.SYSTEM_CHAT.code());
               return null;
             });
     AssembledPrompt prompt =
@@ -870,9 +871,12 @@ public class ConversationService {
                 null,
                 span -> {
                   TraceContext evidence = span.context();
-                  evidence.skipped(RagStageName.CANDIDATE_MERGE, null, "SYSTEM_CHAT");
-                  evidence.skipped(RagStageName.DEDUPLICATION, null, "SYSTEM_CHAT");
-                  evidence.skipped(RagStageName.RERANK, null, "SYSTEM_CHAT");
+                  evidence.skipped(
+                      RagStageName.CANDIDATE_MERGE, null, TraceReasonCatalog.SYSTEM_CHAT.code());
+                  evidence.skipped(
+                      RagStageName.DEDUPLICATION, null, TraceReasonCatalog.SYSTEM_CHAT.code());
+                  evidence.skipped(
+                      RagStageName.RERANK, null, TraceReasonCatalog.SYSTEM_CHAT.code());
                   return evidence.execute(
                       RagStageName.PROMPT_ASSEMBLY,
                       null,
@@ -973,7 +977,7 @@ public class ConversationService {
         messageMapper.checkpointReasoning(active.ownerId, active.assistant.getId(), "");
         active.lastCheckpointLength = active.buffer.length();
         active.lastCheckpointAt = System.currentTimeMillis();
-        send(active.emitter, "reset", event("reason", "PROVIDER_FALLBACK"));
+        send(active.emitter, "reset", event("reason", TraceReasonCatalog.PROVIDER_FALLBACK.code()));
       }
       int index = active.attemptCounter.incrementAndGet();
       // 消息状态只在首个候选开始时迁移一次；provider fallback 和引用修复沿用 STREAMING。

@@ -77,6 +77,7 @@ export interface RagStageRun {
   provider?: string
   model?: string
   reasonCode?: string
+  reasonLabel?: string | null
   errorCode?: string
   errorMessage?: string
   startedAt: string
@@ -97,6 +98,11 @@ export interface RagRunDetail {
   run: RagRunSummary
   stages: RagStageRun[]
   degradationReasons: string[]
+  degradationReasonDetails?: {
+    stageName: RagStageName
+    reasonCode: string
+    reasonLabel: string
+  }[]
 }
 
 /** 一项耗时指标的 P50 与 P95。 */
