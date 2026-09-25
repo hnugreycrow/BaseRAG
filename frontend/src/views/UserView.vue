@@ -144,7 +144,7 @@ onMounted(load)
           clearable
           @clear="search"
         /><el-button native-type="submit">搜索</el-button
-        ><el-button :icon="Refresh" aria-label="刷新用户" :loading="loading" @click="load" />
+        ><el-button style="margin-left: 0;" :icon="Refresh" aria-label="刷新用户" :loading="loading" @click="load" />
       </form>
       <div v-if="error" role="alert" class="user-error">
         <p>{{ error }}</p>

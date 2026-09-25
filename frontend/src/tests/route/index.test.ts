@@ -92,7 +92,9 @@ describe('authentication route guard', () => {
       ['/admin/knowledge-bases', 'knowledge-bases'],
       ['/admin/knowledge-bases/kb/documents/doc/preview', 'document-preview'],
       ['/admin/intent-tree', 'intent-tree'],
-      ['/admin/models', 'models'],
+      ['/admin/settings', 'settings'],
+      ['/admin/models', 'settings'],
+      ['/models', 'settings'],
       ['/admin/observability', 'observability'],
       ['/admin/users', 'users'],
     ]) {

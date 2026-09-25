@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Collection, Cpu, HomeFilled, Share, User, Connection } from '@element-plus/icons-vue'
+import { Collection, Setting, HomeFilled, Share, User, Connection } from '@element-plus/icons-vue'
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '../store'
@@ -21,8 +21,8 @@ const menuItems = computed(() => [
         { label: '知识库管理', path: '/admin/knowledge-bases', icon: Collection },
         { label: '意图树', path: '/admin/intent-tree', icon: Connection },
         { label: '链路追踪', path: '/admin/observability', icon: Share },
-        { label: '模型', path: '/admin/models', icon: Cpu },
         { label: '用户管理', path: '/admin/users', icon: User },
+        { label: '系统配置', path: '/admin/settings', icon: Setting },
       ]
     : []),
 ])

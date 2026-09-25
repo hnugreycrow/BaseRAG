@@ -59,10 +59,10 @@ export const router = createRouter({
           meta: { title: '全局意图树', section: '知识管理' },
         },
         {
-          path: 'models',
-          name: 'models',
-          component: () => import('../views/ModelView.vue'),
-          meta: { title: '模型配置', section: '系统设置' },
+          path: 'settings',
+          name: 'settings',
+          component: () => import('../views/SystemSettingsView.vue'),
+          meta: { title: '系统配置', section: '' },
         },
         {
           path: 'observability',
@@ -85,7 +85,8 @@ export const router = createRouter({
     // 兼容早期后台地址，统一引导到新的页面结构。
     { path: '/conversations', redirect: '/chat' },
     { path: '/knowledge-bases', redirect: '/admin/knowledge-bases' },
-    { path: '/models', redirect: '/admin/models' },
+    { path: '/models', redirect: '/admin/settings' },
+    { path: '/admin/models', name: 'models', redirect: '/admin/settings' },
     { path: '/observability', redirect: '/admin/observability' },
     { path: '/admin/conversations', redirect: '/chat' },
     { path: '/admin/documents', redirect: '/admin/knowledge-bases' },

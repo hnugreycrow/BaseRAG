@@ -22,8 +22,12 @@ import com.hnu.backend.auth.service.CurrentUserService;
 import com.hnu.backend.document.controller.DocumentController;
 import com.hnu.backend.intent.IntentTreeController;
 import com.hnu.backend.knowledgebase.controller.KnowledgeBaseController;
+import com.hnu.backend.model.controller.ModelSettingsController;
+import com.hnu.backend.model.service.ModelSettingsService;
 import com.hnu.backend.observability.controller.RagRunController;
 import com.hnu.backend.rag.controller.RagEvaluationController;
+import com.hnu.backend.rag.controller.RetrievalSettingsController;
+import com.hnu.backend.rag.service.RetrievalSettingsService;
 import com.hnu.backend.shared.error.GlobalExceptionHandler;
 import java.util.List;
 import java.util.UUID;
@@ -76,7 +80,9 @@ class ManagementAuthorizationTest {
             RagRunController.class,
             RagEvaluationController.class,
             AdminUserController.class,
-            IntentTreeController.class);
+            IntentTreeController.class,
+            ModelSettingsController.class,
+            RetrievalSettingsController.class);
 
     for (Class<?> controller : controllers) {
       SaCheckRole annotation = controller.getAnnotation(SaCheckRole.class);
@@ -101,5 +107,33 @@ class ManagementAuthorizationTest {
     mvc.perform(get("/api/admin/users")).andExpect(status().isForbidden());
 
     verifyNoInteractions(currentUserService, adminUserService);
+  }
+
+  @Test
+  void rejectsRegularUserBeforeReadingModelSettings() throws Exception {
+    ModelSettingsService service = mock(ModelSettingsService.class);
+    var mvc =
+        MockMvcBuilders.standaloneSetup(new ModelSettingsController(service))
+            .addInterceptors(new SaInterceptor())
+            .setControllerAdvice(new GlobalExceptionHandler())
+            .build();
+    SaTokenContextMockUtil.setMockContext();
+    StpUtil.login(UUID.randomUUID().toString());
+    mvc.perform(get("/api/admin/settings/models")).andExpect(status().isForbidden());
+    verifyNoInteractions(service);
+  }
+
+  @Test
+  void rejectsRegularUserBeforeReadingRetrievalSettings() throws Exception {
+    RetrievalSettingsService service = mock(RetrievalSettingsService.class);
+    var mvc =
+        MockMvcBuilders.standaloneSetup(new RetrievalSettingsController(service))
+            .addInterceptors(new SaInterceptor())
+            .setControllerAdvice(new GlobalExceptionHandler())
+            .build();
+    SaTokenContextMockUtil.setMockContext();
+    StpUtil.login(UUID.randomUUID().toString());
+    mvc.perform(get("/api/admin/settings/retrieval")).andExpect(status().isForbidden());
+    verifyNoInteractions(service);
   }
 }

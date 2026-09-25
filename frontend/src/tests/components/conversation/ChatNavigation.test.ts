@@ -128,6 +128,6 @@ describe('chat and management navigation', () => {
     expect(navigation.text()).toContain('Dashboard')
     expect(navigation.text()).toContain('知识库')
     expect(navigation.text()).toContain('链路追踪')
-    expect(navigation.text()).toContain('模型')
+    expect(navigation.text()).toContain('系统配置')
   })
 })
