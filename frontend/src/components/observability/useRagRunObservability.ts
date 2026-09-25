@@ -101,7 +101,7 @@ export function useRagRunObservability() {
   const total = ref(0)
   const page = ref(Math.max(1, Number.parseInt(queryString(route.query.page), 10) || 1))
   const pageSize = ref(
-    [10, 20, 50].includes(Number(route.query.pageSize)) ? Number(route.query.pageSize) : 20,
+    [10, 20, 50].includes(Number(route.query.pageSize)) ? Number(route.query.pageSize) : 10,
   )
   const loading = ref(false)
   const error = ref('')
@@ -168,7 +168,7 @@ export function useRagRunObservability() {
       ...(applied.executionMode ? { executionMode: applied.executionMode } : {}),
       ...(isAdmin.value && applied.userId ? { userId: applied.userId } : {}),
       ...(page.value > 1 ? { page: String(page.value) } : {}),
-      ...(pageSize.value !== 20 ? { pageSize: String(pageSize.value) } : {}),
+      ...(pageSize.value !== 10 ? { pageSize: String(pageSize.value) } : {}),
     }
   }
 
@@ -195,7 +195,7 @@ export function useRagRunObservability() {
     copyFilters(draft, defaults)
     copyFilters(applied, defaults)
     page.value = 1
-    pageSize.value = 20
+    pageSize.value = 10
     await syncRouteAndLoad()
   }
 
@@ -226,7 +226,7 @@ export function useRagRunObservability() {
       page.value = Math.max(1, Number.parseInt(queryString(route.query.page), 10) || 1)
       pageSize.value = [10, 20, 50].includes(Number(route.query.pageSize))
         ? Number(route.query.pageSize)
-        : 20
+        : 10
       void load()
     },
     { immediate: true },

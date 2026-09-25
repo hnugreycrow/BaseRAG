@@ -17,7 +17,7 @@ vi.mock('../../../api', async () => {
   }
 })
 
-const emptyPage = { items: [], total: 0, page: 1, pageSize: 20, totalPages: 0 }
+const emptyPage = { items: [], total: 0, page: 1, pageSize: 10, totalPages: 0 }
 const emptySummary = {
   requestCount: 0,
   successRate: 0,
@@ -72,7 +72,7 @@ describe('useRagRunObservability', () => {
     const wrapper = mount(Harness, { global: { plugins: [pinia, router] } })
     await flushPromises()
 
-    expect(api.listRagRuns).toHaveBeenCalledWith({}, 1, 20)
+    expect(api.listRagRuns).toHaveBeenCalledWith({}, 1, 10)
     expect(state.draft.range).toBe('all')
     wrapper.unmount()
   })
@@ -127,7 +127,7 @@ describe('useRagRunObservability', () => {
 
     expect(state.draft.range).toBe('all')
     expect(router.currentRoute.value.query).toEqual({ range: 'all' })
-    expect(api.listRagRuns).toHaveBeenLastCalledWith({}, 1, 20)
+    expect(api.listRagRuns).toHaveBeenLastCalledWith({}, 1, 10)
     wrapper.unmount()
   })
 
@@ -170,7 +170,7 @@ describe('useRagRunObservability', () => {
         to: '2026-09-15T08:00:00.000Z',
       },
       1,
-      20,
+      10,
     )
     wrapper.unmount()
   })
