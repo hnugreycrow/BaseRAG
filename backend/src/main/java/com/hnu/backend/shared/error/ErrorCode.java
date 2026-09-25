@@ -30,7 +30,7 @@ public enum ErrorCode {
   EMPTY_DOCUMENT("文档没有可用文本", HttpStatus.BAD_REQUEST),
   ENCRYPTED_PDF("不支持加密 PDF", HttpStatus.BAD_REQUEST),
   EXECUTION_FAILED("子问题执行失败", HttpStatus.BAD_GATEWAY),
-  FILE_TOO_LARGE("文件超过格式大小限制", HttpStatus.PAYLOAD_TOO_LARGE),
+  FILE_TOO_LARGE("文件超过格式大小限制", HttpStatus.CONTENT_TOO_LARGE),
   FORBIDDEN("当前账号无权执行此操作", HttpStatus.FORBIDDEN),
   GENERATION_CANCELLED("生成已停止", HttpStatus.CONFLICT),
   GENERATION_FAILED("模型未完整生成有效回答，请重试", HttpStatus.BAD_GATEWAY),
@@ -106,7 +106,7 @@ public enum ErrorCode {
   TOOL_TIMEOUT("工具执行超时", HttpStatus.BAD_GATEWAY),
   TRACE_OR_RESULT_PERSISTENCE_FAILED("运行记录或结果保存失败", HttpStatus.INTERNAL_SERVER_ERROR),
   UNSUPPORTED_MEDIA_TYPE("请求内容类型不受支持", HttpStatus.UNSUPPORTED_MEDIA_TYPE),
-  UPLOAD_REQUEST_TOO_LARGE("上传请求不能超过 60 MB", HttpStatus.PAYLOAD_TOO_LARGE),
+  UPLOAD_REQUEST_TOO_LARGE("上传请求不能超过 60 MB", HttpStatus.CONTENT_TOO_LARGE),
   USER_NOT_FOUND("用户不存在", HttpStatus.NOT_FOUND),
   USERNAME_EXISTS("用户名已存在", HttpStatus.CONFLICT);
 

@@ -21,6 +21,7 @@ import com.hnu.backend.model.client.ChatGenerationRequest;
 import com.hnu.backend.model.config.AiProperties;
 import com.hnu.backend.observability.service.RagTraceManager;
 import com.hnu.backend.observability.trace.RagRunTrace;
+import com.hnu.backend.observability.trace.TraceContext;
 import com.hnu.backend.rag.answer.AnswerStage;
 import com.hnu.backend.rag.answer.ChatAnswerGenerator;
 import com.hnu.backend.rag.answer.ContextBuilder;
@@ -43,6 +44,8 @@ import com.hnu.backend.rag.routing.RoutingPlan;
 import com.hnu.backend.rag.routing.RoutingReasonCode;
 import com.hnu.backend.shared.error.ApiException;
 import com.hnu.backend.shared.error.ErrorCode;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -51,6 +54,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
@@ -85,17 +90,26 @@ class ConversationServiceCancellationTest {
         new ConversationService(
             conversationMapper,
             messageMapper,
-            generationAttemptMapper,
-            conversationContextService,
-            executionStage,
-            deduplicationStage,
-            rerankStage,
-            prompts,
-            new AnswerStage(new ChatAnswerGenerator(chat), prompts),
-            rag,
-            config,
-            tx,
-            traces);
+            new ConversationGenerationService(
+                conversationMapper,
+                messageMapper,
+                generationAttemptMapper,
+                new AnswerStage(new ChatAnswerGenerator(chat), prompts),
+                rag,
+                tx,
+                traces,
+                new ConversationTerminalWriter(
+                    conversationMapper, messageMapper, generationAttemptMapper, tx, traces),
+                new ConversationGenerationRunner(
+                    conversationContextService,
+                    executionStage,
+                    deduplicationStage,
+                    rerankStage,
+                    prompts,
+                    new AnswerStage(new ChatAnswerGenerator(chat), prompts),
+                    messageMapper,
+                    generationAttemptMapper,
+                    config)));
     lenient()
         .when(traces.start(any(), any(), any(), any(), any(), any()))
         .thenReturn(RagRunTrace.noop());
@@ -209,7 +223,8 @@ class ConversationServiceCancellationTest {
     when(conversationMapper.find(ownerId, conversationId)).thenReturn(conversation);
     when(messageMapper.nextTurn(ownerId, conversationId)).thenReturn(1);
     when(rag.getMaxQuestionChars()).thenReturn(2000);
-    when(conversationContextService.prepare(any(Conversation.class), eq(1), eq("你好")))
+    when(conversationContextService.prepare(
+            any(Conversation.class), eq(1), eq("你好"), any(RagRunTrace.class)))
         .thenReturn(preparedSystemChat("你好"));
     when(messageMapper.markStreaming(eq(ownerId), any(UUID.class))).thenReturn(1);
     if (hasOutput) {
@@ -275,8 +290,15 @@ class ConversationServiceCancellationTest {
     verify(messageMapper, never()).checkpointReasoning(eq(ownerId), any(UUID.class), eq(""));
   }
 
-  @Test
-  void retrievesAndPersistsTheStandaloneQuestionFromTheQueryPlan() {
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void retrievesAndPersistsTheStandaloneQuestionFromTheQueryPlan(boolean traceEnabled) {
+    if (traceEnabled) {
+      when(traces.start(any(), any(), any(), any(), any(), any()))
+          .thenReturn(
+              new RagRunTrace(
+                  UUID.randomUUID(), OffsetDateTime.now(ZoneOffset.UTC), System.nanoTime()));
+    }
     UUID conversationId = UUID.randomUUID();
     Conversation conversation = new Conversation();
     conversation.setId(conversationId);
@@ -284,15 +306,24 @@ class ConversationServiceCancellationTest {
     when(conversationMapper.find(ownerId, conversationId)).thenReturn(conversation);
     when(messageMapper.nextTurn(ownerId, conversationId)).thenReturn(1);
     when(rag.getMaxQuestionChars()).thenReturn(2000);
-    when(conversationContextService.prepare(any(Conversation.class), eq(1), eq("原问题")))
+    when(conversationContextService.prepare(
+            any(Conversation.class), eq(1), eq("原问题"), any(RagRunTrace.class)))
         .thenReturn(preparedMixed("改写后的独立问题"));
     ExecutionResult empty =
         new ExecutionResult(List.of(), List.of(), RagBudgetSnapshot.from(new RagProperties()));
-    when(executionStage.execute(eq(ownerId), any(), any(), isNull(), any(CancellationToken.class)))
+    when(executionStage.executeRetrieval(
+            eq(ownerId),
+            any(),
+            any(),
+            isNull(),
+            any(CancellationToken.class),
+            any(TraceContext.class)))
         .thenReturn(empty);
+    when(executionStage.merge(eq(empty), any(TraceContext.class))).thenReturn(empty);
     when(deduplicationStage.execute(empty.candidates(), empty.budget()))
         .thenReturn(new DeduplicationResult(List.of(), 0, 0, 0));
-    when(rerankStage.execute(any(), eq(empty), eq(List.of()), any(CancellationToken.class)))
+    when(rerankStage.execute(
+            any(), eq(empty), eq(List.of()), any(CancellationToken.class), any(TraceContext.class)))
         .thenReturn(
             new RerankResult(
                 List.of(),
@@ -312,10 +343,18 @@ class ConversationServiceCancellationTest {
     conversationService.ask(ownerId, conversationId, UUID.randomUUID(), "原问题", "request-id");
 
     verify(executionStage, timeout(2000))
-        .execute(eq(ownerId), any(), any(), isNull(), any(CancellationToken.class));
+        .executeRetrieval(
+            eq(ownerId),
+            any(),
+            any(),
+            isNull(),
+            any(CancellationToken.class),
+            any(TraceContext.class));
+    verify(executionStage, timeout(2000)).merge(eq(empty), any(TraceContext.class));
     verify(deduplicationStage, timeout(2000)).execute(empty.candidates(), empty.budget());
     verify(rerankStage, timeout(2000))
-        .execute(any(), eq(empty), eq(List.of()), any(CancellationToken.class));
+        .execute(
+            any(), eq(empty), eq(List.of()), any(CancellationToken.class), any(TraceContext.class));
     verify(messageMapper, timeout(2000))
         .prepare(eq(ownerId), any(UUID.class), eq("改写后的独立问题"), eq("[]"));
     // 等待异步任务进入终态事务，避免 teardown 提前取消任务导致严格 mock 检查误报。
@@ -332,7 +371,8 @@ class ConversationServiceCancellationTest {
     when(conversationMapper.find(ownerId, conversationId)).thenReturn(conversation);
     when(messageMapper.nextTurn(ownerId, conversationId)).thenReturn(1);
     when(rag.getMaxQuestionChars()).thenReturn(2000);
-    when(conversationContextService.prepare(any(Conversation.class), eq(1), eq("你好")))
+    when(conversationContextService.prepare(
+            any(Conversation.class), eq(1), eq("你好"), any(RagRunTrace.class)))
         .thenReturn(preparedSystemChat("你好"));
     when(chat.stream(anyString(), anyString(), any(), any()))
         .thenReturn(new ChatClient.Generation("你好，有什么可以帮你？", "chat", "test", "model"));
@@ -355,7 +395,8 @@ class ConversationServiceCancellationTest {
     when(messageMapper.nextTurn(ownerId, conversationId)).thenReturn(1);
     when(rag.getMaxQuestionChars()).thenReturn(2000);
     ConversationContextService.PreparedContext prepared = preparedTool("查询今日排班");
-    when(conversationContextService.prepare(any(Conversation.class), eq(1), eq("查询今日排班")))
+    when(conversationContextService.prepare(
+            any(Conversation.class), eq(1), eq("查询今日排班"), any(RagRunTrace.class)))
         .thenReturn(prepared);
     ToolObservation observation =
         new ToolObservation(
@@ -380,17 +421,23 @@ class ConversationServiceCancellationTest {
                     "TOOL_COMPLETED",
                     1)),
             RagBudgetSnapshot.from(new RagProperties()));
-    when(executionStage.execute(
+    when(executionStage.executeRetrieval(
             eq(ownerId),
             eq(prepared.queryPlan()),
             eq(prepared.routingPlan()),
             isNull(),
-            any(CancellationToken.class)))
+            any(CancellationToken.class),
+            any(TraceContext.class)))
         .thenReturn(execution);
+    when(executionStage.merge(eq(execution), any(TraceContext.class))).thenReturn(execution);
     when(deduplicationStage.execute(List.of(), execution.budget()))
         .thenReturn(new DeduplicationResult(List.of(), 0, 0, 0));
     when(rerankStage.execute(
-            eq(prepared.queryPlan()), eq(execution), eq(List.of()), any(CancellationToken.class)))
+            eq(prepared.queryPlan()),
+            eq(execution),
+            eq(List.of()),
+            any(CancellationToken.class),
+            any(TraceContext.class)))
         .thenReturn(
             new RerankResult(
                 List.of(),
@@ -425,7 +472,8 @@ class ConversationServiceCancellationTest {
     when(rag.getMaxQuestionChars()).thenReturn(2000);
     when(config.getCheckpointChars()).thenReturn(1000);
     when(config.getCheckpointIntervalMs()).thenReturn(60_000L);
-    when(conversationContextService.prepare(any(Conversation.class), eq(1), eq("你好")))
+    when(conversationContextService.prepare(
+            any(Conversation.class), eq(1), eq("你好"), any(RagRunTrace.class)))
         .thenReturn(preparedSystemChat("你好"));
     when(messageMapper.markStreaming(eq(ownerId), any(UUID.class))).thenReturn(1);
     AiProperties.ModelTarget target =

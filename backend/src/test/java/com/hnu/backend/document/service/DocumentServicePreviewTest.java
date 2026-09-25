@@ -48,7 +48,8 @@ class DocumentServicePreviewTest {
           new MarkdownChunker(new RagProperties()),
           mock(EmbeddingClient.class),
           storage,
-          mock(TransactionTemplate.class));
+          mock(TransactionTemplate.class),
+          new com.hnu.backend.configuration.DocumentProcessingProperties());
 
   @BeforeAll
   static void initializeTableMetadata() {

@@ -188,6 +188,12 @@ rag:
     bucket: "${RUSTFS_BUCKET:baserag}"
     region: us-east-1
 
+document:
+  processing:
+    sync-concurrency: 2
+    workers: 2
+    queue-capacity: 50
+
 conversation:
   recent-turns: 8
   summary-batch-turns: 4

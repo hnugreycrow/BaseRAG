@@ -9,7 +9,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.withSettings;
 
 import com.hnu.backend.rag.mcp.McpToolDefinition;
 import com.hnu.backend.rag.mcp.McpToolRegistry;
@@ -25,8 +24,7 @@ import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 class IntentTreeSnapshotProviderTest {
-  private final IntentTreeService intentTreeService =
-      mock(IntentTreeService.class, withSettings().mockMaker("mock-maker-subclass"));
+  private final IntentTreeService intentTreeService = mock(IntentTreeService.class);
   private final McpToolRegistry tools = mock(McpToolRegistry.class);
   private final IntentTreeSnapshotProvider provider =
       new IntentTreeSnapshotProvider(intentTreeService, tools);

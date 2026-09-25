@@ -106,7 +106,8 @@ class ConversationMemoryProviderTest {
     when(conversationMapper.find(conversation.getOwnerId(), conversation.getId()))
         .thenReturn(conversation, conversation, updated);
     when(messageMapper.list(conversation.getOwnerId(), conversation.getId()))
-        .thenReturn(turns(conversation.getId(), 12), turns(conversation.getId(), 13));
+        .thenReturn(turns(conversation.getId(), 12))
+        .thenReturn(turns(conversation.getId(), 13));
     when(chat.generate(anyString(), anyString())).thenReturn(generation(VALID_SUMMARY));
     when(conversationMapper.updateSummary(
             eq(conversation.getOwnerId()), eq(conversation.getId()), anyString(), eq(9), eq(1)))

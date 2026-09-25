@@ -20,20 +20,7 @@ class ConversationPaginationTest {
   private final ConversationMapper conversations = mock(ConversationMapper.class);
   private final MessageMapper messages = mock(MessageMapper.class);
   private final ConversationService service =
-      new ConversationService(
-          conversations,
-          messages,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null);
+      new ConversationService(conversations, messages, mock(ConversationGenerationService.class));
 
   @AfterEach
   void close() {

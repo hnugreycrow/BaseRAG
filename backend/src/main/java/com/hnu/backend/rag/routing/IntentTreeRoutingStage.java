@@ -33,6 +33,7 @@ import java.util.concurrent.TimeoutException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -317,7 +318,7 @@ public class IntentTreeRoutingStage {
       if (!values.isObject()) {
         throw new IllegalArgumentException("Invalid tool arguments");
       }
-      arguments = json.convertValue(values, Map.class);
+      arguments = json.convertValue(values, new TypeReference<Map<String, Object>>() {});
       McpToolRegistry.RoutingCheck check = tools.check(node.toolName(), arguments);
       if (check != McpToolRegistry.RoutingCheck.ALLOWED) {
         throw new ToolValidationException(toolFallbackReason(check));

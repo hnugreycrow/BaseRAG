@@ -13,7 +13,6 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.withSettings;
 
 import com.hnu.backend.configuration.RagProperties;
 import com.hnu.backend.intent.IntentNode;
@@ -43,8 +42,7 @@ import org.springframework.boot.test.system.OutputCaptureExtension;
 
 @ExtendWith(OutputCaptureExtension.class)
 class IntentTreeRoutingStageTest {
-  private final IntentTreeSnapshotProvider snapshots =
-      mock(IntentTreeSnapshotProvider.class, withSettings().mockMaker("mock-maker-subclass"));
+  private final IntentTreeSnapshotProvider snapshots = mock(IntentTreeSnapshotProvider.class);
   private final ChatClient chat = mock(ChatClient.class);
   private final McpToolRegistry tools = mock(McpToolRegistry.class);
   private final RagProperties config = new RagProperties();

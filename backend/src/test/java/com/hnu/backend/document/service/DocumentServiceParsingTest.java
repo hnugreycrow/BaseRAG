@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.hnu.backend.configuration.RagProperties;
 import com.hnu.backend.document.entity.Document;
@@ -104,7 +103,8 @@ class DocumentServiceParsingTest {
             new MarkdownChunker(new RagProperties()),
             embedding,
             storage,
-            tx);
+            tx,
+            new com.hnu.backend.configuration.DocumentProcessingProperties());
     var invalid =
         new MockMultipartFile(
             "file", "fake.pdf", "application/pdf", "not a pdf".getBytes(StandardCharsets.UTF_8));
@@ -135,7 +135,7 @@ class DocumentServiceParsingTest {
             })
         .when(tx)
         .executeWithoutResult(any());
-    when(documentVersionMapper.update(any(LambdaUpdateWrapper.class))).thenReturn(1);
+    when(documentVersionMapper.update(any())).thenReturn(1);
     when(embedding.embed(eq("model-id"), eq("local"), eq("embedding"), eq(2), anyList()))
         .thenAnswer(
             invocation -> {
@@ -151,7 +151,8 @@ class DocumentServiceParsingTest {
             new MarkdownChunker(new RagProperties()),
             embedding,
             storage,
-            tx);
+            tx,
+            new com.hnu.backend.configuration.DocumentProcessingProperties());
 
     var uploaded =
         service.upload(

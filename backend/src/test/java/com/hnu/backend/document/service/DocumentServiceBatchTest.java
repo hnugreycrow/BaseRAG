@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
+import com.hnu.backend.configuration.DocumentProcessingProperties;
 import com.hnu.backend.document.entity.Document;
 import com.hnu.backend.document.entity.DocumentVersion;
 import com.hnu.backend.document.entity.DocumentVersionStatus;
@@ -65,7 +66,8 @@ class DocumentServiceBatchTest {
             mock(MarkdownChunker.class),
             mock(EmbeddingClient.class),
             storage,
-            tx);
+            tx,
+            new DocumentProcessingProperties());
   }
 
   @Test
