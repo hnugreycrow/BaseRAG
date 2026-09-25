@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.hnu.backend.observability.RagRunStatus;
 import com.hnu.backend.observability.entity.RagRun;
 import com.hnu.backend.observability.trace.RagRunTrace;
+import com.hnu.backend.observability.vo.DashboardTrend;
 import java.util.List;
 import java.util.UUID;
 import org.apache.ibatis.annotations.Delete;
@@ -15,6 +16,14 @@ import org.apache.ibatis.annotations.Update;
 /** 单次问答运行记录的写入、恢复和安全查询接口。 */
 @Mapper
 public interface RagRunMapper extends BaseMapper<RagRun> {
+  /**
+   * 按北京时间聚合每日运行量和成功请求的延迟。
+   *
+   * @param filter 已收敛权限和时间边界的筛选条件
+   * @return 有请求的日期，按日期升序排列
+   */
+  List<DashboardTrend.Day> dailyTrend(@Param("filter") RagRunFilter filter);
+
   /**
    * 按回答版本查找运行记录。
    *

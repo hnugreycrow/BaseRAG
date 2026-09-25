@@ -2,6 +2,7 @@ package com.hnu.backend.observability.service;
 
 import com.hnu.backend.auth.entity.User;
 import com.hnu.backend.auth.entity.UserRole;
+import com.hnu.backend.configuration.ObservabilityProperties;
 import com.hnu.backend.observability.RagExecutionMode;
 import com.hnu.backend.observability.RagRunStatus;
 import com.hnu.backend.observability.RagStageName;
@@ -13,14 +14,19 @@ import com.hnu.backend.observability.mapper.RagRunMapper;
 import com.hnu.backend.observability.mapper.RagRunSummaryRow;
 import com.hnu.backend.observability.mapper.RagRunViewRow;
 import com.hnu.backend.observability.mapper.RagStageRunMapper;
+import com.hnu.backend.observability.vo.DashboardTrend;
 import com.hnu.backend.observability.vo.RagRunResponses;
 import com.hnu.backend.shared.error.ApiException;
 import com.hnu.backend.shared.error.ErrorCode;
 import com.hnu.backend.shared.web.PageResponse;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 
 /** 执行用户隔离的问答运行查询和统计。 */
@@ -28,16 +34,76 @@ import org.springframework.stereotype.Service;
 public class RagRunQueryService {
   private final RagRunMapper ragRunMapper;
   private final RagStageRunMapper ragStageRunMapper;
+  private final ObservabilityProperties observability;
 
   /**
    * 创建观测查询服务。
    *
    * @param ragRunMapper 运行查询接口
    * @param ragStageRunMapper 阶段查询接口
+   * @param observability 历史数据保留配置
    */
-  public RagRunQueryService(RagRunMapper ragRunMapper, RagStageRunMapper ragStageRunMapper) {
+  public RagRunQueryService(
+      RagRunMapper ragRunMapper,
+      RagStageRunMapper ragStageRunMapper,
+      ObservabilityProperties observability) {
     this.ragRunMapper = ragRunMapper;
     this.ragStageRunMapper = ragStageRunMapper;
+    this.observability = observability;
+  }
+
+  /**
+   * 查询指定自然日范围的趋势及上一等长周期数量。
+   *
+   * @param actor 当前用户，普通用户只统计自己的请求
+   * @param from 北京时间开始日期，包含
+   * @param to 北京时间结束日期，包含；范围最多 30 天
+   * @return 补齐空日期的趋势，无耗时样本时保留空值
+   */
+  public DashboardTrend trend(User actor, LocalDate from, LocalDate to) {
+    if (from == null || to == null || from.isAfter(to) || ChronoUnit.DAYS.between(from, to) >= 30) {
+      throw ApiException.bad(ErrorCode.INVALID_TIME_RANGE, "日期范围须为 1 到 30 天");
+    }
+    long length = ChronoUnit.DAYS.between(from, to) + 1;
+    var zone = ZoneId.of("Asia/Shanghai");
+    var rows =
+        ragRunMapper.dailyTrend(
+            filter(
+                actor,
+                from.minusDays(length).atStartOfDay(zone).toOffsetDateTime(),
+                to.plusDays(1).atStartOfDay(zone).toOffsetDateTime(),
+                null,
+                null,
+                null,
+                null));
+    var byDate = rows.stream().collect(Collectors.toMap(DashboardTrend.Day::date, value -> value));
+    var days =
+        from.datesUntil(to.plusDays(1))
+            .map(
+                date ->
+                    byDate.getOrDefault(
+                        date, new DashboardTrend.Day(date, 0, 0, 0, 0, null, null, null, null)))
+            .toList();
+    long previousRequests =
+        rows.stream()
+            .filter(row -> row.date().isBefore(from))
+            .mapToLong(DashboardTrend.Day::requestCount)
+            .sum();
+    long previousFailures =
+        rows.stream()
+            .filter(row -> row.date().isBefore(from))
+            .mapToLong(DashboardTrend.Day::failureCount)
+            .sum();
+    // 超出保留期的上期数据可能被清理，不能把缺失数据当成零生成环比。
+    boolean previousAvailable =
+        !from.minusDays(length)
+            .atStartOfDay(zone)
+            .toOffsetDateTime()
+            .isBefore(OffsetDateTime.now(zone).minusDays(observability.getRetentionDays()));
+    return new DashboardTrend(
+        days,
+        previousAvailable ? previousRequests : null,
+        previousAvailable ? previousFailures : null);
   }
 
   /**

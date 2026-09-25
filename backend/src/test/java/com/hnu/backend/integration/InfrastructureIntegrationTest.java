@@ -83,6 +83,60 @@ import software.amazon.awssdk.services.s3.S3Client;
       "rag.storage.bucket=baserag-test"
     })
 class InfrastructureIntegrationTest {
+  @Test
+  void dashboardAggregatesBeijingDaysAndSuccessfulLatencyOnly() {
+    transaction.executeWithoutResult(
+        tx -> {
+          tx.setRollbackOnly();
+          UUID owner = createUser();
+          String[] statuses = {
+            "COMPLETED", "COMPLETED", "FAILED", "CANCELLED", "INTERRUPTED", "RUNNING"
+          };
+          for (int i = 0; i < statuses.length; i++) {
+            RagRun run = new RagRun();
+            run.setId(UUID.randomUUID());
+            run.setOwnerId(owner);
+            run.setRequestId(UUID.randomUUID().toString());
+            run.setStatus(RagRunStatus.valueOf(statuses[i]));
+            run.setExecutionMode(RagExecutionMode.FULL_PIPELINE);
+            run.setStartedAt(OffsetDateTime.parse("2026-09-01T16:00:00Z"));
+            run.setTotalMs(i == 0 ? 1000L : 3000L);
+            run.setEndToEndTtftMs(i == 0 ? null : 500L);
+            ragRunMapper.insert(run);
+          }
+          var rows =
+              ragRunMapper.dailyTrend(
+                  new com.hnu.backend.observability.mapper.RagRunFilter(
+                      OffsetDateTime.parse("2026-09-02T00:00:00+08:00"),
+                      OffsetDateTime.parse("2026-09-03T00:00:00+08:00"),
+                      null,
+                      null,
+                      null,
+                      owner));
+          assertEquals(1, rows.size());
+          var day = rows.getFirst();
+          assertEquals(java.time.LocalDate.of(2026, 9, 2), day.date());
+          assertEquals(6, day.requestCount());
+          assertEquals(1, day.failureCount());
+          assertEquals(1, day.ttftSampleCount());
+          assertEquals(2, day.totalSampleCount());
+          assertEquals(500L, day.ttftP95Ms());
+          assertEquals(2000L, day.totalP50Ms());
+          assertEquals(2900L, day.totalP95Ms());
+          assertTrue(
+              ragRunMapper
+                  .dailyTrend(
+                      new com.hnu.backend.observability.mapper.RagRunFilter(
+                          OffsetDateTime.parse("2026-09-01T00:00:00+08:00"),
+                          OffsetDateTime.parse("2026-09-02T00:00:00+08:00"),
+                          null,
+                          null,
+                          null,
+                          owner))
+                  .isEmpty());
+        });
+  }
+
   @Autowired KnowledgeBaseMapper knowledgeBaseMapper;
   @Autowired UserMapper userMapper;
   @Autowired DocumentMapper documentMapper;

@@ -27,6 +27,23 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class RagRunControllerTest {
+  @Test
+  void routesTrendAndBindsCalendarDates() throws Exception {
+    var from = java.time.LocalDate.of(2026, 9, 1);
+    var to = from.plusDays(6);
+    when(ragRunQueryService.trend(actor, from, to))
+        .thenReturn(new com.hnu.backend.observability.vo.DashboardTrend(List.of(), 12L, 1L));
+    mvc.perform(
+            get("/api/observability/rag-runs/trend")
+                .param("from", from.toString())
+                .param("to", to.toString()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.previousRequestCount").value(12));
+    verify(ragRunQueryService).trend(actor, from, to);
+    mvc.perform(get("/api/observability/rag-runs/trend").param("from", "invalid"))
+        .andExpect(status().isBadRequest());
+  }
+
   private final CurrentUserService currentUserService = mock(CurrentUserService.class);
   private final RagRunQueryService ragRunQueryService = mock(RagRunQueryService.class);
   private final User actor = user();

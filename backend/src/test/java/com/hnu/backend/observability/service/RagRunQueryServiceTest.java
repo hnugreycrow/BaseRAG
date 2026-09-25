@@ -24,10 +24,65 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 class RagRunQueryServiceTest {
+  private final com.hnu.backend.configuration.ObservabilityProperties observability =
+      new com.hnu.backend.configuration.ObservabilityProperties();
+
+  @Test
+  void trendFillsMissingDaysAndUsesBeijingBoundsAndPreviousPeriod() {
+    observability.setRetentionDays(3650);
+    var from = java.time.LocalDate.of(2026, 9, 1);
+    when(ragRunMapper.dailyTrend(any()))
+        .thenReturn(
+            List.of(
+                new com.hnu.backend.observability.vo.DashboardTrend.Day(
+                    from.minusDays(1), 9, 2, 0, 0, null, null, null, null),
+                new com.hnu.backend.observability.vo.DashboardTrend.Day(
+                    from.plusDays(1), 5, 1, 2, 3, 0L, 1500L, 2000L, 3000L)));
+    var response = ragRunQueryService.trend(user(UserRole.ADMIN), from, from.plusDays(6));
+    assertEquals(7, response.days().size());
+    assertEquals(from, response.days().getFirst().date());
+    assertEquals(0, response.days().getFirst().requestCount());
+    assertNull(response.days().getFirst().ttftP50Ms());
+    assertEquals(0L, response.days().get(1).ttftP50Ms());
+    assertEquals(9, response.previousRequestCount());
+    assertEquals(2, response.previousFailureCount());
+    verify(ragRunMapper)
+        .dailyTrend(
+            argThat(
+                filter ->
+                    filter.ownerId() == null
+                        && filter.from().equals(OffsetDateTime.parse("2026-08-25T00:00:00+08:00"))
+                        && filter.to().equals(OffsetDateTime.parse("2026-09-08T00:00:00+08:00"))));
+  }
+
+  @Test
+  void trendRejectsInvalidRangesAndScopesRegularUsers() {
+    var date = java.time.LocalDate.of(2026, 9, 1);
+    var actor = user(UserRole.USER);
+    assertThrows(
+        ApiException.class, () -> ragRunQueryService.trend(actor, date, date.plusDays(30)));
+    assertThrows(
+        ApiException.class, () -> ragRunQueryService.trend(actor, date, date.minusDays(1)));
+    assertThrows(ApiException.class, () -> ragRunQueryService.trend(actor, null, date));
+    verifyNoInteractions(ragRunMapper);
+    when(ragRunMapper.dailyTrend(any())).thenReturn(List.of());
+    assertEquals(30, ragRunQueryService.trend(actor, date, date.plusDays(29)).days().size());
+    verify(ragRunMapper).dailyTrend(argThat(filter -> actor.getId().equals(filter.ownerId())));
+  }
+
+  @Test
+  void trendDoesNotCompareAnExpiredPreviousPeriodWithZero() {
+    var today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Shanghai"));
+    when(ragRunMapper.dailyTrend(any())).thenReturn(List.of());
+    var response = ragRunQueryService.trend(user(UserRole.ADMIN), today.minusDays(29), today);
+    assertNull(response.previousRequestCount());
+    assertNull(response.previousFailureCount());
+  }
+
   private final RagRunMapper ragRunMapper = mock(RagRunMapper.class);
   private final RagStageRunMapper ragStageRunMapper = mock(RagStageRunMapper.class);
   private final RagRunQueryService ragRunQueryService =
-      new RagRunQueryService(ragRunMapper, ragStageRunMapper);
+      new RagRunQueryService(ragRunMapper, ragStageRunMapper, observability);
 
   @Test
   void rejectsOtherUserFilterForRegularUser() {

@@ -3,6 +3,25 @@
     PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.hnu.backend.observability.mapper.RagRunMapper">
+    <select id="dailyTrend" resultType="com.hnu.backend.observability.vo.DashboardTrend$Day">
+        SELECT (r.started_at AT TIME ZONE 'Asia/Shanghai')::date AS date,
+               COUNT(*) AS request_count,
+               COUNT(*) FILTER (WHERE r.status = 'FAILED') AS failure_count,
+               COUNT(*) FILTER (WHERE r.status = 'COMPLETED' AND r.end_to_end_ttft_ms IS NOT NULL) AS ttft_sample_count,
+               COUNT(*) FILTER (WHERE r.status = 'COMPLETED' AND r.total_ms IS NOT NULL) AS total_sample_count,
+               ROUND(percentile_cont(0.50) WITHIN GROUP (ORDER BY r.end_to_end_ttft_ms)
+                   FILTER (WHERE r.status = 'COMPLETED' AND r.end_to_end_ttft_ms IS NOT NULL))::bigint AS ttft_p50_ms,
+               ROUND(percentile_cont(0.95) WITHIN GROUP (ORDER BY r.end_to_end_ttft_ms)
+                   FILTER (WHERE r.status = 'COMPLETED' AND r.end_to_end_ttft_ms IS NOT NULL))::bigint AS ttft_p95_ms,
+               ROUND(percentile_cont(0.50) WITHIN GROUP (ORDER BY r.total_ms)
+                   FILTER (WHERE r.status = 'COMPLETED' AND r.total_ms IS NOT NULL))::bigint AS total_p50_ms,
+               ROUND(percentile_cont(0.95) WITHIN GROUP (ORDER BY r.total_ms)
+                   FILTER (WHERE r.status = 'COMPLETED' AND r.total_ms IS NOT NULL))::bigint AS total_p95_ms
+        FROM rag_runs r
+        <include refid="filters"/>
+        GROUP BY (r.started_at AT TIME ZONE 'Asia/Shanghai')::date
+        ORDER BY date
+    </select>
     <sql id="viewColumns">
         r.id, r.owner_id, u.username, u.display_name, r.request_id,
         r.conversation_id, r.user_message_id, r.assistant_message_id, r.question,

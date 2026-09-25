@@ -6,11 +6,13 @@ import com.hnu.backend.auth.service.CurrentUserService;
 import com.hnu.backend.observability.RagExecutionMode;
 import com.hnu.backend.observability.RagRunStatus;
 import com.hnu.backend.observability.service.RagRunQueryService;
+import com.hnu.backend.observability.vo.DashboardTrend;
 import com.hnu.backend.observability.vo.RagRunResponses;
 import com.hnu.backend.shared.web.PageResponse;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 import org.springframework.context.annotation.Profile;
@@ -42,6 +44,20 @@ public class RagRunController {
       CurrentUserService currentUserService, RagRunQueryService ragRunQueryService) {
     this.currentUserService = currentUserService;
     this.ragRunQueryService = ragRunQueryService;
+  }
+
+  /**
+   * 获取管理员 Dashboard 的每日趋势。
+   *
+   * @param from 北京时间开始日期，包含
+   * @param to 北京时间结束日期，包含，最多查询 30 天
+   * @return 每日请求量、失败量和成功请求耗时
+   */
+  @GetMapping("/trend")
+  public DashboardTrend trend(
+      @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+      @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+    return ragRunQueryService.trend(currentUserService.require(), from, to);
   }
 
   /**

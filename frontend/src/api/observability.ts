@@ -1,6 +1,29 @@
 import { request } from './http'
 import type { PageResult } from './types'
 
+export interface DashboardDay {
+  date: string
+  requestCount: number
+  failureCount: number
+  ttftSampleCount: number
+  totalSampleCount: number
+  ttftP50Ms: number | null
+  ttftP95Ms: number | null
+  totalP50Ms: number | null
+  totalP95Ms: number | null
+}
+
+export interface DashboardTrend {
+  days: DashboardDay[]
+  previousRequestCount: number | null
+  previousFailureCount: number | null
+}
+
+/** 查询北京时间自然日趋势，日期上下界均包含。 */
+export function getDashboardTrend(from: string, to: string) {
+  return request<DashboardTrend>({ url: '/observability/rag-runs/trend', params: { from, to } })
+}
+
 /** 单次问答运行状态。 */
 export type RagRunStatus = 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'INTERRUPTED'
 

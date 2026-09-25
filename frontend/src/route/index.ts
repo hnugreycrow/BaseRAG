@@ -44,7 +44,7 @@ export const router = createRouter({
           path: '',
           name: 'dashboard',
           component: () => import('../views/DashboardView.vue'),
-          meta: { title: '工作台', section: '概览' },
+          meta: { title: 'Dashboard', section: '概览' },
         },
         {
           path: 'knowledge-bases',
@@ -122,5 +122,5 @@ function redirectTarget(value: unknown) {
 }
 
 router.afterEach((to) => {
-  document.title = `${String(to.meta.title ?? '工作台')} · BaseRAG`
+  document.title = `${String(to.meta.title ?? 'Dashboard')} · BaseRAG`
 })

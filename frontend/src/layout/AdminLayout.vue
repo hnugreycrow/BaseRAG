@@ -51,7 +51,7 @@ const collapsed = computed(() => tablet.value || sidebarCollapsed.value)
         <nav class="breadcrumb" aria-label="当前位置">
           <RouterLink to="/admin">BaseRAG</RouterLink>
           <span aria-hidden="true">/</span>
-          <span class="current-page">{{ String(route.meta.title ?? '工作台') }}</span>
+          <span class="current-page">{{ String(route.meta.title ?? 'Dashboard') }}</span>
         </nav>
         <div class="topbar-actions">
           <RouterLink class="chat-link" to="/chat">

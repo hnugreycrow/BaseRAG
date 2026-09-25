@@ -92,7 +92,7 @@ describe('chat and management navigation', () => {
     })
     expect(sidebar.get('.brand').attributes('href')).toBe('/chat')
     expect(sidebar.get('.workspace-nav').findAll('a')).toHaveLength(0)
-    expect(sidebar.get('.workspace-nav').text()).not.toContain('工作台')
+    expect(sidebar.get('.workspace-nav').text()).not.toContain('Dashboard')
   })
 
   it('keeps the management menu and a return link to chat on admin pages', async () => {
@@ -125,7 +125,7 @@ describe('chat and management navigation', () => {
     expect(layout.get('.topbar .chat-link').text()).toContain('知识问答')
     expect(layout.get('.topbar .chat-link').attributes('href')).toBe('/chat')
     layout.unmount()
-    expect(navigation.text()).toContain('工作台')
+    expect(navigation.text()).toContain('Dashboard')
     expect(navigation.text()).toContain('知识库')
     expect(navigation.text()).toContain('链路追踪')
     expect(navigation.text()).toContain('模型')

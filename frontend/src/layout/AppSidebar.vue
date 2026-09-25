@@ -17,7 +17,7 @@ const activeMenu = computed(() =>
 const menuItems = computed(() => [
   ...(auth.user?.role === 'ADMIN'
     ? [
-        { label: '工作台', path: '/admin', icon: HomeFilled },
+        { label: 'Dashboard', path: '/admin', icon: HomeFilled },
         { label: '知识库管理', path: '/admin/knowledge-bases', icon: Collection },
         { label: '意图树', path: '/admin/intent-tree', icon: Connection },
         { label: '链路追踪', path: '/admin/observability', icon: Share },
