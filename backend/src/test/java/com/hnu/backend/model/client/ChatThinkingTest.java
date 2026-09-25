@@ -2,6 +2,7 @@ package com.hnu.backend.model.client;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.*;
 
 import com.hnu.backend.model.config.AiProperties;
@@ -57,7 +58,7 @@ class ChatThinkingTest {
           return null;
         })
         .when(http)
-        .stream(any(), any(), any(), any());
+        .stream(any(), any(), any(), any(), anyLong(), any());
     List<String> reasoning = new ArrayList<>();
     List<String> content = new ArrayList<>();
     ChatClient.Generation result =
@@ -91,7 +92,7 @@ class ChatThinkingTest {
     assertEquals("答案", result.content());
     assertEquals(List.of("思", "考"), reasoning);
     assertEquals(List.of("答案"), content);
-    verify(http).stream(any(), payload.capture(), any(), any());
+    verify(http).stream(any(), payload.capture(), any(), any(), anyLong(), any());
     assertEquals(enabledValue, payload.getValue().get(parameter));
   }
 

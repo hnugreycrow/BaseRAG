@@ -65,7 +65,7 @@ export const useConversationGenerationStore = defineStore('conversation-generati
       task.generationId = event.data.generationId
       task.assistant.id = event.data.assistantMessageId
       task.assistant.status = 'STREAMING'
-      task.phase = 'streaming'
+      // started 只确认任务身份；收到正文或思考内容后才进入输出阶段。
       return
     }
 

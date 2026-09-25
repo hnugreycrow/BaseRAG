@@ -1,12 +1,17 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { vi } from 'vitest'
 
-import { askConversation, type AssistantMessage, type UserMessage } from '../../api'
+import {
+  askConversation,
+  cancelGeneration,
+  type AssistantMessage,
+  type UserMessage,
+} from '../../api'
 import { useConversationGenerationStore } from '../../store/conversationGeneration'
 
 vi.mock('../../api', async () => {
   const actual = await vi.importActual<typeof import('../../api')>('../../api')
-  return { ...actual, askConversation: vi.fn() }
+  return { ...actual, askConversation: vi.fn(), cancelGeneration: vi.fn() }
 })
 
 describe('conversation thinking stream', () => {
@@ -51,7 +56,10 @@ describe('conversation thinking stream', () => {
           variantIndex: 1,
         },
       })
+      expect(store.taskFor('conversation')?.phase).toBe('starting')
+      expect(store.taskFor('conversation')?.generationId).toBe('generation')
       onEvent({ type: 'reasoning_delta', data: { schemaVersion: 1, text: '旧思考' } })
+      expect(store.taskFor('conversation')?.phase).toBe('streaming')
       onEvent({ type: 'delta', data: { schemaVersion: 1, text: '旧回答' } })
       onEvent({ type: 'reset', data: { schemaVersion: 1, reason: 'INVALID_CITATIONS' } })
       onEvent({ type: 'reasoning_delta', data: { schemaVersion: 1, text: '新思考' } })
@@ -101,6 +109,28 @@ describe('conversation thinking stream', () => {
       completedAt: null,
     }
     vi.mocked(askConversation).mockImplementation(async (_id, _clientId, _content, onEvent) => {
+      const started = {
+        type: 'started' as const,
+        data: {
+          schemaVersion: 1,
+          conversationId: 'failed-conversation',
+          userMessageId: user.id,
+          assistantMessageId: assistant.id,
+          generationId: 'waiting-generation',
+          turnIndex: 1,
+          variantIndex: 1,
+        },
+      }
+      onEvent(started)
+      expect(store.taskFor('failed-conversation')?.phase).toBe('starting')
+      vi.mocked(cancelGeneration).mockResolvedValue(undefined)
+      await store.stop('failed-conversation')
+      expect(cancelGeneration).toHaveBeenCalledWith('failed-conversation', 'waiting-generation')
+      expect(store.taskFor('failed-conversation')?.phase).toBe('stopping')
+      onEvent(started)
+      onEvent({ type: 'reasoning_delta', data: { schemaVersion: 1, text: '部分思考' } })
+      onEvent({ type: 'delta', data: { schemaVersion: 1, text: '部分正文' } })
+      expect(store.taskFor('failed-conversation')?.phase).toBe('stopping')
       onEvent({
         type: 'error',
         data: {
@@ -120,5 +150,7 @@ describe('conversation thinking stream', () => {
     expect(task?.phase).toBe('failed')
     expect(task?.assistant.errorMessage).toBe('模型请求超时，请稍后重试')
     expect(task?.assistant.errorCode).toBe('MODEL_TIMEOUT')
+    expect(task?.assistant.content).toBe('部分正文')
+    expect(task?.assistant.reasoningContent).toBe('部分思考')
   })
 })

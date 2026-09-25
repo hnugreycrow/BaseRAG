@@ -191,7 +191,16 @@ class ConversationServiceCancellationTest {
   }
 
   @Test
-  void thinkingFallbackDiscardsThePreviousModelsReasoningBeforeSavingTheAnswer() {
+  void fallbackBeforeContentPersistsOnlyTheSuccessfulModelsReasoning() {
+    verifyThinkingTimeout(false);
+  }
+
+  @Test
+  void timeoutAfterReasoningPersistsPartialContentWithoutReset() {
+    verifyThinkingTimeout(true);
+  }
+
+  private void verifyThinkingTimeout(boolean hasOutput) {
     UUID conversationId = UUID.randomUUID();
     Conversation conversation = new Conversation();
     conversation.setId(conversationId);
@@ -203,8 +212,19 @@ class ConversationServiceCancellationTest {
     when(conversationContextService.prepare(any(Conversation.class), eq(1), eq("你好")))
         .thenReturn(preparedSystemChat("你好"));
     when(messageMapper.markStreaming(eq(ownerId), any(UUID.class))).thenReturn(1);
-    when(messageMapper.complete(eq(ownerId), any(UUID.class), eq("答案"), eq("[]"), anyString()))
-        .thenReturn(1);
+    if (hasOutput) {
+      when(messageMapper.terminalFailure(
+              eq(ownerId),
+              any(UUID.class),
+              eq(MessageStatus.FAILED),
+              eq(""),
+              eq("MODEL_TIMEOUT"),
+              anyString()))
+          .thenReturn(1);
+    } else {
+      when(messageMapper.complete(eq(ownerId), any(UUID.class), eq("答案"), eq("[]"), anyString()))
+          .thenReturn(1);
+    }
     AiProperties.ModelTarget primary =
         new AiProperties.ModelTarget(
             "primary", "deepseek", "model", "http://localhost", "/chat", "", 1000, 0, true);
@@ -218,9 +238,13 @@ class ConversationServiceCancellationTest {
               assertTrue(request.thinkingEnabled());
               ChatClient.StreamObserver observer = invocation.getArgument(1);
               observer.started(primary, "PRIMARY");
-              observer.reasoningDelta("旧思考");
-              observer.failed(
-                  primary, "", ApiException.upstream(ErrorCode.MODEL_UNAVAILABLE, "模型失败"));
+              ApiException timeout = ApiException.upstream(ErrorCode.MODEL_TIMEOUT, "模型超时");
+              if (hasOutput) {
+                observer.reasoningDelta("部分思考");
+                observer.failed(primary, "", timeout);
+                throw timeout;
+              }
+              observer.failed(primary, "", timeout);
               observer.started(fallback, "PROVIDER_FALLBACK");
               observer.reasoningDelta("新思考");
               observer.delta("答案");
@@ -232,10 +256,23 @@ class ConversationServiceCancellationTest {
 
     conversationService.ask(ownerId, conversationId, UUID.randomUUID(), "你好", "request-id");
 
-    verify(messageMapper, timeout(2000)).checkpointReasoning(eq(ownerId), any(UUID.class), eq(""));
-    verify(messageMapper, timeout(2000)).saveReasoning(eq(ownerId), any(UUID.class), eq("新思考"));
-    verify(messageMapper, timeout(2000))
-        .complete(eq(ownerId), any(UUID.class), eq("答案"), eq("[]"), anyString());
+    if (hasOutput) {
+      verify(messageMapper, timeout(2000)).saveReasoning(eq(ownerId), any(UUID.class), eq("部分思考"));
+      verify(messageMapper, timeout(2000))
+          .terminalFailure(
+              eq(ownerId),
+              any(UUID.class),
+              eq(MessageStatus.FAILED),
+              eq(""),
+              eq("MODEL_TIMEOUT"),
+              anyString());
+      verify(generationAttemptMapper, times(1)).insert(any(GenerationAttempt.class));
+    } else {
+      verify(messageMapper, timeout(2000)).saveReasoning(eq(ownerId), any(UUID.class), eq("新思考"));
+      verify(messageMapper, timeout(2000))
+          .complete(eq(ownerId), any(UUID.class), eq("答案"), eq("[]"), anyString());
+    }
+    verify(messageMapper, never()).checkpointReasoning(eq(ownerId), any(UUID.class), eq(""));
   }
 
   @Test
@@ -281,6 +318,9 @@ class ConversationServiceCancellationTest {
         .execute(any(), eq(empty), eq(List.of()), any(CancellationToken.class));
     verify(messageMapper, timeout(2000))
         .prepare(eq(ownerId), any(UUID.class), eq("改写后的独立问题"), eq("[]"));
+    // 等待异步任务进入终态事务，避免 teardown 提前取消任务导致严格 mock 检查误报。
+    verify(messageMapper, timeout(2000))
+        .complete(eq(ownerId), any(UUID.class), eq("无法确认"), eq("[]"), anyString());
   }
 
   @Test

@@ -33,7 +33,7 @@ describe('authenticated transports', () => {
   it('sends cookies and CSRF nonce and parses POST SSE frames', async () => {
     setCsrfToken('nonce-sse')
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response('event: started\ndata: {"generationId":"g1"}\n\n', {
+      new Response(': ping\n\nevent: started\ndata: {"generationId":"g1"}\n\n: ping\n\n', {
         status: 200,
         headers: { 'Content-Type': 'text/event-stream' },
       }),

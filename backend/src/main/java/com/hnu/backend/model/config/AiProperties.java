@@ -31,6 +31,9 @@ public class AiProperties {
         || selection.maxRetries < 0
         || selection.maxRetries > 3
         || stream.messageChunkSize < 1
+        || stream.firstContentTimeoutMs < 1
+        || stream.idleTimeoutMs < 1
+        || stream.totalTimeoutMs < 1
         || embedding.batchSize < 1
         || embedding.batchSize > 128
         || connectTimeoutMs < 1
@@ -202,9 +205,19 @@ public class AiProperties {
     private int maxRetries = 1;
   }
 
+  /** 流式输出粒度及首内容、空闲和总预算配置，时间单位均为毫秒。 */
   @Data
   public static class Stream {
     private int messageChunkSize = 1;
+
+    /** 单个候选等待首段正文或可见思考内容的上限，单位毫秒，内部重试不重置。 */
+    private int firstContentTimeoutMs = 10_000;
+
+    /** 已输出有效内容后的最大空闲时间，单位毫秒。 */
+    private int idleTimeoutMs = 15_000;
+
+    /** 一次流式生成跨候选、重试和退避的总时限，单位毫秒。 */
+    private int totalTimeoutMs = 180_000;
   }
 
   @Data

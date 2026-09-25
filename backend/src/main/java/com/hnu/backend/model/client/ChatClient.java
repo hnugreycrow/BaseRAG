@@ -7,12 +7,16 @@ import com.hnu.backend.shared.error.ErrorCode;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /** 对话模型客户端，支持模型故障转移和流式生成回调。 */
 @Component
 public class ChatClient {
+  private static final Logger log = LoggerFactory.getLogger(ChatClient.class);
   private final ModelHttpClient http;
   private final AiProperties config;
   private final Map<String, ThinkingParameterAdapter> thinkingAdapters;
@@ -22,6 +26,7 @@ public class ChatClient {
    *
    * @param http 模型 HTTP 客户端
    * @param config AI 模型配置
+   * @param adapters 按供应商匹配的思考参数适配器
    */
   @Autowired
   public ChatClient(
@@ -57,6 +62,7 @@ public class ChatClient {
     return generate(new ChatGenerationRequest(system, user, false));
   }
 
+  /** 按候选顺序生成非流式回答；超时由下一候选接管，中断直接传播。 */
   public Generation generate(ChatGenerationRequest request) {
     ApiException last = null;
     // 仅当当前目标没有产出可用结果时，才按配置顺序切换到下一个模型。
@@ -73,6 +79,9 @@ public class ChatClient {
         }
         return new Generation(content.asString(), target.id(), target.provider(), target.model());
       } catch (ApiException e) {
+        if (interrupted(e)) {
+          throw e;
+        }
         last = e;
       }
     }
@@ -93,19 +102,42 @@ public class ChatClient {
     return stream(new ChatGenerationRequest(system, user, false), observer, control);
   }
 
+  /**
+   * 在共享总预算内流式生成；转发首段正文或思考内容后不再切换候选。
+   *
+   * @param request 提示词与思考开关
+   * @param observer 同步接收模型尝试及内容事件的观察者
+   * @param control 跨候选共享的用户取消控制器
+   * @return 完整回答和实际模型身份；部分结果只经观察者转发
+   * @throws ApiException 全部候选失败、超时、取消或生成结果不完整
+   */
   public Generation stream(
       ChatGenerationRequest request,
       StreamObserver observer,
       ModelHttpClient.StreamControl control) {
     ApiException last = null;
     int attemptIndex = 0;
+    long deadline =
+        System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(config.getStream().getTotalTimeoutMs());
     for (AiProperties.ModelTarget target : config.chatModels()) {
-      if (control.cancelled()) throw ApiException.cancelled();
+      if (control.cancelled()) {
+        throw ApiException.cancelled();
+      }
+      if (Thread.currentThread().isInterrupted()) {
+        throw ApiException.upstream(ErrorCode.REQUEST_INTERRUPTED, "请求已中断");
+      }
+      if (deadline - System.nanoTime() <= 0) {
+        throw ApiException.upstream(ErrorCode.MODEL_TIMEOUT, "模型生成总时限已到，请稍后重试");
+      }
+      if (last != null) {
+        log.info("model fallback nextModelId={} previousCode={}", target.id(), last.code());
+      }
       observer.started(target, attemptIndex++ == 0 ? "PRIMARY" : "PROVIDER_FALLBACK");
       StreamObserver bound = observer.bindAttempt();
       StreamObserver attemptObserver = bound == null ? observer : bound;
       StringBuilder content = new StringBuilder();
       String[] finishReason = {null};
+      boolean[] outputCommitted = {false};
       try {
         attemptObserver.requesting(target);
         http.stream(
@@ -118,17 +150,30 @@ public class ChatClient {
                   && target.supportsThinking()
                   && reasoning.isString()
                   && !reasoning.asString().isEmpty()) {
+                outputCommitted[0] = true;
                 attemptObserver.reasoningDelta(reasoning.asString());
               }
               var delta = choice.path("delta").path("content");
               if (delta.isString() && !delta.asString().isEmpty()) {
+                outputCommitted[0] = true;
                 content.append(delta.asString());
                 attemptObserver.delta(delta.asString());
               }
               var finish = choice.path("finish_reason");
               if (finish.isString()) finishReason[0] = finish.asString();
             },
-            control);
+            control,
+            deadline,
+            event -> {
+              var delta = event.path("choices").path(0).path("delta");
+              var contentNode = delta.path("content");
+              var reasoningNode = delta.path("reasoning_content");
+              return (contentNode.isString() && !contentNode.asString().isEmpty())
+                  || (request.thinkingEnabled()
+                      && target.supportsThinking()
+                      && reasoningNode.isString()
+                      && !reasoningNode.asString().isEmpty());
+            });
         if (control.cancelled()) throw ApiException.cancelled();
         if (content.isEmpty() || !"stop".equals(finishReason[0])) {
           throw ApiException.upstream(ErrorCode.GENERATION_FAILED, "模型未完整生成有效回答，请重试");
@@ -138,19 +183,27 @@ public class ChatClient {
       } catch (ApiException e) {
         attemptObserver.failed(target, content.toString(), e);
         last = e;
-        // 已向客户端发送过内容后切换模型会拼接两份回答，因此只能直接失败。
-        if (!content.isEmpty() || control.cancelled()) throw e;
+        // 正文和可见思考内容都属于已提交输出，不能清空后透明切换供应商。
+        if (outputCommitted[0] || control.cancelled() || interrupted(e)) {
+          throw e;
+        }
       }
     }
     throw last == null ? ApiException.upstream(ErrorCode.MODEL_UNAVAILABLE, "没有可用的对话模型") : last;
+  }
+
+  /** 中断和用户取消必须终止候选遍历，不能作为供应商故障继续调用。 */
+  private boolean interrupted(ApiException error) {
+    return Thread.currentThread().isInterrupted()
+        || ErrorCode.REQUEST_INTERRUPTED.code().equals(error.code())
+        || ErrorCode.GENERATION_CANCELLED.code().equals(error.code());
   }
 
   /**
    * 构造兼容 OpenAI Chat Completions 协议的请求体。
    *
    * @param target 模型目标
-   * @param system 系统提示词
-   * @param user 用户提示词
+   * @param request 提示词与思考开关
    * @param stream 是否启用流式响应
    * @return 模型请求体
    */

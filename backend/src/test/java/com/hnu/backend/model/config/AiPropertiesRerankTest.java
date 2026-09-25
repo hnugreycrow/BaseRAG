@@ -8,6 +8,28 @@ import org.junit.jupiter.api.Test;
 
 class AiPropertiesRerankTest {
   @Test
+  void validatesStreamBudgetsAndInteractiveDefaults() {
+    AiProperties defaults = new AiProperties();
+    assertEquals(10_000, defaults.getStream().getFirstContentTimeoutMs());
+    assertEquals(15_000, defaults.getStream().getIdleTimeoutMs());
+    assertEquals(180_000, defaults.getStream().getTotalTimeoutMs());
+    for (int timeout : new int[] {0, -1}) {
+      for (int field = 0; field < 3; field++) {
+        AiProperties invalid = new AiProperties();
+        switch (field) {
+          case 0 -> invalid.getStream().setFirstContentTimeoutMs(timeout);
+          case 1 -> invalid.getStream().setIdleTimeoutMs(timeout);
+          case 2 -> invalid.getStream().setTotalTimeoutMs(timeout);
+          default -> throw new AssertionError();
+        }
+        assertEquals(
+            "Invalid AI selection, stream or batch configuration",
+            assertThrows(IllegalArgumentException.class, invalid::validate).getMessage());
+      }
+    }
+  }
+
+  @Test
   void rejectsNonPositiveConnectionTimeoutBeforeResolvingModels() {
     for (int timeout : new int[] {0, -1}) {
       AiProperties config = new AiProperties();

@@ -55,6 +55,7 @@ import tools.jackson.databind.json.JsonMapper;
 @Service
 public class ConversationService {
   private static final Logger log = LoggerFactory.getLogger(ConversationService.class);
+  private static final int HEARTBEAT_INTERVAL_SECONDS = 15;
   private final ConversationMapper conversationMapper;
   private final MessageMapper messageMapper;
   private final GenerationAttemptMapper generationAttemptMapper;
@@ -666,15 +667,36 @@ public class ConversationService {
     emitter.onCompletion(() -> disconnect(active));
     emitter.onTimeout(() -> disconnect(active));
     emitter.onError(ignored -> disconnect(active));
+    active.heartbeat = executor.submit(() -> heartbeat(active));
     active.future = executor.submit(() -> generate(active));
     return emitter;
   }
 
   /**
-   * 处理客户端断连，把未结束的生成转换为取消终态。
+   * 定期发送 SSE 注释保活；不改变生成状态，也不计入模型有效输出。
    *
    * @param active 活动生成状态
    */
+  private void heartbeat(ActiveGeneration active) {
+    try {
+      while (!active.terminal.get()) {
+        TimeUnit.SECONDS.sleep(HEARTBEAT_INTERVAL_SECONDS);
+        synchronized (active.emitter) {
+          if (active.terminal.get()) {
+            return;
+          }
+          active.emitter.send(SseEmitter.event().comment("ping"));
+        }
+      }
+    } catch (InterruptedException ignored) {
+      // 正常完成或取消时主动结束保活任务。
+      Thread.currentThread().interrupt();
+    } catch (IOException | IllegalStateException error) {
+      disconnect(active);
+    }
+  }
+
+  /** 客户端断连时取消尚未结束的回答。 */
   private void disconnect(ActiveGeneration active) {
     if (active.terminal.get()) return;
     active.cancel();
@@ -972,13 +994,6 @@ public class ConversationService {
     @Override
     public void started(AnswerGenerator.ModelTarget target, AnswerGenerator.AttemptReason reason) {
       ensureNotCancelled(active);
-      if (active.attemptCounter.get() > 0 && active.reasoningBuffer.length() > 0) {
-        active.reasoningBuffer.setLength(0);
-        messageMapper.checkpointReasoning(active.ownerId, active.assistant.getId(), "");
-        active.lastCheckpointLength = active.buffer.length();
-        active.lastCheckpointAt = System.currentTimeMillis();
-        send(active.emitter, "reset", event("reason", TraceReasonCatalog.PROVIDER_FALLBACK.code()));
-      }
       int index = active.attemptCounter.incrementAndGet();
       // 消息状态只在首个候选开始时迁移一次；provider fallback 和引用修复沿用 STREAMING。
       if (index == 1
@@ -1259,6 +1274,10 @@ public class ConversationService {
    * @param payload 终态事件数据
    */
   private void finish(ActiveGeneration active, String event, Object payload) {
+    Future<?> heartbeat = active.heartbeat;
+    if (heartbeat != null) {
+      heartbeat.cancel(true);
+    }
     activeByConversation.remove(active.conversation.getId(), active);
     activeByGeneration.remove(active.generationId, active);
     try {
@@ -1322,7 +1341,9 @@ public class ConversationService {
    */
   private void send(SseEmitter emitter, String name, Object data) {
     try {
-      emitter.send(SseEmitter.event().name(name).data(data));
+      synchronized (emitter) {
+        emitter.send(SseEmitter.event().name(name).data(data));
+      }
     } catch (IOException | IllegalStateException e) {
       throw ApiException.cancelled();
     }
@@ -1575,6 +1596,7 @@ public class ConversationService {
     private Message assistant;
     private final String requestId;
     private final SseEmitter emitter;
+    private volatile Future<?> heartbeat;
     private final AnswerGenerator.Control control;
     private final RagRunTrace trace;
     private final AtomicBoolean terminal = new AtomicBoolean();
