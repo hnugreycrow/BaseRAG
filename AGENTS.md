@@ -43,6 +43,19 @@ Use two-space indentation in Java, TypeScript, and Vue files. Java is formatted 
 
 Backend modules follow Controller / Service / Mapper layering. Controllers handle HTTP concerns only; business rules belong in services and persistence belongs in mappers or infrastructure adapters. Keep DTOs, response/VO types, and entities separate. Use RESTful endpoints. Do not alter existing database columns directly; add forward-only Flyway migrations. Explain any new dependency and avoid unrelated large-scale refactors.
 
+### MyBatis-Plus Database Access Guidelines
+
+When writing or modifying database-access code, use the official [MyBatis-Plus persistence APIs](https://baomidou.com/guides/data-interface/) and [condition constructors](https://baomidou.com/guides/wrapper/), following the project conventions below. Use APIs supported by the version declared in the backend dependencies.
+
+- Define entity mappers with `BaseMapper<Entity>`. For simple CRUD, have business services call built-in methods such as `insert`, `selectById`, `selectList`, `updateById`, and `deleteById`; do not duplicate these operations in custom SQL or XML without a concrete need.
+- Prefer `Wrappers.<Entity>lambdaQuery()` / `LambdaQueryWrapper` for single-table query conditions and `Wrappers.<Entity>lambdaUpdate()` / `LambdaUpdateWrapper` for conditional updates. Reference entity getters, such as `.eq(User::getId, id)`, instead of hard-coded column-name strings when the Lambda API supports the operation.
+- Use `updateById` when updating an entity by its primary key. For targeted field updates, use an explicit condition and `.set(...)`, for example `mapper.update(null, Wrappers.<User>lambdaUpdate().eq(User::getId, id).set(User::getName, name))`. Preserve the intended handling of null values and the project's field-update strategy.
+- Keep complex joins, aggregations, PostgreSQL/pgvector operations, and SQL that cannot be clearly expressed with the built-in APIs in custom Mapper methods and MyBatis XML. Bind values with `#{...}`; do not concatenate untrusted values or accept raw SQL fragments from clients. Map custom query results to appropriate response/projection types rather than overloading persistence entities.
+- Keep business rules and transaction boundaries in services; controllers must not call mappers directly. Use service-level transactions when multiple writes must succeed or fail together.
+- `IService<Entity>` and `ServiceImpl<Mapper, Entity>` are optional official conveniences, not mandatory base types. The default is a business service using injected mappers; preserve an existing module's service convention unless the task requires changing it.
+- Build a fresh Wrapper per operation. Validate required identifiers and scope conditions before updates or deletes; optional filters must not accidentally turn a scoped operation into a full-table operation. Handle affected-row counts when business behavior depends on whether a write actually changed a row.
+- Apply these conventions to new and changed code without unrelated persistence-layer rewrites.
+
 ### Java Comment Guidelines
 
 Follow the comment and Javadoc rules in the [Google Java Style Guide](https://google.github.io/styleguide/javaguide.html), especially sections 4.8.6 and 7. The Chinese language and business-documentation requirements below are project conventions. Use traditional `/** ... */` Javadoc for this Java 21 project.
