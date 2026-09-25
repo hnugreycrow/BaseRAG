@@ -8,6 +8,7 @@ import io.lettuce.core.RedisException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import java.util.List;
+import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.RedisConnectionFailureException;
@@ -37,7 +38,7 @@ public class GlobalExceptionHandler {
   }
 
   @ExceptionHandler(ApiException.class)
-  ResponseEntity<ApiResponse<Void>> api(ApiException e, HttpServletRequest request) {
+  ResponseEntity<@NonNull ApiResponse<Void>> api(ApiException e, HttpServletRequest request) {
     if (e.status().is5xxServerError()) {
       log.error(
           "requestId={} code={} status={} exceptionType={} safeStack={}",
@@ -65,7 +66,8 @@ public class GlobalExceptionHandler {
    * @return 统一认证失败响应
    */
   @ExceptionHandler(NotLoginException.class)
-  ResponseEntity<ApiResponse<Void>> notLoggedIn(NotLoginException e, HttpServletRequest request) {
+  ResponseEntity<@NonNull ApiResponse<Void>> notLoggedIn(
+      NotLoginException e, HttpServletRequest request) {
     return failure(ErrorCode.AUTH_REQUIRED, request);
   }
 
@@ -77,7 +79,8 @@ public class GlobalExceptionHandler {
    * @return 统一无权限响应
    */
   @ExceptionHandler(NotRoleException.class)
-  ResponseEntity<ApiResponse<Void>> roleDenied(NotRoleException e, HttpServletRequest request) {
+  ResponseEntity<@NonNull ApiResponse<Void>> roleDenied(
+      NotRoleException e, HttpServletRequest request) {
     return failure(ErrorCode.FORBIDDEN, request);
   }
 
@@ -92,18 +95,18 @@ public class GlobalExceptionHandler {
     RedisSystemException.class,
     RedisException.class
   })
-  ResponseEntity<ApiResponse<Void>> redisUnavailable(
+  ResponseEntity<@NonNull ApiResponse<Void>> redisUnavailable(
       RuntimeException error, HttpServletRequest request) {
     return redisUnavailableResponse(error, request);
   }
 
   @ExceptionHandler(MaxUploadSizeExceededException.class)
-  ResponseEntity<ApiResponse<Void>> size(HttpServletRequest request) {
+  ResponseEntity<@NonNull ApiResponse<Void>> size(HttpServletRequest request) {
     return failure(ErrorCode.UPLOAD_REQUEST_TOO_LARGE, request);
   }
 
   @ExceptionHandler(MethodArgumentNotValidException.class)
-  ResponseEntity<ApiResponse<List<FieldViolation>>> invalidBody(
+  ResponseEntity<@NonNull ApiResponse<List<FieldViolation>>> invalidBody(
       MethodArgumentNotValidException e, HttpServletRequest request) {
     List<FieldViolation> violations =
         e.getBindingResult().getFieldErrors().stream()
@@ -122,27 +125,27 @@ public class GlobalExceptionHandler {
     ServletRequestBindingException.class,
     ConstraintViolationException.class
   })
-  ResponseEntity<ApiResponse<Void>> invalid(HttpServletRequest request) {
+  ResponseEntity<@NonNull ApiResponse<Void>> invalid(HttpServletRequest request) {
     return failure(ErrorCode.INVALID_REQUEST, request);
   }
 
   @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
-  ResponseEntity<ApiResponse<Void>> methodNotAllowed(HttpServletRequest request) {
+  ResponseEntity<@NonNull ApiResponse<Void>> methodNotAllowed(HttpServletRequest request) {
     return failure(ErrorCode.METHOD_NOT_ALLOWED, request);
   }
 
   @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
-  ResponseEntity<ApiResponse<Void>> mediaTypeNotSupported(HttpServletRequest request) {
+  ResponseEntity<@NonNull ApiResponse<Void>> mediaTypeNotSupported(HttpServletRequest request) {
     return failure(ErrorCode.UNSUPPORTED_MEDIA_TYPE, request);
   }
 
   @ExceptionHandler(NoResourceFoundException.class)
-  ResponseEntity<ApiResponse<Void>> notFound(HttpServletRequest request) {
+  ResponseEntity<@NonNull ApiResponse<Void>> notFound(HttpServletRequest request) {
     return failure(ErrorCode.RESOURCE_NOT_FOUND, request);
   }
 
   @ExceptionHandler(Exception.class)
-  ResponseEntity<ApiResponse<Void>> unexpected(Exception e, HttpServletRequest request) {
+  ResponseEntity<@NonNull ApiResponse<Void>> unexpected(Exception e, HttpServletRequest request) {
     if (isAuthStoreFailure(e)) return redisUnavailableResponse(e, request);
     // Do not log raw provider responses, SQL values, credentials or document text.
     log.error(
@@ -171,13 +174,13 @@ public class GlobalExceptionHandler {
     return false;
   }
 
-  private ResponseEntity<ApiResponse<Void>> failure(
+  private ResponseEntity<@NonNull ApiResponse<Void>> failure(
       HttpStatusCode status, String code, String message, HttpServletRequest request) {
     return ResponseEntity.status(status)
         .body(ApiResponse.failure(code, message, null, requestId(request)));
   }
 
-  private ResponseEntity<ApiResponse<Void>> redisUnavailableResponse(
+  private ResponseEntity<@NonNull ApiResponse<Void>> redisUnavailableResponse(
       Throwable error, HttpServletRequest request) {
     log.error(
         "requestId={} code={} exceptionType={} safeStack={}",
@@ -188,7 +191,7 @@ public class GlobalExceptionHandler {
     return failure(ErrorCode.AUTH_STORE_UNAVAILABLE, request);
   }
 
-  private ResponseEntity<ApiResponse<Void>> failure(
+  private ResponseEntity<@NonNull ApiResponse<Void>> failure(
       ErrorCode errorCode, HttpServletRequest request) {
     return failure(errorCode.status(), errorCode.code(), errorCode.defaultMessage(), request);
   }
