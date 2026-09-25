@@ -31,6 +31,7 @@ import {
 } from '../api'
 import AppSidebar from '../layout/AppSidebar.vue'
 import ConversationHistory from '../components/conversation/ConversationHistory.vue'
+import QuestionDirectory from '../components/conversation/QuestionDirectory.vue'
 import SourcePanel from '../components/conversation/SourcePanel.vue'
 import ReasoningPanel from '../components/conversation/ReasoningPanel.vue'
 import { answerTable } from '../components/conversation/answerTable'
@@ -49,6 +50,13 @@ const thinkingEnabled = ref(false)
 const thinkingSaving = ref(false)
 const listLoading = ref(false)
 const detailLoading = ref(false)
+const pageLoading = ref(false)
+const submitting = ref(false)
+const pageError = ref('')
+const highlightedTurn = ref<number | null>(null)
+const activeQuestion = ref<number | null>(null)
+let detailSequence = 0
+let positioningTurn = false
 const mobileSidebarOpen = ref(false)
 const compactSidebar = ref(window.innerWidth <= 1000)
 function updateSidebarWidth() {
@@ -166,7 +174,13 @@ async function loadConversationList(query = searchQuery.value) {
   }
 }
 
-async function loadCurrentConversation(id: string) {
+async function loadCurrentConversation(id: string, target?: number) {
+  const sequence = ++detailSequence
+  positioningTurn = false
+  pageLoading.value = false
+  pageError.value = ''
+  highlightedTurn.value = target ?? null
+  activeQuestion.value = target ?? null
   followingLatest.value = true
   enteringTurnId.value = null
   copiedAnswerId.value = null
@@ -181,8 +195,12 @@ async function loadCurrentConversation(id: string) {
 
   detailLoading.value = true
   try {
-    const result = generationStore.mergeIntoDetail(await getConversation(id))
-    if (currentConversationId.value !== id) return
+    const result = generationStore.mergeIntoDetail(
+      await getConversation(id, target ? { target } : {}),
+    )
+    if (currentConversationId.value !== id || sequence !== detailSequence) {
+      return
+    }
     conversation.value = result
     thinkingEnabled.value = result.thinkingEnabled
     result.turns.forEach((turn) => {
@@ -190,14 +208,22 @@ async function loadCurrentConversation(id: string) {
     })
     generationStore.markSeen(id)
   } catch (error) {
-    if (currentConversationId.value === id) {
+    if (currentConversationId.value === id && sequence === detailSequence) {
       ElMessage.error(getErrorMessage(error))
-      await router.replace('/chat')
+      if (!target) {
+        await router.replace('/chat')
+      }
     }
   } finally {
-    if (currentConversationId.value === id) {
+    if (currentConversationId.value === id && sequence === detailSequence) {
       detailLoading.value = false
-      if (conversation.value?.id === id) void scrollToBottom(false)
+      if (conversation.value?.id === id) {
+        if (target) {
+          await focusTurn(target)
+        } else {
+          void scrollToBottom(false)
+        }
+      }
     }
   }
 }
@@ -388,16 +414,112 @@ function openSources(message: AssistantMessage, citationId?: string) {
 }
 
 function trackScroll() {
+  if (detailLoading.value || pageLoading.value || positioningTurn) {
+    return
+  }
   const viewport = messageViewport.value
   if (viewport) {
+    const readingLine = viewport.getBoundingClientRect().top + 100
+    const turns = Array.from(viewport.querySelectorAll<HTMLElement>('[data-turn-index]'))
+    const active = turns.find((turn) => turn.getBoundingClientRect().bottom > readingLine)
+    if (active) {
+      activeQuestion.value = Number(active.dataset.turnIndex)
+    }
     const atBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 80
     if (atBottom || !scrollingToLatest) {
-      followingLatest.value = atBottom
+      followingLatest.value = atBottom && !conversation.value?.hasNewer
+    }
+    if (!pageError.value && viewport.scrollTop < 100 && conversation.value?.hasOlder) {
+      void loadTurnPage('older')
+    } else if (!pageError.value && atBottom && conversation.value?.hasNewer) {
+      void loadTurnPage('newer')
     }
   }
 }
 
+async function loadTurnPage(direction: 'older' | 'newer') {
+  const detail = conversation.value
+  const viewport = messageViewport.value
+  if (!detail || !viewport || pageLoading.value || detailLoading.value) {
+    return
+  }
+  if (direction === 'older' ? !detail.hasOlder : !detail.hasNewer) {
+    return
+  }
+  const sequence = detailSequence
+  const cursor =
+    direction === 'older' ? detail.turns[0]?.user.turnIndex : detail.turns.at(-1)?.user.turnIndex
+  if (!cursor) {
+    return
+  }
+  pageLoading.value = true
+  pageError.value = ''
+  followingLatest.value = false
+  try {
+    const page = await getConversation(
+      detail.id,
+      direction === 'older' ? { before: cursor } : { after: cursor },
+    )
+    if (sequence !== detailSequence || conversation.value !== detail) {
+      return
+    }
+    const previousHeight = viewport.scrollHeight
+    const previousTop = viewport.scrollTop
+    const existing = new Set(detail.turns.map((turn) => turn.user.id))
+    const added = page.turns.filter((turn) => !existing.has(turn.user.id))
+    detail.turns = direction === 'older' ? [...added, ...detail.turns] : [...detail.turns, ...added]
+    if (direction === 'older') {
+      detail.hasOlder = page.hasOlder
+    } else {
+      detail.hasNewer = page.hasNewer
+    }
+    detail.latestTurnIndex = page.latestTurnIndex
+    generationStore.mergeIntoDetail(detail)
+    await nextTick()
+    if (sequence !== detailSequence) {
+      return
+    }
+    viewport.scrollTop =
+      previousTop + (direction === 'older' ? viewport.scrollHeight - previousHeight : 0)
+  } catch (error) {
+    if (sequence === detailSequence) {
+      pageError.value = getErrorMessage(error)
+    }
+  } finally {
+    if (sequence === detailSequence) {
+      pageLoading.value = false
+    }
+  }
+}
+
+async function focusTurn(turnIndex: number) {
+  const sequence = detailSequence
+  followingLatest.value = false
+  interruptScroll()
+  positioningTurn = true
+  highlightedTurn.value = turnIndex
+  activeQuestion.value = turnIndex
+  await nextTick()
+  if (sequence !== detailSequence) {
+    return
+  }
+  const element = messageViewport.value?.querySelector<HTMLElement>(
+    `[data-turn-index="${turnIndex}"]`,
+  )
+  element?.scrollIntoView({ block: 'start', behavior: 'auto' })
+  element?.focus({ preventScroll: true })
+}
+
+async function jumpToQuestion(turnIndex: number) {
+  if (conversation.value?.turns.some((turn) => turn.user.turnIndex === turnIndex)) {
+    await focusTurn(turnIndex)
+  } else {
+    await loadCurrentConversation(currentConversationId.value, turnIndex)
+  }
+}
+
 function interruptScroll() {
+  positioningTurn = false
   scrollingToLatest = false
   clearTimeout(scrollTimer)
 }
@@ -423,7 +545,13 @@ async function copyAnswer(message: AssistantMessage) {
 }
 
 async function scrollToBottom(smooth = true) {
+  positioningTurn = false
+  if (conversation.value?.hasNewer) {
+    await loadCurrentConversation(currentConversationId.value)
+    return
+  }
   followingLatest.value = true
+  activeQuestion.value = conversation.value?.turns.at(-1)?.user.turnIndex ?? null
   await nextTick()
   const animate = smooth && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
   scrollingToLatest = animate
@@ -441,6 +569,18 @@ async function scrollToBottom(smooth = true) {
 }
 
 async function submitQuestion() {
+  if (submitting.value || detailLoading.value || pageLoading.value) {
+    return
+  }
+  submitting.value = true
+  try {
+    await sendQuestion()
+  } finally {
+    submitting.value = false
+  }
+}
+
+async function sendQuestion() {
   const content = draft.value.trim()
   if (!content || thinkingSaving.value || generationStore.isActive(currentConversationId.value))
     return
@@ -467,9 +607,14 @@ async function submitQuestion() {
     }
   }
 
-  if (!conversation.value || conversation.value.id !== id) {
+  if (!conversation.value || conversation.value.id !== id || conversation.value.hasNewer) {
     try {
-      conversation.value = await getConversation(id)
+      const sequence = ++detailSequence
+      const latest = await getConversation(id)
+      if (currentConversationId.value !== id || sequence !== detailSequence) {
+        return
+      }
+      conversation.value = generationStore.mergeIntoDetail(latest)
     } catch (error) {
       draft.value = content
       ElMessage.error(getErrorMessage(error))
@@ -478,7 +623,11 @@ async function submitQuestion() {
   }
 
   const clientMessageId = newUuid()
-  const turnIndex = (conversation.value.turns.at(-1)?.user.turnIndex ?? 0) + 1
+  const turnIndex =
+    Math.max(
+      conversation.value.latestTurnIndex ?? 0,
+      conversation.value.turns.at(-1)?.user.turnIndex ?? 0,
+    ) + 1
   const now = new Date().toISOString()
   const assistant = makeAssistant(`${clientMessageId}-assistant`, clientMessageId, turnIndex, 1)
   const turn: ConversationTurn = {
@@ -488,6 +637,7 @@ async function submitQuestion() {
   }
   enteringTurnId.value = turn.user.id
   conversation.value.turns.push(turn)
+  conversation.value.latestTurnIndex = turnIndex
   viewedVersions.value[turnIndex] = assistant.id
   await scrollToBottom()
 
@@ -535,7 +685,11 @@ async function rerunAnswer(turn: ConversationTurn, mode: 'retry' | 'regenerate')
   turn.assistantVersions.push(assistant)
   turn.activeAssistantId = assistant.id
   viewedVersions.value[turn.user.turnIndex] = assistant.id
-  await scrollToBottom()
+  if (conversation.value?.hasNewer || turn !== conversation.value?.turns.at(-1)) {
+    await focusTurn(turn.user.turnIndex)
+  } else {
+    await scrollToBottom()
+  }
 
   void generationStore.restartAnswer(id, turn.user, assistant, previous.id, requestId, mode)
 }
@@ -573,7 +727,7 @@ watch(
 watch(
   () => currentTask.value?.assistant.content.length,
   () => {
-    if (sending.value && followingLatest.value) {
+    if (sending.value && followingLatest.value && !detailLoading.value) {
       void scrollToBottom(false)
     }
   },
@@ -582,7 +736,7 @@ watch(
 watch(
   () => currentTask.value?.assistant.reasoningContent.length,
   () => {
-    if (sending.value && followingLatest.value) {
+    if (sending.value && followingLatest.value && !detailLoading.value) {
       void scrollToBottom(false)
     }
   },
@@ -613,6 +767,7 @@ watch(searchQuery, () => {
 void loadConversationList()
 
 onBeforeUnmount(() => {
+  detailSequence += 1
   clearTimeout(scrollTimer)
   if (searchTimer) clearTimeout(searchTimer)
   if (copiedTimer) {
@@ -668,6 +823,19 @@ onBeforeUnmount(() => {
           <el-icon><MenuIcon /></el-icon>
         </button>
         <span class="chat-title" :title="conversationTitle">{{ conversationTitle }}</span>
+        <QuestionDirectory
+          v-if="currentConversationId"
+          :conversation-id="currentConversationId"
+          :active-turn="activeQuestion"
+          :visible-questions="
+            conversation?.turns.map((turn) => ({
+              id: turn.user.id,
+              turnIndex: turn.user.turnIndex,
+              preview: turn.user.content,
+            })) ?? []
+          "
+          @jump="jumpToQuestion"
+        />
       </header>
       <div
         ref="messageViewport"
@@ -689,11 +857,26 @@ onBeforeUnmount(() => {
         </section>
 
         <div v-else class="message-list">
+          <button
+            v-if="conversation?.hasOlder"
+            class="load-turns"
+            type="button"
+            :disabled="pageLoading"
+            @click="loadTurnPage('older')"
+          >
+            {{ pageLoading ? '加载中…' : '加载更早对话' }}
+          </button>
+          <p v-if="pageError" class="history-error" role="alert">{{ pageError }}</p>
           <article
             v-for="turn in conversation?.turns"
             :key="turn.user.id"
             class="turn"
-            :class="{ 'is-entering': enteringTurnId === turn.user.id }"
+            :data-turn-index="turn.user.turnIndex"
+            tabindex="-1"
+            :class="{
+              'is-entering': enteringTurnId === turn.user.id,
+              'is-highlighted': highlightedTurn === turn.user.turnIndex,
+            }"
             @animationend.self="enteringTurnId = null"
           >
             <div class="user-row">
@@ -942,6 +1125,7 @@ onBeforeUnmount(() => {
                     v-if="
                       currentAssistant(turn)?.status === 'COMPLETED' &&
                       turn === conversation?.turns.at(-1) &&
+                      !conversation?.hasNewer &&
                       currentAssistant(turn)?.active
                     "
                     type="button"
@@ -983,6 +1167,15 @@ onBeforeUnmount(() => {
               </div>
             </div>
           </article>
+          <button
+            v-if="conversation?.hasNewer"
+            class="load-turns"
+            type="button"
+            :disabled="pageLoading"
+            @click="loadTurnPage('newer')"
+          >
+            {{ pageLoading ? '加载中…' : '加载后续对话' }}
+          </button>
         </div>
       </div>
 
@@ -1036,7 +1229,9 @@ onBeforeUnmount(() => {
               v-else
               type="button"
               class="send-button"
-              :disabled="!draft.trim() || thinkingSaving"
+              :disabled="
+                !draft.trim() || thinkingSaving || submitting || detailLoading || pageLoading
+              "
               aria-label="发送问题"
               @click="submitQuestion"
             >

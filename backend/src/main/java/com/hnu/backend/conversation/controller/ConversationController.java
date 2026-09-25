@@ -64,6 +64,27 @@ public class ConversationController {
     return conversationService.get(currentUserService.require().getId(), id);
   }
 
+  /** 按轮次游标读取消息窗口，默认返回最近 10 轮。 */
+  @GetMapping("/{id}/turns")
+  public ConversationResponses.TurnPage page(
+      @PathVariable UUID id,
+      @RequestParam(required = false) Integer before,
+      @RequestParam(required = false) Integer after,
+      @RequestParam(required = false) Integer target,
+      @RequestParam(defaultValue = "10") int limit) {
+    return conversationService.page(
+        currentUserService.require().getId(), id, before, after, target, limit);
+  }
+
+  /** 分页读取提问目录，不包含助手回答正文。 */
+  @GetMapping("/{id}/questions")
+  public ConversationResponses.QuestionPage questions(
+      @PathVariable UUID id,
+      @RequestParam(required = false) Integer before,
+      @RequestParam(defaultValue = "50") int limit) {
+    return conversationService.questions(currentUserService.require().getId(), id, before, limit);
+  }
+
   /** 修改会话标题。 */
   @PatchMapping("/{id}")
   public ConversationResponses.Summary rename(

@@ -190,6 +190,13 @@ export const useConversationGenerationStore = defineStore('conversation-generati
       (item) => item.user.id === task.user.id || item.user.turnIndex === task.user.turnIndex,
     )
     if (!turn) {
+      // 浏览历史窗口时不追加窗口之外的后台生成轮次，避免消息断层。
+      if (
+        detail.hasNewer ||
+        (detail.hasOlder && task.user.turnIndex < (detail.turns[0]?.user.turnIndex ?? 0))
+      ) {
+        return detail
+      }
       turn = {
         user: task.user,
         assistantVersions: [],

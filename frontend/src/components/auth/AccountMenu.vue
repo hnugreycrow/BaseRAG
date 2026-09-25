@@ -162,7 +162,7 @@ async function changePassword() {
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 5px;
+  padding: 6px;
   color: #35425a;
   background: transparent;
   border: 0;

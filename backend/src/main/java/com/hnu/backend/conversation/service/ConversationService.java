@@ -187,6 +187,61 @@ public class ConversationService {
   public ConversationResponses.Detail get(UUID ownerId, UUID id) {
     Conversation conversation = require(ownerId, id);
     List<Message> all = messageMapper.list(ownerId, id);
+    return detail(conversation, all);
+  }
+
+  public ConversationResponses.TurnPage page(
+      UUID ownerId, UUID id, Integer before, Integer after, Integer target, int rawLimit) {
+    Conversation conversation = require(ownerId, id);
+    if ((before != null ? 1 : 0) + (after != null ? 1 : 0) + (target != null ? 1 : 0) > 1
+        || (before != null && before < 1)
+        || (after != null && after < 1)
+        || (target != null && target < 1)) {
+      throw ApiException.bad(ErrorCode.INVALID_REQUEST, "请提供一个有效的轮次游标");
+    }
+    int limit = Math.max(1, Math.min(rawLimit, 50));
+    int latest = Math.max(0, messageMapper.nextTurn(ownerId, id) - 1);
+    int last =
+        before != null
+            ? Math.min(latest, before - 1)
+            : target != null ? (int) Math.min(latest, (long) target + limit / 2) : latest;
+    int first = Math.max(1, last - limit + 1);
+    if (after != null) {
+      first = (int) Math.min((long) latest + 1, (long) after + 1);
+      last = (int) Math.min(latest, (long) first + limit - 1);
+    }
+    return new ConversationResponses.TurnPage(
+        detail(
+            conversation,
+            first > last ? List.of() : messageMapper.listRange(ownerId, id, first, last)),
+        first > 1 && latest > 0,
+        last < latest,
+        latest);
+  }
+
+  public ConversationResponses.QuestionPage questions(
+      UUID ownerId, UUID id, Integer before, int rawLimit) {
+    require(ownerId, id);
+    int limit = Math.max(1, Math.min(rawLimit, 100));
+    List<Message> items =
+        messageMapper.questions(
+            ownerId, id, before == null ? Integer.MAX_VALUE : before, limit + 1);
+    return new ConversationResponses.QuestionPage(
+        items.stream()
+            .limit(limit)
+            .map(
+                message ->
+                    new ConversationResponses.Question(
+                        message.getId(),
+                        message.getTurnIndex(),
+                        message
+                            .getContent()
+                            .substring(0, Math.min(120, message.getContent().length()))))
+            .toList(),
+        items.size() > limit);
+  }
+
+  private ConversationResponses.Detail detail(Conversation conversation, List<Message> all) {
     Map<Integer, Message> users = new LinkedHashMap<>();
     Map<Integer, List<Message>> assistants = new LinkedHashMap<>();
     for (Message message : all) {

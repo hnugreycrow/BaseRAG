@@ -72,6 +72,22 @@ export interface ConversationTurn {
 
 export interface ConversationDetail extends ConversationSummary {
   turns: ConversationTurn[]
+  hasOlder?: boolean
+  hasNewer?: boolean
+  latestTurnIndex?: number
+}
+
+export interface QuestionSummary {
+  id: string
+  turnIndex: number
+  preview: string
+}
+
+export function listQuestions(id: string, before?: number) {
+  return request<{ items: QuestionSummary[]; hasMore: boolean }>({
+    url: `/conversations/${id}/questions`,
+    params: { before, limit: 50 },
+  })
 }
 
 interface StartedEvent {
@@ -133,8 +149,25 @@ export function setConversationThinking(id: string, thinkingEnabled: boolean) {
   })
 }
 
-export function getConversation(id: string) {
-  return request<ConversationDetail>({ url: `/conversations/${id}` })
+export async function getConversation(
+  id: string,
+  cursor: { before?: number; after?: number; target?: number } = {},
+): Promise<ConversationDetail> {
+  const page = await request<{
+    conversation: ConversationDetail
+    hasOlder: boolean
+    hasNewer: boolean
+    latestTurnIndex: number
+  }>({
+    url: `/conversations/${id}/turns`,
+    params: { ...cursor, limit: 10 },
+  })
+  return {
+    ...page.conversation,
+    hasOlder: page.hasOlder,
+    hasNewer: page.hasNewer,
+    latestTurnIndex: page.latestTurnIndex,
+  }
 }
 
 export function renameConversation(id: string, title: string) {

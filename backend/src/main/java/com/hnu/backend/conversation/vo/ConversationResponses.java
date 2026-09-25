@@ -43,6 +43,14 @@ public final class ConversationResponses {
       OffsetDateTime updatedAt,
       List<Turn> turns) {}
 
+  /** 有界消息窗口，轮次游标不受新消息插入影响。 */
+  public record TurnPage(
+      Detail conversation, boolean hasOlder, boolean hasNewer, int latestTurnIndex) {}
+
+  public record Question(UUID id, int turnIndex, String preview) {}
+
+  public record QuestionPage(List<Question> items, boolean hasMore) {}
+
   /**
    * 一轮用户消息及其所有助手回答版本。
    *

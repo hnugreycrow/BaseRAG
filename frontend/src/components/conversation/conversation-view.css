@@ -19,6 +19,35 @@
   flex: 1;
   flex-direction: column;
 }
+
+.load-turns {
+  display: block;
+  margin: 12px auto;
+  padding: 10px 16px;
+  border: 1px solid var(--chat-line);
+  border-radius: 8px;
+  background: white;
+  color: var(--chat-blue);
+  cursor: pointer;
+}
+.load-turns:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+.history-error {
+  text-align: center;
+  color: #b42318;
+}
+.turn {
+  scroll-margin-top: 20px;
+  overflow-anchor: none;
+}
+.turn.is-highlighted .user-message {
+  box-shadow: 0 0 0 2px var(--chat-blue);
+}
+.turn:focus {
+  outline: none;
+}
 .chat-workspace.is-empty {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto auto minmax(0, 1fr);

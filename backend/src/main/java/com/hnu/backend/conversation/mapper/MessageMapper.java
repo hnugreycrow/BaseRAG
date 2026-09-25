@@ -13,6 +13,32 @@ import org.apache.ibatis.annotations.Mapper;
 /** 会话消息及助手回答状态迁移的数据访问接口。 */
 @Mapper
 public interface MessageMapper extends BaseMapper<Message> {
+  /** 只读取窗口内的完整轮次，保留每轮所有回答版本。 */
+  default List<Message> listRange(UUID ownerId, UUID conversationId, int first, int last) {
+    return selectList(
+        Wrappers.<Message>lambdaQuery()
+            .eq(Message::getConversationId, conversationId)
+            .apply(
+                "conversation_id IN (SELECT id FROM conversations WHERE owner_id = {0})", ownerId)
+            .between(Message::getTurnIndex, first, last)
+            .orderByAsc(Message::getTurnIndex)
+            .orderByDesc(Message::getRole)
+            .orderByAsc(Message::getVariantIndex));
+  }
+
+  default List<Message> questions(UUID ownerId, UUID conversationId, int before, int limit) {
+    return selectList(
+        Wrappers.<Message>lambdaQuery()
+            .select(Message::getId, Message::getTurnIndex, Message::getContent)
+            .eq(Message::getConversationId, conversationId)
+            .eq(Message::getRole, MessageRole.USER)
+            .apply(
+                "conversation_id IN (SELECT id FROM conversations WHERE owner_id = {0})", ownerId)
+            .lt(Message::getTurnIndex, before)
+            .orderByDesc(Message::getTurnIndex)
+            .last("LIMIT " + Math.max(1, Math.min(limit, 101))));
+  }
+
   /**
    * 按标识查询消息。
    *
