@@ -42,8 +42,10 @@ public class RerankClient {
         return Generation.noop(target.id());
       }
       try {
-        JsonNode response = http.post(target, payload(target, query, documents));
-        return parse(target, response, documents.size());
+        return http.post(
+            target,
+            payload(target, query, documents),
+            response -> parse(target, response, documents.size()));
       } catch (ApiException error) {
         if (ErrorCode.REQUEST_INTERRUPTED.code().equals(error.code())
             || ErrorCode.GENERATION_CANCELLED.code().equals(error.code())) throw error;

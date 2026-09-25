@@ -33,14 +33,18 @@ class ChatThinkingTest {
   private void verifyProvider(String providerId, String parameter, Object enabledValue) {
     AiProperties config = config(providerId);
     ModelHttpClient http = mock(ModelHttpClient.class);
-    when(http.post(any(), any()))
-        .thenReturn(
-            json.readTree(
-                "{\"choices\":[{\"finish_reason\":\"stop\",\"message\":{\"content\":\"答\"}}]}"));
+    when(http.post(any(), any(), any()))
+        .thenAnswer(
+            invocation -> {
+              java.util.function.Function<JsonNode, ?> decoder = invocation.getArgument(2);
+              return decoder.apply(
+                  json.readTree(
+                      "{\"choices\":[{\"finish_reason\":\"stop\",\"message\":{\"content\":\"答\"}}]}"));
+            });
     ChatClient client = new ChatClient(http, config);
     assertEquals("答", client.generate("系统", "问题").content());
     ArgumentCaptor<Map<String, Object>> payload = ArgumentCaptor.forClass(Map.class);
-    verify(http).post(any(), payload.capture());
+    verify(http).post(any(), payload.capture(), any());
     assertEquals(
         "deepseek".equals(providerId) ? Map.of("type", "disabled") : false,
         payload.getValue().get(parameter));
@@ -55,10 +59,11 @@ class ChatThinkingTest {
           events.accept(
               json.readTree(
                   "{\"choices\":[{\"delta\":{\"content\":\"答案\"},\"finish_reason\":\"stop\"}]}"));
+          ((Runnable) invocation.getArgument(6)).run();
           return null;
         })
         .when(http)
-        .stream(any(), any(), any(), any(), anyLong(), any());
+        .stream(any(), any(), any(), any(), anyLong(), any(), any());
     List<String> reasoning = new ArrayList<>();
     List<String> content = new ArrayList<>();
     ChatClient.Generation result =
@@ -92,7 +97,7 @@ class ChatThinkingTest {
     assertEquals("答案", result.content());
     assertEquals(List.of("思", "考"), reasoning);
     assertEquals(List.of("答案"), content);
-    verify(http).stream(any(), payload.capture(), any(), any(), anyLong(), any());
+    verify(http).stream(any(), payload.capture(), any(), any(), anyLong(), any(), any());
     assertEquals(enabledValue, payload.getValue().get(parameter));
   }
 

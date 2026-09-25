@@ -80,7 +80,7 @@ ai:
   selection:
     failure-threshold: 2
     open-duration-ms: 30000
-    # 超时不重试；429、5xx 和非超时 I/O 错误最多再尝试一次，之后按候选顺序降级。
+    # 超时与 429 不重试；正常态下 5xx 和非超时 I/O 错误最多再尝试一次。
     max-retries: 1
 
   stream:

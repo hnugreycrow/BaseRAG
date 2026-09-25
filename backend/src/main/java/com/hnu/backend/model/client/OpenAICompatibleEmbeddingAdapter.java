@@ -32,19 +32,18 @@ public class OpenAICompatibleEmbeddingAdapter implements EmbeddingAdapter {
 
   @Override
   public List<float[]> embed(AiProperties.ModelTarget target, List<String> texts) {
-    JsonNode response =
-        http.post(
-            target,
-            Map.of(
-                "model",
-                target.model(),
-                "input",
-                texts,
-                "encoding_format",
-                "float",
-                "dimensions",
-                target.dimension()));
-    return parse(response, texts.size(), target.dimension());
+    return http.post(
+        target,
+        Map.of(
+            "model",
+            target.model(),
+            "input",
+            texts,
+            "encoding_format",
+            "float",
+            "dimensions",
+            target.dimension()),
+        response -> parse(response, texts.size(), target.dimension()));
   }
 
   /** 严格按 index 恢复原输入顺序，并校验数量、维度与向量值。 */

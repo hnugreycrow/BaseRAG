@@ -13,10 +13,13 @@ import java.net.URI;
 import java.net.http.*;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,7 +37,7 @@ public class ModelHttpClient {
   private final AiProperties config;
   private final HttpClient client;
   private final JsonMapper json = JsonMapper.builder().build();
-  private final Map<String, Circuit> circuits = new ConcurrentHashMap<>();
+  private final Map<String, ModelCircuitBreaker> circuits = new ConcurrentHashMap<>();
 
   /** 根据模型配置创建共享 HTTP 客户端与流式超时调度器。 */
   public ModelHttpClient(AiProperties config) {
@@ -61,58 +64,87 @@ public class ModelHttpClient {
 
   /** 发送非流式请求；超时直接失败，其他可重试传输错误遵循配置。 */
   public JsonNode post(AiProperties.ModelTarget target, Map<String, Object> payload) {
+    return post(target, payload, Function.identity());
+  }
+
+  /**
+   * 在协议解析成功后结算候选；只有明确的供应商协议异常计入熔断。
+   *
+   * @param target 当前模型目标
+   * @param payload 供应商请求体
+   * @param decoder 响应解析器；协议错误须抛出对应的 INVALID_RESPONSE 异常
+   * @param <T> 解析结果类型
+   * @return 校验后的模型结果
+   */
+  public <T> T post(
+      AiProperties.ModelTarget target, Map<String, Object> payload, Function<JsonNode, T> decoder) {
     requireConfigured(target);
-    Circuit circuit = circuits.computeIfAbsent(target.id(), ignored -> new Circuit());
-    if (circuit.isOpen()) {
-      throw ApiException.upstream(ErrorCode.MODEL_CIRCUIT_OPEN, "模型服务暂时不可用，请稍后重试");
-    }
-    HttpRequest.Builder builder =
+    HttpRequest request =
         HttpRequest.newBuilder(URI.create(target.baseUrl() + target.endpoint()))
             .timeout(Duration.ofMillis(target.timeoutMs()))
             .header("Content-Type", "application/json")
-            .POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(payload)));
-    builder.header("Authorization", "Bearer " + target.apiKey());
-    HttpRequest request = builder.build();
-    for (int attempt = 0; ; attempt++) {
-      try {
-        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-        int status = response.statusCode();
-        if (status >= 200 && status < 300) {
-          try {
-            JsonNode node = json.readTree(response.body());
-            if (node == null || !node.isObject()) throw new IllegalArgumentException();
-            success(circuit);
-            return node;
-          } catch (RuntimeException e) {
-            failure(circuit);
-            throw ApiException.upstream(ErrorCode.MODEL_INVALID_RESPONSE, "模型服务返回了无效 JSON", e);
-          }
-        }
-        boolean retryable = status == 429 || status >= 500;
-        if (retryable && attempt < config.getSelection().getMaxRetries()) {
-          pause(attempt);
-          continue;
-        }
-        failure(circuit);
-        throw ApiException.upstream(
-            status == 429 ? ErrorCode.MODEL_RATE_LIMITED : ErrorCode.MODEL_HTTP_ERROR,
-            status == 429 ? "模型服务请求频繁，请稍后重试" : "模型服务请求失败，请检查服务配置");
-      } catch (HttpTimeoutException e) {
-        failure(circuit);
-        throw ApiException.upstream(ErrorCode.MODEL_TIMEOUT, "模型请求超时，请稍后重试", e);
-      } catch (IOException e) {
+            .header("Authorization", "Bearer " + target.apiKey())
+            .POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(payload)))
+            .build();
+    try (var permit = circuit(target).acquire()) {
+      for (int attempt = 0; ; attempt++) {
         if (Thread.currentThread().isInterrupted()) {
-          throw ApiException.upstream(ErrorCode.REQUEST_INTERRUPTED, "请求已中断", e);
+          throw ApiException.upstream(ErrorCode.REQUEST_INTERRUPTED, "请求已中断");
         }
-        if (attempt < config.getSelection().getMaxRetries()) {
-          pause(attempt);
-          continue;
+        if (attempt > 0) {
+          permit.checkRetry();
         }
-        failure(circuit);
-        throw ApiException.upstream(ErrorCode.MODEL_UNAVAILABLE, "无法连接模型服务", e);
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-        throw ApiException.upstream(ErrorCode.REQUEST_INTERRUPTED, "请求已中断", e);
+        try {
+          HttpResponse<String> response =
+              client.send(request, HttpResponse.BodyHandlers.ofString());
+          int status = response.statusCode();
+          if (status >= 200 && status < 300) {
+            JsonNode node;
+            try {
+              node = json.readTree(response.body());
+              if (node == null || !node.isObject()) {
+                throw new IllegalArgumentException();
+              }
+            } catch (RuntimeException error) {
+              permit.failure();
+              throw ApiException.upstream(
+                  ErrorCode.MODEL_INVALID_RESPONSE, "模型服务返回了无效 JSON", error);
+            }
+            T result;
+            try {
+              result = decoder.apply(node);
+            } catch (ApiException error) {
+              recordProtocolFailure(permit, error);
+              throw error;
+            }
+            permit.success();
+            return result;
+          }
+          if (status >= 500
+              && attempt < config.getSelection().getMaxRetries()
+              && permit.canRetry()) {
+            pause(attempt);
+            continue;
+          }
+          recordStatus(target, permit, status, response.headers());
+          throw statusError(status);
+        } catch (HttpTimeoutException error) {
+          permit.failure();
+          throw ApiException.upstream(ErrorCode.MODEL_TIMEOUT, "模型请求超时，请稍后重试", error);
+        } catch (IOException error) {
+          if (Thread.currentThread().isInterrupted()) {
+            throw ApiException.upstream(ErrorCode.REQUEST_INTERRUPTED, "请求已中断", error);
+          }
+          if (attempt < config.getSelection().getMaxRetries() && permit.canRetry()) {
+            pause(attempt);
+            continue;
+          }
+          permit.failure();
+          throw ApiException.upstream(ErrorCode.MODEL_UNAVAILABLE, "无法连接模型服务", error);
+        } catch (InterruptedException error) {
+          Thread.currentThread().interrupt();
+          throw ApiException.upstream(ErrorCode.REQUEST_INTERRUPTED, "请求已中断", error);
+        }
       }
     }
   }
@@ -159,26 +191,48 @@ public class ModelHttpClient {
       StreamControl control,
       long totalDeadline,
       Predicate<JsonNode> isContent) {
+    stream(target, payload, events, control, totalDeadline, isContent, () -> {});
+  }
+
+  /**
+   * 消费候选流并在完整响应校验后结算熔断结果。
+   *
+   * @param target 当前模型候选
+   * @param payload 供应商请求体
+   * @param events 同步事件接收器；异常不计入供应商故障
+   * @param control 跨候选的取消控制器
+   * @param totalDeadline 基于 nanoTime 的总截止时间
+   * @param isContent 是否实际转发了有效内容
+   * @param validateCompletion 完整响应校验；仅 INVALID_RESPONSE 异常计入熔断
+   */
+  public void stream(
+      AiProperties.ModelTarget target,
+      Map<String, Object> payload,
+      Consumer<JsonNode> events,
+      StreamControl control,
+      long totalDeadline,
+      Predicate<JsonNode> isContent,
+      Runnable validateCompletion) {
     if (control.cancelled()) {
       throw ApiException.cancelled();
     }
     requireConfigured(target);
-    Circuit circuit = circuits.computeIfAbsent(target.id(), ignored -> new Circuit());
-    if (circuit.isOpen()) {
-      throw ApiException.upstream(ErrorCode.MODEL_CIRCUIT_OPEN, "模型服务暂时不可用，请稍后重试");
-    }
     long started = System.nanoTime();
-    try (StreamAttempt scope =
-        new StreamAttempt(
-            streamTimers,
-            totalDeadline,
-            config.getStream().getFirstContentTimeoutMs(),
-            config.getStream().getIdleTimeoutMs())) {
+    try (var permit = circuit(target).acquire();
+        StreamAttempt scope =
+            new StreamAttempt(
+                streamTimers,
+                totalDeadline,
+                config.getStream().getFirstContentTimeoutMs(),
+                config.getStream().getIdleTimeoutMs())) {
       control.attach(scope);
       try {
         for (int attempt = 0; ; attempt++) {
           boolean emitted = false;
           scope.check();
+          if (attempt > 0) {
+            permit.checkRetry();
+          }
           try {
             HttpRequest request =
                 HttpRequest.newBuilder(URI.create(target.baseUrl() + target.endpoint()))
@@ -203,16 +257,16 @@ public class ModelHttpClient {
             int status = response.statusCode();
             if (status < 200 || status >= 300) {
               scope.releaseNetwork();
-              boolean retryable = status == 429 || status >= 500;
-              if (retryable && attempt < config.getSelection().getMaxRetries()) {
+              boolean retryable = status >= 500;
+              if (retryable
+                  && attempt < config.getSelection().getMaxRetries()
+                  && permit.canRetry()) {
                 scope.pause(attempt);
                 continue;
               }
               scope.fail();
-              failure(circuit);
-              throw ApiException.upstream(
-                  status == 429 ? ErrorCode.MODEL_RATE_LIMITED : ErrorCode.MODEL_HTTP_ERROR,
-                  status == 429 ? "模型服务请求频繁，请稍后重试" : "模型服务请求失败，请检查服务配置");
+              recordStatus(target, permit, status, response.headers());
+              throw statusError(status);
             }
             boolean done = false;
             try (var reader =
@@ -240,7 +294,7 @@ public class ModelHttpClient {
                     }
                   } catch (RuntimeException error) {
                     scope.fail();
-                    failure(circuit);
+                    permit.failure();
                     throw ApiException.upstream(
                         ErrorCode.MODEL_INVALID_RESPONSE, "模型服务返回了无效流式数据", error);
                   }
@@ -257,23 +311,30 @@ public class ModelHttpClient {
             scope.check();
             if (!done) {
               scope.fail();
-              failure(circuit);
+              permit.failure();
               throw ApiException.upstream(ErrorCode.MODEL_INVALID_RESPONSE, "模型流式响应未正常结束");
             }
+            try {
+              validateCompletion.run();
+            } catch (ApiException error) {
+              scope.fail();
+              recordProtocolFailure(permit, error);
+              throw error;
+            }
             scope.complete();
-            success(circuit);
+            permit.success();
             return;
           } catch (HttpTimeoutException error) {
             throw error;
           } catch (IOException error) {
             scope.check();
-            if (!emitted && attempt < config.getSelection().getMaxRetries()) {
+            if (!emitted && attempt < config.getSelection().getMaxRetries() && permit.canRetry()) {
               scope.releaseNetwork();
               scope.pause(attempt);
               continue;
             }
             scope.fail();
-            failure(circuit);
+            permit.failure();
             throw ApiException.upstream(ErrorCode.MODEL_UNAVAILABLE, "无法连接模型服务", error);
           } finally {
             scope.releaseNetwork();
@@ -281,7 +342,9 @@ public class ModelHttpClient {
         }
       } catch (HttpTimeoutException error) {
         scope.timeout();
-        failure(circuit);
+        if (!"TOTAL".equals(scope.timeoutPhase())) {
+          permit.failure();
+        }
         log.warn(
             "model stream timeout modelId={} phase={} elapsedMs={}",
             target.id(),
@@ -359,13 +422,71 @@ public class ModelHttpClient {
     }
   }
 
-  private void success(Circuit circuit) {
-    circuit.success();
+  /** 按目标身份隔离，避免不同接口复用本地 ID 时互相熔断。 */
+  private ModelCircuitBreaker circuit(AiProperties.ModelTarget target) {
+    String key =
+        target.id() + "|" + target.baseUrl() + "|" + target.endpoint() + "|" + target.model();
+    return circuits.computeIfAbsent(
+        key,
+        ignored ->
+            new ModelCircuitBreaker(
+                target.id(),
+                config.getSelection().getFailureThreshold(),
+                config.getSelection().getOpenDurationMs(),
+                System::nanoTime));
   }
 
-  private void failure(Circuit circuit) {
-    circuit.failure(
-        config.getSelection().getFailureThreshold(), config.getSelection().getOpenDurationMs());
+  private void recordProtocolFailure(ModelCircuitBreaker.Permit permit, ApiException error) {
+    if (ErrorCode.MODEL_INVALID_RESPONSE.code().equals(error.code())
+        || ErrorCode.EMBEDDING_INVALID_RESPONSE.code().equals(error.code())
+        || ErrorCode.RERANK_INVALID_RESPONSE.code().equals(error.code())) {
+      permit.failure();
+    }
+  }
+
+  private void recordStatus(
+      AiProperties.ModelTarget target,
+      ModelCircuitBreaker.Permit permit,
+      int status,
+      HttpHeaders headers) {
+    if (status == 429) {
+      permit.rateLimited(retryAfterMs(headers));
+    } else if (status >= 500) {
+      permit.failure();
+    } else if (status == 401 || status == 403) {
+      log.warn("model authorization failed modelId={} status={}", target.id(), status);
+    }
+  }
+
+  /** 支持秒数和 HTTP 日期；缺失或非法值使用熔断冷却配置，最长保留一天。 */
+  private long retryAfterMs(HttpHeaders headers) {
+    String value = headers.firstValue("Retry-After").orElse("").trim();
+    long max = TimeUnit.DAYS.toMillis(1);
+    try {
+      long seconds = Long.parseLong(value);
+      if (seconds >= 0) {
+        return Math.max(1, Math.min(seconds, TimeUnit.DAYS.toSeconds(1)) * 1000);
+      }
+    } catch (NumberFormatException ignored) {
+      // 非整数可能是标准 HTTP 日期，继续按日期解析。
+    }
+    try {
+      long delay =
+          ZonedDateTime.parse(value, DateTimeFormatter.RFC_1123_DATE_TIME)
+                  .toInstant()
+                  .toEpochMilli()
+              - System.currentTimeMillis();
+      return Math.max(1, Math.min(max, delay));
+    } catch (java.time.DateTimeException ignored) {
+      // 缺失或非法 Retry-After 不覆盖原始限流错误，使用本地冷却配置。
+      return config.getSelection().getOpenDurationMs();
+    }
+  }
+
+  private ApiException statusError(int status) {
+    return ApiException.upstream(
+        status == 429 ? ErrorCode.MODEL_RATE_LIMITED : ErrorCode.MODEL_HTTP_ERROR,
+        status == 429 ? "模型服务请求频繁，请稍后重试" : "模型服务请求失败，请检查服务配置");
   }
 
   private void pause(int attempt) {
@@ -374,27 +495,6 @@ public class ModelHttpClient {
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       throw ApiException.upstream(ErrorCode.REQUEST_INTERRUPTED, "请求已中断", e);
-    }
-  }
-
-  private static final class Circuit {
-    private int failures;
-    private long openUntil;
-
-    private synchronized boolean isOpen() {
-      return openUntil > System.currentTimeMillis();
-    }
-
-    private synchronized void success() {
-      failures = 0;
-      openUntil = 0;
-    }
-
-    private synchronized void failure(int threshold, long openDurationMs) {
-      if (++failures >= threshold) {
-        failures = 0;
-        openUntil = System.currentTimeMillis() + openDurationMs;
-      }
     }
   }
 }

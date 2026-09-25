@@ -68,16 +68,17 @@ public class ChatClient {
     // 仅当当前目标没有产出可用结果时，才按配置顺序切换到下一个模型。
     for (AiProperties.ModelTarget target : config.chatModels()) {
       try {
-        var response = http.post(target, payload(target, request, false));
-        var choice = response.path("choices").path(0);
-        var content = choice.path("message").path("content");
-        if (!content.isString()
-            || content.asString().isBlank()
-            || !choice.path("finish_reason").isString()
-            || !"stop".equals(choice.path("finish_reason").asString())) {
-          throw ApiException.upstream(ErrorCode.GENERATION_FAILED, "模型未完整生成有效回答，请重试");
-        }
-        return new Generation(content.asString(), target.id(), target.provider(), target.model());
+        return http.post(
+            target,
+            payload(target, request, false),
+            response -> {
+              var choice = response.path("choices").path(0);
+              var content = choice.path("message").path("content");
+              var finish = choice.path("finish_reason");
+              String text = content.isString() ? content.asString() : "";
+              validateCompletion(text, finish.isString() ? finish.asString() : null);
+              return new Generation(text, target.id(), target.provider(), target.model());
+            });
       } catch (ApiException e) {
         if (interrupted(e)) {
           throw e;
@@ -160,7 +161,9 @@ public class ChatClient {
                 attemptObserver.delta(delta.asString());
               }
               var finish = choice.path("finish_reason");
-              if (finish.isString()) finishReason[0] = finish.asString();
+              if (finish.isString()) {
+                finishReason[0] = finish.asString();
+              }
             },
             control,
             deadline,
@@ -173,10 +176,10 @@ public class ChatClient {
                       && target.supportsThinking()
                       && reasoningNode.isString()
                       && !reasoningNode.asString().isEmpty());
-            });
-        if (control.cancelled()) throw ApiException.cancelled();
-        if (content.isEmpty() || !"stop".equals(finishReason[0])) {
-          throw ApiException.upstream(ErrorCode.GENERATION_FAILED, "模型未完整生成有效回答，请重试");
+            },
+            () -> validateCompletion(content.toString(), finishReason[0]));
+        if (control.cancelled()) {
+          throw ApiException.cancelled();
         }
         attemptObserver.completed(target, content.toString(), finishReason[0]);
         return new Generation(content.toString(), target.id(), target.provider(), target.model());
@@ -190,6 +193,19 @@ public class ChatClient {
       }
     }
     throw last == null ? ApiException.upstream(ErrorCode.MODEL_UNAVAILABLE, "没有可用的对话模型") : last;
+  }
+
+  /** 缺失内容或终止标记属于协议错误；长度限制与内容过滤不表示服务不可用。 */
+  private void validateCompletion(String content, String finishReason) {
+    if (finishReason == null || finishReason.isBlank()) {
+      throw ApiException.upstream(ErrorCode.MODEL_INVALID_RESPONSE, "模型响应缺少结束原因");
+    }
+    if (!"stop".equals(finishReason)) {
+      throw ApiException.upstream(ErrorCode.GENERATION_FAILED, "模型未完整生成有效回答，请重试");
+    }
+    if (content.isBlank()) {
+      throw ApiException.upstream(ErrorCode.MODEL_INVALID_RESPONSE, "模型响应缺少有效回答");
+    }
   }
 
   /** 中断和用户取消必须终止候选遍历，不能作为供应商故障继续调用。 */

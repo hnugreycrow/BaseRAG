@@ -230,7 +230,7 @@ class ModelHttpClientTest {
   }
 
   @Test
-  void retriesRateLimitOnlyToConfiguredLimitAndHidesProviderBody() {
+  void rateLimitSkipsRetryAndHidesProviderBody() {
     AtomicInteger calls = new AtomicInteger();
     server.createContext(
         "/v1/test",
@@ -255,7 +255,7 @@ class ModelHttpClientTest {
             false);
     var error =
         assertThrows(ApiException.class, () -> new ModelHttpClient(config).post(target, Map.of()));
-    assertEquals(2, calls.get());
+    assertEquals(1, calls.get());
     assertEquals("MODEL_RATE_LIMITED", error.code());
     assertFalse(error.getMessage().contains("provider-secret"));
   }
