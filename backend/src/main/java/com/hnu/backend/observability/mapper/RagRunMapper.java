@@ -52,7 +52,9 @@ public interface RagRunMapper extends BaseMapper<RagRun> {
             .set(RagRun::getCompletedAt, snapshot.completedAt())
             .set(RagRun::getTotalMs, snapshot.totalMs())
             .set(RagRun::getEndToEndTtftMs, snapshot.endToEndTtftMs())
-            .set(RagRun::getModelTtftMs, snapshot.modelTtftMs()));
+            .set(RagRun::getModelTtftMs, snapshot.modelTtftMs())
+            .set(RagRun::getFirstReasoningMs, snapshot.firstReasoningMs())
+            .set(RagRun::getFirstAnswerMs, snapshot.firstAnswerMs()));
   }
 
   /**

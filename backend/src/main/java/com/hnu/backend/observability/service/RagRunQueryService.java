@@ -194,7 +194,9 @@ public class RagRunQueryService {
         value.getCompletedAt(),
         value.getTotalMs(),
         value.getEndToEndTtftMs(),
-        value.getModelTtftMs());
+        value.getModelTtftMs(),
+        value.getFirstReasoningMs(),
+        value.getFirstAnswerMs());
   }
 
   /** 判断阶段原因是否属于 run 级降级口径。 */
@@ -225,7 +227,13 @@ public class RagRunQueryService {
         value.getFirstTokenAt(),
         value.getCompletedAt(),
         value.getElapsedMs(),
-        value.getTtftMs());
+        value.getTtftMs(),
+        value.getParentStageId(),
+        value.getQueueMs(),
+        value.getAttemptId(),
+        value.getAttemptIndex(),
+        value.getFirstReasoningMs(),
+        value.getFirstAnswerMs());
   }
 
   /** 创建延迟分位数组合。 */

@@ -224,8 +224,82 @@
 .waterfall-axis,
 .waterfall-row {
   display: grid;
-  grid-template-columns: 180px minmax(180px, 1fr) 78px;
+  grid-template-columns: 260px minmax(180px, 1fr) 90px;
   column-gap: 18px;
+}
+
+.trace-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.trace-controls button {
+  min-height: 36px;
+  padding: 6px 10px;
+  color: var(--color-primary);
+  background: #f3f5ff;
+  border-radius: 6px;
+}
+
+.tree-toggle,
+.stage-name > .tree-spacer {
+  width: 28px;
+  height: 32px;
+  flex: 0 0 28px;
+}
+
+.tree-toggle {
+  color: var(--color-primary);
+  font-size: 20px;
+}
+
+.stage-select {
+  min-height: 32px;
+  text-align: left;
+  color: var(--color-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.stage-select small {
+  margin-left: 4px;
+}
+
+.stage-name > div {
+  align-items: flex-start;
+  padding: 6px 0;
+}
+
+.trace-controls button:focus-visible,
+.tree-toggle:focus-visible,
+.stage-select:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.stage-inspector {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 16px;
+  margin: 0 0 14px;
+  padding: 16px;
+  background: #f6f8fc;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.stage-inspector dt {
+  color: var(--color-muted);
+}
+
+.stage-inspector dd {
+  margin: 6px 0 0;
+  overflow-wrap: anywhere;
 }
 
 .waterfall-axis {
@@ -286,7 +360,7 @@
   margin-top: 2px;
   color: #929daf;
   font-family: var(--font-data);
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .stage-lane {
@@ -348,7 +422,14 @@
 }
 
 .stage-skipped .stage-bar {
-  background: repeating-linear-gradient(90deg, #a8b1c0 0 3px, transparent 3px 5px);
+  width: 8px !important;
+  height: 8px;
+  background: #7c8799;
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.stage-event i {
+  display: none;
 }
 
 .stage-duration {
@@ -370,7 +451,7 @@
 .stage-duration small {
   margin-top: 2px;
   color: #a0a9b8;
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .stage-note {
@@ -702,9 +783,21 @@
     flex-basis: auto;
   }
 
-  .stage-lane,
   .stage-duration {
     display: none;
+  }
+
+  .stage-lane {
+    display: block;
+    width: 100%;
+  }
+
+  .stage-mobile-detail :deep(.status-badge) {
+    display: none;
+  }
+
+  .stage-inspector {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .stage-mobile-detail {

@@ -2,6 +2,7 @@ package com.hnu.backend.rag.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -37,6 +38,132 @@ import org.junit.jupiter.api.Test;
 class ExecutionStageTest {
   private final UUID ownerId = UUID.randomUUID();
   private final List<ExecutionStage> stages = new ArrayList<>();
+
+  @Test
+  void cancellationBeforeWorkerStartRecordsNoExecutionAndDoesNotCallRetrieval() throws Exception {
+    RetrievalService retrieval = mock(RetrievalService.class);
+    var executor = java.util.concurrent.Executors.newSingleThreadExecutor();
+    var occupied = new java.util.concurrent.CountDownLatch(1);
+    var release = new java.util.concurrent.CountDownLatch(1);
+    executor.submit(
+        () -> {
+          occupied.countDown();
+          try {
+            release.await();
+          } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+          }
+        });
+    assertTrue(occupied.await(2, java.util.concurrent.TimeUnit.SECONDS));
+    var stage =
+        new ExecutionStage(
+            retrieval,
+            mock(McpToolExecutor.class),
+            new CandidateMerge(),
+            new RagProperties(),
+            executor);
+    stages.add(stage);
+    var trace = new RagRunTrace(UUID.randomUUID(), OffsetDateTime.now(), System.nanoTime());
+    var calls = new java.util.concurrent.atomic.AtomicInteger();
+    // 前两个检查分别在检索入口与提交后等待处，取消在任务排队后生效。
+    CancellationToken cancelled = () -> calls.incrementAndGet() >= 2;
+    try {
+      assertThrows(
+          ApiException.class,
+          () ->
+              stage.execute(
+                  ownerId,
+                  new QueryPlan("问题", List.of(new SubQuestion("Q1", "问题"))),
+                  new RoutingPlan(List.of(knowledge("Q1"))),
+                  null,
+                  cancelled,
+                  trace));
+      var snapshot = trace.finish(RagRunStatus.CANCELLED, "GENERATION_CANCELLED");
+      var task =
+          snapshot.stages().stream()
+              .filter(s -> s.name() == RagStageName.SUBQUESTION_EXECUTION)
+              .findFirst()
+              .orElseThrow();
+      assertEquals(RagStageStatus.CANCELLED, task.status());
+      assertEquals(0, task.elapsedMs());
+      assertTrue(task.queueMs() >= 0);
+      verifyNoInteractions(retrieval);
+    } finally {
+      release.countDown();
+    }
+  }
+
+  @Test
+  void recordsWorkerCompletionInsteadOfFutureCollectionAndKeepsParents() throws Exception {
+    RetrievalService retrieval = mock(RetrievalService.class);
+    var stage = stage(retrieval, mock(McpToolExecutor.class), new RagProperties());
+    var fastReturned = new java.util.concurrent.CountDownLatch(1);
+    var trace = new RagRunTrace(UUID.randomUUID(), OffsetDateTime.now(), System.nanoTime());
+    when(retrieval.retrieveCandidates(
+            eq(ownerId),
+            anyString(),
+            anyString(),
+            isNull(),
+            any(),
+            any(),
+            any(com.hnu.backend.observability.trace.TraceContext.class)))
+        .thenAnswer(
+            call -> {
+              String id = call.getArgument(1);
+              com.hnu.backend.observability.trace.TraceContext context = call.getArgument(6);
+              return context.execute(
+                  RagStageName.DATABASE_RETRIEVAL,
+                  id,
+                  1,
+                  span -> {
+                    if (id.equals("Q1")) {
+                      try {
+                        assertTrue(fastReturned.await(2, java.util.concurrent.TimeUnit.SECONDS));
+                        // 留出明确的执行差异，以验证 Q2 不包含等待 Q1 被收取的时间。
+                        Thread.sleep(150);
+                      } catch (InterruptedException error) {
+                        Thread.currentThread().interrupt();
+                        throw ApiException.cancelled();
+                      }
+                    } else {
+                      fastReturned.countDown();
+                    }
+                    return List.of();
+                  });
+            });
+    var plan =
+        new QueryPlan(
+            "并行问题", List.of(new SubQuestion("Q1", "slow"), new SubQuestion("Q2", "fast")));
+    stage.execute(
+        ownerId,
+        plan,
+        new RoutingPlan(List.of(knowledge("Q1"), knowledge("Q2"))),
+        null,
+        () -> false,
+        trace);
+    var snapshot = trace.finish(RagRunStatus.COMPLETED, null);
+    var children =
+        snapshot.stages().stream()
+            .filter(s -> s.name() == RagStageName.SUBQUESTION_EXECUTION)
+            .toList();
+    var slow =
+        children.stream().filter(s -> s.subQuestionId().equals("Q1")).findFirst().orElseThrow();
+    var fast =
+        children.stream().filter(s -> s.subQuestionId().equals("Q2")).findFirst().orElseThrow();
+    assertTrue(fast.completedAt().isBefore(slow.completedAt()));
+    assertTrue(slow.elapsedMs() >= fast.elapsedMs() + 100);
+    assertEquals(slow.parentStageId(), fast.parentStageId());
+    assertTrue(fast.queueMs() >= 0);
+    for (var child : children) {
+      assertTrue(
+          snapshot.stages().stream()
+              .anyMatch(
+                  s ->
+                      s.name() == RagStageName.DATABASE_RETRIEVAL
+                          && child.id().equals(s.parentStageId())
+                          && child.subQuestionId().equals(s.subQuestionId())));
+    }
+  }
 
   @AfterEach
   void tearDown() {
@@ -166,7 +293,13 @@ class ExecutionStageTest {
     RagRunTrace trace =
         new RagRunTrace(UUID.randomUUID(), OffsetDateTime.now(ZoneOffset.UTC), System.nanoTime());
     when(retrievalService.retrieveCandidates(
-            eq(ownerId), eq("Q1"), anyString(), isNull(), any(), any(), same(trace)))
+            eq(ownerId),
+            eq("Q1"),
+            anyString(),
+            isNull(),
+            any(),
+            any(),
+            any(com.hnu.backend.observability.trace.TraceContext.class)))
         .thenThrow(ApiException.upstream(ErrorCode.SUBQUESTION_TIMEOUT, "向量检索通道超时"));
 
     ExecutionResult result = stage.execute(ownerId, plan, routing, null, () -> false, trace);

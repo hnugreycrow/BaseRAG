@@ -33,4 +33,6 @@ public class RagRunViewRow {
   private Long totalMs;
   private Long endToEndTtftMs;
   private Long modelTtftMs;
+  private Long firstReasoningMs;
+  private Long firstAnswerMs;
 }

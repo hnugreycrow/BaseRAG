@@ -94,6 +94,9 @@ class InfrastructureIntegrationTest {
   @Autowired GenerationAttemptMapper generationAttemptMapper;
   @Autowired RagRunMapper ragRunMapper;
   @Autowired RagStageRunMapper ragStageRunMapper;
+  @Autowired com.hnu.backend.observability.service.RagTraceManager traceManager;
+  @Autowired com.hnu.backend.observability.service.RagRunQueryService traceQuery;
+  @Autowired org.springframework.transaction.support.TransactionTemplate transaction;
   @Autowired DocumentService documentService;
   @Autowired com.hnu.backend.configuration.RagProperties config;
   @MockitoBean EmbeddingClient embedding;
@@ -308,6 +311,60 @@ class InfrastructureIntegrationTest {
     assertTrue(ragRunMapper.deleteExpired(30) >= 1);
     assertNull(ragRunMapper.selectById(run.getId()));
     assertTrue(ragStageRunMapper.listByRun(run.getId()).isEmpty());
+  }
+
+  @Test
+  void persistsStructuredTraceInTerminalTransactionAndKeepsOwnerIsolation() {
+    UUID owner = createUser();
+    var trace =
+        traceManager.start(
+            owner,
+            null,
+            null,
+            null,
+            "结构化测试",
+            new com.hnu.backend.shared.web.RequestTiming(
+                "structured-test", OffsetDateTime.now(), System.nanoTime()));
+    UUID attemptId = UUID.randomUUID();
+    var parent = trace.context().start(RagStageName.ANSWER, null, 1);
+    var model =
+        parent
+            .context()
+            .start(RagStageName.ANSWER_MODEL, null, 1)
+            .queued(System.nanoTime())
+            .attempt(attemptId, 1)
+            .model("test", "test", "test");
+    model.content(true, "reasoning");
+    trace.deltaSent(true, "reasoning");
+    model.content(false, "answer");
+    trace.deltaSent(false, "answer");
+    model.success(1, "PRIMARY");
+    parent.success(1);
+    trace.finalAnswer(model, "test", "test", "test");
+    transaction.executeWithoutResult(
+        ignored -> traceManager.finish(trace, RagRunStatus.COMPLETED, null));
+    var actor = userMapper.selectById(owner);
+    var detail = traceQuery.get(actor, trace.runId());
+    var stored =
+        detail.stages().stream()
+            .filter(s -> s.stageName() == RagStageName.ANSWER_MODEL)
+            .findFirst()
+            .orElseThrow();
+    assertEquals(parent.context().parentStageId(), stored.parentStageId());
+    assertEquals(attemptId, stored.attemptId());
+    assertEquals(1, stored.attemptIndex());
+    assertNotNull(stored.queueMs());
+    assertNotNull(stored.firstReasoningMs());
+    assertNotNull(stored.firstAnswerMs());
+    assertNotNull(detail.run().firstReasoningMs());
+    assertNotNull(detail.run().firstAnswerMs());
+    assertTrue(detail.degradationReasons().isEmpty());
+    assertThrows(
+        ApiException.class,
+        () -> traceQuery.get(userMapper.selectById(createUser()), trace.runId()));
+    transaction.executeWithoutResult(
+        ignored -> traceManager.finish(trace, RagRunStatus.COMPLETED, null));
+    assertEquals(2, ragStageRunMapper.listByRun(trace.runId()).size());
   }
 
   @BeforeEach

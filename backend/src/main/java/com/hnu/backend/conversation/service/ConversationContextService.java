@@ -1,6 +1,7 @@
 package com.hnu.backend.conversation.service;
 
 import com.hnu.backend.conversation.entity.Conversation;
+import com.hnu.backend.observability.RagStageName;
 import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.rag.memory.MemoryStage;
 import com.hnu.backend.rag.memory.RagMemory;
@@ -62,10 +63,29 @@ public class ConversationContextService {
   public PreparedContext prepare(
       Conversation conversation, int currentTurn, String question, RagRunTrace trace) {
     RagMemory memory =
-        memoryStage.execute(conversation.getOwnerId(), conversation.getId(), currentTurn, trace);
-    QueryPlan queryPlan = queryPlanningStage.execute(memory, question, trace);
-    RoutingPlan routingPlan = treeRoutingStage.execute(queryPlan, trace);
-    return new PreparedContext(memory, queryPlan, routingPlan);
+        trace
+            .context()
+            .execute(
+                RagStageName.MEMORY,
+                null,
+                null,
+                span ->
+                    memoryStage.execute(
+                        conversation.getOwnerId(),
+                        conversation.getId(),
+                        currentTurn,
+                        span.context()));
+    return trace
+        .context()
+        .execute(
+            RagStageName.PLANNING,
+            null,
+            1,
+            span -> {
+              QueryPlan queryPlan = queryPlanningStage.execute(memory, question, span.context());
+              RoutingPlan routingPlan = treeRoutingStage.execute(queryPlan, span.context());
+              return new PreparedContext(memory, queryPlan, routingPlan);
+            });
   }
 
   /**

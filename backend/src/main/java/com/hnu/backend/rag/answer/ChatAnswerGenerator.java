@@ -45,45 +45,7 @@ public class ChatAnswerGenerator implements AnswerGenerator {
       throw new IllegalArgumentException("Unsupported answer stream control");
     }
     control.throwIfCancelled();
-    ChatClient.StreamObserver bridge =
-        new ChatClient.StreamObserver() {
-          /** {@inheritDoc} */
-          @Override
-          public void started(AiProperties.ModelTarget target, String providerReason) {
-            observer.started(modelTarget(target), attemptReason(reason, providerReason));
-          }
-
-          /** {@inheritDoc} */
-          @Override
-          public void requesting(AiProperties.ModelTarget target) {
-            observer.requesting(modelTarget(target));
-          }
-
-          /** {@inheritDoc} */
-          @Override
-          public void delta(String text) {
-            observer.delta(text);
-          }
-
-          @Override
-          public void reasoningDelta(String text) {
-            observer.reasoningDelta(text);
-          }
-
-          /** {@inheritDoc} */
-          @Override
-          public void completed(
-              AiProperties.ModelTarget target, String content, String finishReason) {
-            observer.completed(modelTarget(target), content, finishReason);
-          }
-
-          /** {@inheritDoc} */
-          @Override
-          public void failed(
-              AiProperties.ModelTarget target, String partialContent, ApiException error) {
-            observer.failed(modelTarget(target), partialContent, error);
-          }
-        };
+    ChatClient.StreamObserver bridge = bridge(observer, reason);
     ChatClient.Generation generation =
         request.thinkingEnabled()
             ? chat.stream(
@@ -96,6 +58,53 @@ public class ChatAnswerGenerator implements AnswerGenerator {
     control.throwIfCancelled();
     return new Generation(
         generation.content(), generation.id(), generation.provider(), generation.model());
+  }
+
+  /** 每次模型尝试绑定独立观察器，HTTP 增量闭包保留该接收器。 */
+  private ChatClient.StreamObserver bridge(StreamObserver observer, AttemptReason reason) {
+    return new ChatClient.StreamObserver() {
+      @Override
+      public ChatClient.StreamObserver bindAttempt() {
+        StreamObserver bound = observer.bindAttempt();
+        return bridge(bound == null ? observer : bound, reason);
+      }
+
+      /** {@inheritDoc} */
+      @Override
+      public void started(AiProperties.ModelTarget target, String providerReason) {
+        observer.started(modelTarget(target), attemptReason(reason, providerReason));
+      }
+
+      /** {@inheritDoc} */
+      @Override
+      public void requesting(AiProperties.ModelTarget target) {
+        observer.requesting(modelTarget(target));
+      }
+
+      /** {@inheritDoc} */
+      @Override
+      public void delta(String text) {
+        observer.delta(text);
+      }
+
+      @Override
+      public void reasoningDelta(String text) {
+        observer.reasoningDelta(text);
+      }
+
+      /** {@inheritDoc} */
+      @Override
+      public void completed(AiProperties.ModelTarget target, String content, String finishReason) {
+        observer.completed(modelTarget(target), content, finishReason);
+      }
+
+      /** {@inheritDoc} */
+      @Override
+      public void failed(
+          AiProperties.ModelTarget target, String partialContent, ApiException error) {
+        observer.failed(modelTarget(target), partialContent, error);
+      }
+    };
   }
 
   /**

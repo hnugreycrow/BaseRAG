@@ -67,6 +67,11 @@ public interface AnswerGenerator {
 
   /** 接收单次回答中每个供应商尝试的生命周期和增量正文。 */
   interface StreamObserver {
+    /** 返回当前尝试独占的回调接收器，兼容原有同步观察器。 */
+    default StreamObserver bindAttempt() {
+      return this;
+    }
+
     /**
      * 模型候选即将开始生成。
      *

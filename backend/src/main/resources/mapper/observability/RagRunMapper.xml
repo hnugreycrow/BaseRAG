@@ -9,7 +9,7 @@
         r.status, r.execution_mode, r.model_id, r.provider, r.model,
         r.candidate_count, r.evidence_count, r.degraded, r.error_code,
         r.started_at, r.first_token_at, r.completed_at, r.total_ms,
-        r.end_to_end_ttft_ms, r.model_ttft_ms
+        r.end_to_end_ttft_ms, r.model_ttft_ms, r.first_reasoning_ms, r.first_answer_ms
     </sql>
 
     <sql id="filters">

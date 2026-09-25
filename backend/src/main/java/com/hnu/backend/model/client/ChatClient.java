@@ -102,10 +102,12 @@ public class ChatClient {
     for (AiProperties.ModelTarget target : config.chatModels()) {
       if (control.cancelled()) throw ApiException.cancelled();
       observer.started(target, attemptIndex++ == 0 ? "PRIMARY" : "PROVIDER_FALLBACK");
+      StreamObserver bound = observer.bindAttempt();
+      StreamObserver attemptObserver = bound == null ? observer : bound;
       StringBuilder content = new StringBuilder();
       String[] finishReason = {null};
       try {
-        observer.requesting(target);
+        attemptObserver.requesting(target);
         http.stream(
             target,
             payload(target, request, true),
@@ -116,12 +118,12 @@ public class ChatClient {
                   && target.supportsThinking()
                   && reasoning.isString()
                   && !reasoning.asString().isEmpty()) {
-                observer.reasoningDelta(reasoning.asString());
+                attemptObserver.reasoningDelta(reasoning.asString());
               }
               var delta = choice.path("delta").path("content");
               if (delta.isString() && !delta.asString().isEmpty()) {
                 content.append(delta.asString());
-                observer.delta(delta.asString());
+                attemptObserver.delta(delta.asString());
               }
               var finish = choice.path("finish_reason");
               if (finish.isString()) finishReason[0] = finish.asString();
@@ -131,10 +133,10 @@ public class ChatClient {
         if (content.isEmpty() || !"stop".equals(finishReason[0])) {
           throw ApiException.upstream(ErrorCode.GENERATION_FAILED, "模型未完整生成有效回答，请重试");
         }
-        observer.completed(target, content.toString(), finishReason[0]);
+        attemptObserver.completed(target, content.toString(), finishReason[0]);
         return new Generation(content.toString(), target.id(), target.provider(), target.model());
       } catch (ApiException e) {
-        observer.failed(target, content.toString(), e);
+        attemptObserver.failed(target, content.toString(), e);
         last = e;
         // 已向客户端发送过内容后切换模型会拼接两份回答，因此只能直接失败。
         if (!content.isEmpty() || control.cancelled()) throw e;
@@ -171,6 +173,11 @@ public class ChatClient {
 
   /** 接收流式模型调用生命周期事件。 */
   public interface StreamObserver {
+    /** 返回当前尝试独占的回调接收器，避免后续尝试覆盖其状态。 */
+    default StreamObserver bindAttempt() {
+      return this;
+    }
+
     /**
      * 模型尝试开始。
      *

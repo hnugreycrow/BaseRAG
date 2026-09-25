@@ -33,4 +33,22 @@ public class RagStageRun {
   private OffsetDateTime completedAt;
   private long elapsedMs;
   private Long ttftMs;
+
+  /** 父阶段标识，根节点为空。 */
+  private UUID parentStageId;
+
+  /** 任务排队毫秒。 */
+  private Long queueMs;
+
+  /** 模型尝试标识。 */
+  private UUID attemptId;
+
+  /** 模型尝试序号。 */
+  private Integer attemptIndex;
+
+  /** 首次思考相对毫秒。 */
+  private Long firstReasoningMs;
+
+  /** 首次正文相对毫秒。 */
+  private Long firstAnswerMs;
 }

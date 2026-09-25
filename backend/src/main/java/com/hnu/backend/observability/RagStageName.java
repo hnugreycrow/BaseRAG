@@ -2,6 +2,11 @@ package com.hnu.backend.observability;
 
 /** 可稳定用于筛选和瀑布展示的问答阶段名称。 */
 public enum RagStageName {
+  MEMORY,
+  PLANNING,
+  RETRIEVAL,
+  EVIDENCE,
+  ANSWER,
   MEMORY_LOAD,
   MEMORY_SUMMARY,
   QUERY_PLANNING,

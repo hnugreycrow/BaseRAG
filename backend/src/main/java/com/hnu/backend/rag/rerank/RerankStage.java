@@ -2,6 +2,7 @@ package com.hnu.backend.rag.rerank;
 
 import com.hnu.backend.observability.RagStageName;
 import com.hnu.backend.observability.trace.RagRunTrace;
+import com.hnu.backend.observability.trace.TraceContext;
 import com.hnu.backend.rag.execution.CancellationToken;
 import com.hnu.backend.rag.execution.ExecutionResult;
 import com.hnu.backend.rag.execution.RagBudgetSnapshot;
@@ -88,7 +89,7 @@ public class RerankStage {
       ExecutionResult execution,
       List<EvidenceCandidate> deduplicatedCandidates,
       CancellationToken cancellationToken,
-      RagRunTrace trace) {
+      TraceContext trace) {
     long startedAt = System.nanoTime();
     cancellationToken.throwIfCancelled();
     RagBudgetSnapshot budget = execution.budget();
@@ -96,89 +97,99 @@ public class RerankStage {
     List<EvidenceCandidate> input =
         candidateMerge.mergeAndSelect(
             deduplicatedCandidates, knowledgeQuestionIds, budget.rerankInputLimit());
-    RagRunTrace.Span span = trace.start(RagStageName.RERANK, null, input.size());
-    if (input.isEmpty()) {
-      return observed(
-          span,
-          result(
-              List.of(), List.of(), RerankResult.Status.EMPTY, "NO_RERANK_INPUT", null, startedAt));
-    }
-    if (!budget.rerankEnabled()) {
-      return observed(
-          span,
-          fallback(
-              input,
-              knowledgeQuestionIds,
-              budget.selectedEvidenceLimit(),
-              RerankResult.Status.DISABLED,
-              "RERANK_DISABLED",
-              null,
-              startedAt));
-    }
+    return trace.execute(
+        RagStageName.RERANK,
+        null,
+        input.size(),
+        span -> {
+          if (input.isEmpty()) {
+            return observed(
+                span,
+                result(
+                    List.of(),
+                    List.of(),
+                    RerankResult.Status.EMPTY,
+                    "NO_RERANK_INPUT",
+                    null,
+                    startedAt));
+          }
+          if (!budget.rerankEnabled()) {
+            return observed(
+                span,
+                fallback(
+                    input,
+                    knowledgeQuestionIds,
+                    budget.selectedEvidenceLimit(),
+                    RerankResult.Status.DISABLED,
+                    "RERANK_DISABLED",
+                    null,
+                    startedAt));
+          }
 
-    CandidateReranker.Output output = null;
-    try {
-      output = await(plan.standaloneQuestion(), input, cancellationToken);
-      cancellationToken.throwIfCancelled();
-      if (output.noop()) {
-        return observed(
-            span,
-            fallback(
-                input,
-                knowledgeQuestionIds,
-                budget.selectedEvidenceLimit(),
-                RerankResult.Status.DEGRADED,
-                "RERANK_NOOP",
-                output,
-                startedAt));
-      }
-      List<RerankDecision> ranking = modelRanking(input, output.scores());
-      Set<UUID> selectedIds =
-          selectIds(ranking, knowledgeQuestionIds, budget.selectedEvidenceLimit());
-      List<RerankDecision> decisions = markSelected(ranking, selectedIds);
-      List<EvidenceCandidate> selected =
-          decisions.stream()
-              .filter(RerankDecision::selected)
-              .map(RerankDecision::candidate)
-              .toList();
-      return observed(
-          span,
-          result(
-              selected,
-              decisions,
-              RerankResult.Status.SUCCESS,
-              "RERANK_COMPLETED",
-              output,
-              startedAt));
-    } catch (ApiException error) {
-      if (cancellationToken.cancelled()
-          || ErrorCode.GENERATION_CANCELLED.code().equals(error.code())) throw error;
-      return observed(
-          span,
-          fallback(
-              input,
-              knowledgeQuestionIds,
-              budget.selectedEvidenceLimit(),
-              RerankResult.Status.DEGRADED,
-              ErrorCode.MODEL_TIMEOUT.code().equals(error.code())
-                      || ErrorCode.RERANK_TIMEOUT.code().equals(error.code())
-                  ? ErrorCode.RERANK_TIMEOUT.code()
-                  : ErrorCode.RERANK_FAILED.code(),
-              output,
-              startedAt));
-    } catch (RuntimeException error) {
-      if (cancellationToken.cancelled()) throw ApiException.cancelled();
-      return observed(
-          span,
-          fallback(
-              input,
-              knowledgeQuestionIds,
-              budget.selectedEvidenceLimit(),
-              RerankResult.Status.DEGRADED,
-              ErrorCode.RERANK_INVALID_RESULT.code(),
-              output,
-              startedAt));
-    }
+          CandidateReranker.Output output = null;
+          try {
+            output = await(plan.standaloneQuestion(), input, cancellationToken);
+            cancellationToken.throwIfCancelled();
+            if (output.noop()) {
+              return observed(
+                  span,
+                  fallback(
+                      input,
+                      knowledgeQuestionIds,
+                      budget.selectedEvidenceLimit(),
+                      RerankResult.Status.DEGRADED,
+                      "RERANK_NOOP",
+                      output,
+                      startedAt));
+            }
+            List<RerankDecision> ranking = modelRanking(input, output.scores());
+            Set<UUID> selectedIds =
+                selectIds(ranking, knowledgeQuestionIds, budget.selectedEvidenceLimit());
+            List<RerankDecision> decisions = markSelected(ranking, selectedIds);
+            List<EvidenceCandidate> selected =
+                decisions.stream()
+                    .filter(RerankDecision::selected)
+                    .map(RerankDecision::candidate)
+                    .toList();
+            return observed(
+                span,
+                result(
+                    selected,
+                    decisions,
+                    RerankResult.Status.SUCCESS,
+                    "RERANK_COMPLETED",
+                    output,
+                    startedAt));
+          } catch (ApiException error) {
+            if (cancellationToken.cancelled()
+                || ErrorCode.GENERATION_CANCELLED.code().equals(error.code())) throw error;
+            return observed(
+                span,
+                fallback(
+                    input,
+                    knowledgeQuestionIds,
+                    budget.selectedEvidenceLimit(),
+                    RerankResult.Status.DEGRADED,
+                    ErrorCode.MODEL_TIMEOUT.code().equals(error.code())
+                            || ErrorCode.RERANK_TIMEOUT.code().equals(error.code())
+                        ? ErrorCode.RERANK_TIMEOUT.code()
+                        : ErrorCode.RERANK_FAILED.code(),
+                    output,
+                    startedAt));
+          } catch (RuntimeException error) {
+            if (cancellationToken.cancelled()) throw ApiException.cancelled();
+            return observed(
+                span,
+                fallback(
+                    input,
+                    knowledgeQuestionIds,
+                    budget.selectedEvidenceLimit(),
+                    RerankResult.Status.DEGRADED,
+                    ErrorCode.RERANK_INVALID_RESULT.code(),
+                    output,
+                    startedAt));
+          }
+        });
   }
 
   /** 根据重排结果结束观测阶段。 */
@@ -356,5 +367,15 @@ public class RerankStage {
 
   private long elapsedMillis(long startedAt) {
     return Math.max(0, (System.nanoTime() - startedAt) / 1_000_000);
+  }
+
+  /** 兼容根 Trace 入口；内部显式传递父节点上下文。 */
+  public RerankResult execute(
+      QueryPlan plan,
+      ExecutionResult execution,
+      List<EvidenceCandidate> deduplicatedCandidates,
+      CancellationToken cancellationToken,
+      RagRunTrace trace) {
+    return execute(plan, execution, deduplicatedCandidates, cancellationToken, trace.context());
   }
 }

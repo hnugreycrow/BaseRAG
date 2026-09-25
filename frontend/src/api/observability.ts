@@ -12,6 +12,11 @@ export type RagStageStatus = 'SUCCESS' | 'DEGRADED' | 'FAILED' | 'CANCELLED' | '
 
 /** 后端稳定的阶段名称。 */
 export type RagStageName =
+  | 'MEMORY'
+  | 'PLANNING'
+  | 'RETRIEVAL'
+  | 'EVIDENCE'
+  | 'ANSWER'
   | 'MEMORY_LOAD'
   | 'MEMORY_SUMMARY'
   | 'QUERY_PLANNING'
@@ -55,6 +60,8 @@ export interface RagRunSummary {
   totalMs?: number
   endToEndTtftMs?: number
   modelTtftMs?: number
+  firstReasoningMs?: number | null
+  firstAnswerMs?: number | null
 }
 
 /** 单个流水线阶段的安全观测信息。 */
@@ -76,7 +83,13 @@ export interface RagStageRun {
   firstTokenAt?: string
   completedAt: string
   elapsedMs: number
-  ttftMs?: number
+  ttftMs?: number | null
+  parentStageId?: string | null
+  queueMs?: number | null
+  attemptId?: string | null
+  attemptIndex?: number | null
+  firstReasoningMs?: number | null
+  firstAnswerMs?: number | null
 }
 
 /** 单次运行及其阶段瀑布。 */

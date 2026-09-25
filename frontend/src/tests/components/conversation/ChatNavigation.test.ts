@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
 import AppSidebar from '../../../layout/AppSidebar.vue'
+import AdminLayout from '../../../layout/AdminLayout.vue'
 import { useAuthStore } from '../../../store/auth'
 import ConversationHistory from '../../../components/conversation/ConversationHistory.vue'
 
@@ -89,7 +90,8 @@ describe('chat and management navigation', () => {
       props: { mode: 'admin' },
       global: { plugins: [pinia, router], stubs: { AccountMenu: true } },
     })
-    expect(sidebar.get('.workspace-nav').text()).toContain('知识问答')
+    expect(sidebar.get('.brand').attributes('href')).toBe('/chat')
+    expect(sidebar.get('.workspace-nav').findAll('a')).toHaveLength(0)
     expect(sidebar.get('.workspace-nav').text()).not.toContain('工作台')
   })
 
@@ -114,7 +116,15 @@ describe('chat and management navigation', () => {
       global: { plugins: [pinia, router], stubs: { AccountMenu: true } },
     })
     const navigation = sidebar.get('.workspace-nav')
-    expect(navigation.text()).toContain('知识问答')
+    const layout = mount(AdminLayout, {
+      global: {
+        plugins: [pinia, router],
+        stubs: { AppSidebar: true, AccountMenu: true, 'el-drawer': true },
+      },
+    })
+    expect(layout.get('.topbar .chat-link').text()).toContain('知识问答')
+    expect(layout.get('.topbar .chat-link').attributes('href')).toBe('/chat')
+    layout.unmount()
     expect(navigation.text()).toContain('工作台')
     expect(navigation.text()).toContain('知识库')
     expect(navigation.text()).toContain('链路追踪')

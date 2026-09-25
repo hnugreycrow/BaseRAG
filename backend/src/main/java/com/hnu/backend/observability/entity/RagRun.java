@@ -37,4 +37,10 @@ public class RagRun {
   private Long totalMs;
   private Long endToEndTtftMs;
   private Long modelTtftMs;
+
+  /** 首次思考相对毫秒。 */
+  private Long firstReasoningMs;
+
+  /** 首次正文相对毫秒。 */
+  private Long firstAnswerMs;
 }

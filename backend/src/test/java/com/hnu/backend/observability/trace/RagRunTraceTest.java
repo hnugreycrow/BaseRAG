@@ -15,6 +15,118 @@ import org.junit.jupiter.api.Test;
 
 class RagRunTraceTest {
   @Test
+  void wrapperPreservesDeclaredResultsAndPropagatesOriginalFailure() {
+    RagRunTrace trace = trace();
+    var original = new IllegalStateException("failure");
+    trace
+        .context()
+        .execute(
+            RagStageName.PLANNING,
+            null,
+            1,
+            parent -> {
+              parent
+                  .context()
+                  .execute(
+                      RagStageName.QUERY_PLANNING,
+                      null,
+                      1,
+                      child -> {
+                        child.degraded(1, "INVALID_PLAN");
+                        return "fallback";
+                      });
+              parent
+                  .context()
+                  .execute(
+                      RagStageName.INTENT_ROUTING,
+                      null,
+                      1,
+                      child -> {
+                        child.skipped(0, "DISABLED");
+                        return null;
+                      });
+              return null;
+            });
+    assertSame(
+        original,
+        assertThrows(
+            IllegalStateException.class,
+            () ->
+                trace
+                    .context()
+                    .execute(
+                        RagStageName.RERANK,
+                        null,
+                        1,
+                        span -> {
+                          throw original;
+                        })));
+    var snapshot = trace.finish(RagRunStatus.FAILED, "INTERNAL_ERROR");
+    var parent =
+        snapshot.stages().stream()
+            .filter(s -> s.name() == RagStageName.PLANNING)
+            .findFirst()
+            .orElseThrow();
+    assertEquals(RagStageStatus.DEGRADED, parent.status());
+    assertEquals(
+        2, snapshot.stages().stream().filter(s -> parent.id().equals(s.parentStageId())).count());
+    assertTrue(snapshot.stages().stream().anyMatch(s -> s.status() == RagStageStatus.SKIPPED));
+    assertEquals(4, snapshot.stages().size());
+  }
+
+  @Test
+  void rejectsUnknownParentAndDoesNotReopenClosedScope() {
+    RagRunTrace trace = trace();
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new TraceContext(trace, UUID.randomUUID()).start(RagStageName.EMBEDDING, "Q1", 1));
+    var parent = trace.context().start(RagStageName.RETRIEVAL, null, 1);
+    parent.success(0);
+    parent.context().start(RagStageName.EMBEDDING, "Q1", 1).success(1);
+    assertEquals(1, trace.finish(RagRunStatus.COMPLETED, null).stages().size());
+  }
+
+  @Test
+  void cancellationClosesDescendantsAndIgnoresLateContent() {
+    RagRunTrace trace = trace();
+    var parent = trace.context().start(RagStageName.ANSWER, null, 1);
+    var child = parent.context().start(RagStageName.ANSWER_MODEL, null, 1);
+    child.content(true, "");
+    parent.stopChildren(true, "GENERATION_CANCELLED");
+    parent.cancelled("GENERATION_CANCELLED");
+    child.content(false, "late");
+    child.success(1);
+    var snapshot = trace.finish(RagRunStatus.CANCELLED, "GENERATION_CANCELLED");
+    assertTrue(snapshot.stages().stream().allMatch(s -> s.status() == RagStageStatus.CANCELLED));
+    assertTrue(snapshot.stages().stream().allMatch(s -> s.firstAnswerMs() == null));
+  }
+
+  @Test
+  void recordsDistinctFirstContentAndZeroExecutionForQueuedCancellation() {
+    RagRunTrace trace = trace();
+    var queued =
+        trace
+            .context()
+            .start(RagStageName.SUBQUESTION_EXECUTION, "Q1", 1)
+            .queued(System.nanoTime() - 10_000_000);
+    queued.cancelledBeforeStart("GENERATION_CANCELLED");
+    var model = trace.context().start(RagStageName.ANSWER_MODEL, null, 1);
+    model.content(false, "answer");
+    model.content(true, "reasoning");
+    trace.deltaSent(false, "answer");
+    trace.deltaSent(true, "reasoning");
+    model.success(1);
+    trace.finalAnswer(model, "id", "provider", "model");
+    var snapshot = trace.finish(RagRunStatus.COMPLETED, null);
+    assertEquals(0, snapshot.stages().getFirst().elapsedMs());
+    assertTrue(snapshot.stages().getFirst().queueMs() >= 0);
+    assertNotNull(snapshot.firstAnswerMs());
+    assertNotNull(snapshot.firstReasoningMs());
+    assertEquals(snapshot.firstAnswerMs(), snapshot.endToEndTtftMs());
+    assertEquals(snapshot.stages().getLast().firstAnswerMs(), snapshot.modelTtftMs());
+  }
+
+  @Test
   void recordsConcurrentStagesWithUniqueSequenceNumbers() throws Exception {
     RagRunTrace trace = trace();
     try (var executor = Executors.newFixedThreadPool(8)) {

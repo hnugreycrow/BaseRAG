@@ -6,6 +6,7 @@ import com.hnu.backend.knowledgebase.mapper.KnowledgeBaseMapper;
 import com.hnu.backend.model.client.EmbeddingClient;
 import com.hnu.backend.observability.RagStageName;
 import com.hnu.backend.observability.trace.RagRunTrace;
+import com.hnu.backend.observability.trace.TraceContext;
 import com.hnu.backend.rag.execution.CancellationToken;
 import com.hnu.backend.rag.execution.RagBudgetSnapshot;
 import com.hnu.backend.rag.execution.StageBudget;
@@ -155,7 +156,7 @@ public class RetrievalService {
       List<UUID> knowledgeBaseIds,
       StageBudget budget,
       CancellationToken cancellationToken,
-      RagRunTrace trace) {
+      TraceContext trace) {
     List<UUID> scope =
         knowledgeBaseIds == null ? null : knowledgeBaseIds.stream().distinct().toList();
     if (scope != null && scope.isEmpty()) {
@@ -179,46 +180,65 @@ public class RetrievalService {
     for (var binding : bindings) {
       cancellationToken.throwIfCancelled();
       if (remainingSearchNanos <= 0) throw channelTimeout();
-      RagRunTrace.Span embeddingSpan =
-          trace
-              .start(RagStageName.EMBEDDING, subQuestionId, 1)
-              .model(binding.model(), null, binding.model());
-      float[] vector;
-      try {
-        vector =
-            embedding
-                .embed(
-                    binding.modelId(),
-                    binding.provider(),
-                    binding.model(),
-                    binding.dimensions(),
-                    List.of(question))
-                .getFirst();
-        embeddingSpan.success(1);
-      } catch (RuntimeException error) {
-        embeddingSpan.failed(errorCode(error, ErrorCode.EMBEDDING_FAILED.code()));
-        throw error;
-      }
-      RagRunTrace.Span retrievalSpan =
-          trace.start(RagStageName.DATABASE_RETRIEVAL, subQuestionId, 1);
-      List<SearchHit> hits;
-      try {
-        long searchStartedAt = System.nanoTime();
-        hits =
-            search(
-                ownerId,
-                scope,
-                vector,
-                binding,
-                budget.recallBudget(),
-                remainingSearchNanos,
-                cancellationToken);
-        remainingSearchNanos -= System.nanoTime() - searchStartedAt;
-        retrievalSpan.success(hits.size());
-      } catch (RuntimeException error) {
-        retrievalSpan.failed(errorCode(error, ErrorCode.DATABASE_RETRIEVAL_FAILED.code()));
-        throw error;
-      }
+      float[] vector =
+          trace.execute(
+              RagStageName.EMBEDDING,
+              subQuestionId,
+              1,
+              embeddingSpan -> {
+                embeddingSpan.model(binding.model(), binding.provider(), binding.model());
+                try {
+                  float[] result =
+                      embedding
+                          .embed(
+                              binding.modelId(),
+                              binding.provider(),
+                              binding.model(),
+                              binding.dimensions(),
+                              List.of(question))
+                          .getFirst();
+                  embeddingSpan.success(1);
+                  return result;
+                } catch (RuntimeException error) {
+                  if (ErrorCode.GENERATION_CANCELLED.code().equals(errorCode(error, ""))) {
+                    embeddingSpan.error(error);
+                  } else {
+                    embeddingSpan.failed(errorCode(error, ErrorCode.EMBEDDING_FAILED.code()));
+                  }
+                  throw error;
+                }
+              });
+      long searchStartedAt = System.nanoTime();
+      long availableSearchNanos = remainingSearchNanos;
+      List<SearchHit> hits =
+          trace.execute(
+              RagStageName.DATABASE_RETRIEVAL,
+              subQuestionId,
+              1,
+              retrievalSpan -> {
+                try {
+                  List<SearchHit> result =
+                      search(
+                          ownerId,
+                          scope,
+                          vector,
+                          binding,
+                          budget.recallBudget(),
+                          availableSearchNanos,
+                          cancellationToken);
+                  retrievalSpan.success(result.size());
+                  return result;
+                } catch (RuntimeException error) {
+                  if (ErrorCode.GENERATION_CANCELLED.code().equals(errorCode(error, ""))) {
+                    retrievalSpan.error(error);
+                  } else {
+                    retrievalSpan.failed(
+                        errorCode(error, ErrorCode.DATABASE_RETRIEVAL_FAILED.code()));
+                  }
+                  throw error;
+                }
+              });
+      remainingSearchNanos -= System.nanoTime() - searchStartedAt;
       cancellationToken.throwIfCancelled();
       List<SearchHit> ranked =
           hits.stream()
@@ -255,7 +275,7 @@ public class RetrievalService {
       List<UUID> primaryKnowledgeBaseIds,
       StageBudget budget,
       CancellationToken cancellationToken,
-      RagRunTrace trace) {
+      TraceContext trace) {
     if (primaryKnowledgeBaseIds == null || primaryKnowledgeBaseIds.isEmpty()) {
       return retrieveCandidates(
           ownerId, subQuestionId, question, null, budget, cancellationToken, trace);
@@ -284,60 +304,81 @@ public class RetrievalService {
     long remainingSearchNanos = TimeUnit.MILLISECONDS.toNanos(budget.timeoutMs());
     for (var binding : modelBindings) {
       cancellationToken.throwIfCancelled();
-      RagRunTrace.Span embeddingSpan =
-          trace
-              .start(RagStageName.EMBEDDING, subQuestionId, 1)
-              .model(binding.model(), null, binding.model());
-      float[] vector;
-      try {
-        vector =
-            embedding
-                .embed(
-                    binding.modelId(),
-                    binding.provider(),
-                    binding.model(),
-                    binding.dimensions(),
-                    List.of(question))
-                .getFirst();
-        embeddingSpan.success(1);
-      } catch (RuntimeException error) {
-        embeddingSpan.failed(errorCode(error, ErrorCode.EMBEDDING_FAILED.code()));
-        throw error;
-      }
-      RagRunTrace.Span retrievalSpan =
-          trace.start(RagStageName.DATABASE_RETRIEVAL, subQuestionId, 2);
-      try {
-        long started = System.nanoTime();
-        List<SearchHit> focused =
-            search(
-                ownerId,
-                primary,
-                vector,
-                binding,
-                primaryLimit,
-                remainingSearchNanos,
-                cancellationToken);
-        remainingSearchNanos -= System.nanoTime() - started;
-        addRanked(candidates, focused, subQuestionId, binding, budget);
-        if (supplementLimit > 0) {
-          started = System.nanoTime();
-          List<SearchHit> supplementary =
-              search(
-                  ownerId,
-                  supplementalScope,
-                  vector,
-                  binding,
-                  supplementLimit,
-                  remainingSearchNanos,
-                  cancellationToken);
-          remainingSearchNanos -= System.nanoTime() - started;
-          addRanked(candidates, supplementary, subQuestionId, binding, budget);
-        }
-        retrievalSpan.success(candidates.size());
-      } catch (RuntimeException error) {
-        retrievalSpan.failed(errorCode(error, ErrorCode.DATABASE_RETRIEVAL_FAILED.code()));
-        throw error;
-      }
+      float[] vector =
+          trace.execute(
+              RagStageName.EMBEDDING,
+              subQuestionId,
+              1,
+              embeddingSpan -> {
+                embeddingSpan.model(binding.model(), binding.provider(), binding.model());
+                try {
+                  float[] result =
+                      embedding
+                          .embed(
+                              binding.modelId(),
+                              binding.provider(),
+                              binding.model(),
+                              binding.dimensions(),
+                              List.of(question))
+                          .getFirst();
+                  embeddingSpan.success(1);
+                  return result;
+                } catch (RuntimeException error) {
+                  if (ErrorCode.GENERATION_CANCELLED.code().equals(errorCode(error, ""))) {
+                    embeddingSpan.error(error);
+                  } else {
+                    embeddingSpan.failed(errorCode(error, ErrorCode.EMBEDDING_FAILED.code()));
+                  }
+                  throw error;
+                }
+              });
+      long availableSearchNanos = remainingSearchNanos;
+      remainingSearchNanos =
+          trace.execute(
+              RagStageName.DATABASE_RETRIEVAL,
+              subQuestionId,
+              2,
+              retrievalSpan -> {
+                long remaining = availableSearchNanos;
+                try {
+                  long started = System.nanoTime();
+                  List<SearchHit> focused =
+                      search(
+                          ownerId,
+                          primary,
+                          vector,
+                          binding,
+                          primaryLimit,
+                          remaining,
+                          cancellationToken);
+                  remaining -= System.nanoTime() - started;
+                  addRanked(candidates, focused, subQuestionId, binding, budget);
+                  if (supplementLimit > 0) {
+                    started = System.nanoTime();
+                    List<SearchHit> supplementary =
+                        search(
+                            ownerId,
+                            supplementalScope,
+                            vector,
+                            binding,
+                            supplementLimit,
+                            remaining,
+                            cancellationToken);
+                    remaining -= System.nanoTime() - started;
+                    addRanked(candidates, supplementary, subQuestionId, binding, budget);
+                  }
+                  retrievalSpan.success(candidates.size());
+                  return remaining;
+                } catch (RuntimeException error) {
+                  if (ErrorCode.GENERATION_CANCELLED.code().equals(errorCode(error, ""))) {
+                    retrievalSpan.error(error);
+                  } else {
+                    retrievalSpan.failed(
+                        errorCode(error, ErrorCode.DATABASE_RETRIEVAL_FAILED.code()));
+                  }
+                  throw error;
+                }
+              });
     }
     return candidateMerge.mergeAndSelect(candidates, List.of(subQuestionId), budget.recallBudget());
   }
@@ -434,7 +475,7 @@ public class RetrievalService {
   }
 
   /** 记录向量通道未执行时的两个非降级阶段。 */
-  private void skipVectorStages(RagRunTrace trace, String subQuestionId, String reasonCode) {
+  private void skipVectorStages(TraceContext trace, String subQuestionId, String reasonCode) {
     trace.skipped(RagStageName.EMBEDDING, subQuestionId, reasonCode);
     trace.skipped(RagStageName.DATABASE_RETRIEVAL, subQuestionId, reasonCode);
   }
@@ -500,5 +541,43 @@ public class RetrievalService {
             .max()
             .orElse(0));
     return hit;
+  }
+
+  /** 兼容根 Trace 入口；内部显式传递父节点上下文。 */
+  public List<EvidenceCandidate> retrieveCandidates(
+      UUID ownerId,
+      String subQuestionId,
+      String question,
+      List<UUID> knowledgeBaseIds,
+      StageBudget budget,
+      CancellationToken cancellationToken,
+      RagRunTrace trace) {
+    return retrieveCandidates(
+        ownerId,
+        subQuestionId,
+        question,
+        knowledgeBaseIds,
+        budget,
+        cancellationToken,
+        trace.context());
+  }
+
+  /** 兼容根 Trace 入口；内部显式传递父节点上下文。 */
+  public List<EvidenceCandidate> retrieveDirectedCandidates(
+      UUID ownerId,
+      String subQuestionId,
+      String question,
+      List<UUID> primaryKnowledgeBaseIds,
+      StageBudget budget,
+      CancellationToken cancellationToken,
+      RagRunTrace trace) {
+    return retrieveDirectedCandidates(
+        ownerId,
+        subQuestionId,
+        question,
+        primaryKnowledgeBaseIds,
+        budget,
+        cancellationToken,
+        trace.context());
   }
 }

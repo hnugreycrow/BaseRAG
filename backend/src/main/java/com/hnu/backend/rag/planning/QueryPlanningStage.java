@@ -5,6 +5,7 @@ import com.hnu.backend.configuration.RagProperties;
 import com.hnu.backend.observability.RagDecisionLog;
 import com.hnu.backend.observability.RagStageName;
 import com.hnu.backend.observability.trace.RagRunTrace;
+import com.hnu.backend.observability.trace.TraceContext;
 import com.hnu.backend.rag.memory.RagMemory;
 import com.hnu.backend.shared.error.ApiException;
 import com.hnu.backend.shared.error.ErrorCode;
@@ -62,46 +63,51 @@ public class QueryPlanningStage {
    * @param trace 当前问答 Trace
    * @return 可安全执行的查询计划
    */
-  public QueryPlan execute(RagMemory memory, String originalQuestion, RagRunTrace trace) {
-    long startedAt = System.nanoTime();
-    RagRunTrace.Span span = trace.start(RagStageName.QUERY_PLANNING, null, 1);
-    QueryPlanner.PlanningOutput output = null;
-    String degradedReason = null;
-    String exceptionType = null;
-    try {
-      int maxSubQuestions = config.getPipeline().getMaxSubQuestions();
-      output = planner.plan(memory, originalQuestion, maxSubQuestions);
-      QueryPlan plan = parse(output.content(), maxSubQuestions);
-      span.model(output.modelId(), output.provider(), output.model());
-      span.success(plan.subQuestions().size());
-      logPlan(trace, originalQuestion, plan, "SUCCESS", null, null, output, startedAt);
-      return plan;
-    } catch (PlanValidationException e) {
-      if (output != null) span.model(output.modelId(), output.provider(), output.model());
-      span.degraded(1, e.reason.name());
-      degradedReason = e.reason.name();
-    } catch (RuntimeException e) {
-      DegradedReason reason = failureReason(e);
-      span.degraded(1, reason.name());
-      degradedReason = reason.name();
-      exceptionType = e.getClass().getSimpleName();
-    }
-    // 规划是增强能力而非问答前置条件，失败时保留原始问题继续执行。
-    QueryPlan fallback = QueryPlan.fallback(originalQuestion);
-    logPlan(
-        trace,
-        originalQuestion,
-        fallback,
-        "FALLBACK",
-        degradedReason,
-        exceptionType,
-        output,
-        startedAt);
-    return fallback;
+  public QueryPlan execute(RagMemory memory, String originalQuestion, TraceContext trace) {
+    return trace.execute(
+        RagStageName.QUERY_PLANNING,
+        null,
+        1,
+        span -> {
+          long startedAt = System.nanoTime();
+          QueryPlanner.PlanningOutput output = null;
+          String degradedReason = null;
+          String exceptionType = null;
+          try {
+            int maxSubQuestions = config.getPipeline().getMaxSubQuestions();
+            output = planner.plan(memory, originalQuestion, maxSubQuestions);
+            QueryPlan plan = parse(output.content(), maxSubQuestions);
+            span.model(output.modelId(), output.provider(), output.model());
+            span.success(plan.subQuestions().size());
+            logPlan(trace, originalQuestion, plan, "SUCCESS", null, null, output, startedAt);
+            return plan;
+          } catch (PlanValidationException e) {
+            if (output != null) span.model(output.modelId(), output.provider(), output.model());
+            span.degraded(1, e.reason.name());
+            degradedReason = e.reason.name();
+          } catch (RuntimeException e) {
+            DegradedReason reason = failureReason(e);
+            span.degraded(1, reason.name());
+            degradedReason = reason.name();
+            exceptionType = e.getClass().getSimpleName();
+          }
+          // 规划是增强能力而非问答前置条件，失败时保留原始问题继续执行。
+          QueryPlan fallback = QueryPlan.fallback(originalQuestion);
+          logPlan(
+              trace,
+              originalQuestion,
+              fallback,
+              "FALLBACK",
+              degradedReason,
+              exceptionType,
+              output,
+              startedAt);
+          return fallback;
+        });
   }
 
   private void logPlan(
-      RagRunTrace trace,
+      TraceContext trace,
       String originalQuestion,
       QueryPlan plan,
       String status,
@@ -316,5 +322,10 @@ public class QueryPlanningStage {
     private PlanValidationException(DegradedReason reason) {
       this.reason = reason;
     }
+  }
+
+  /** 兼容根 Trace 入口；内部显式传递父节点上下文。 */
+  public QueryPlan execute(RagMemory memory, String originalQuestion, RagRunTrace trace) {
+    return execute(memory, originalQuestion, trace.context());
   }
 }

@@ -8,6 +8,7 @@ import com.hnu.backend.model.client.ChatClient;
 import com.hnu.backend.observability.RagDecisionLog;
 import com.hnu.backend.observability.RagStageName;
 import com.hnu.backend.observability.trace.RagRunTrace;
+import com.hnu.backend.observability.trace.TraceContext;
 import com.hnu.backend.rag.mcp.McpToolRegistry;
 import com.hnu.backend.rag.planning.QueryPlan;
 import com.hnu.backend.rag.prompt.IntentTreeRoutingPrompts;
@@ -57,100 +58,106 @@ public class IntentTreeRoutingStage {
   }
 
   /** 读取树快照并分类；单个子问题无效时只将该子问题降级到全公共库检索。 */
-  public RoutingPlan execute(QueryPlan plan, RagRunTrace trace) {
-    RagRunTrace.Span span =
-        trace.start(RagStageName.INTENT_ROUTING, null, plan.subQuestions().size());
-    if (Thread.currentThread().isInterrupted()) {
-      span.cancelled(ErrorCode.GENERATION_CANCELLED.code());
-      throw ApiException.cancelled();
-    }
-    try {
-      IntentTreeSnapshot snapshot = snapshots.snapshot();
-      List<IntentNode> leaves = snapshot.activeLeaves();
-      if (leaves.isEmpty()) {
-        String reason =
-            snapshot.nodes().isEmpty() ? "INTENT_TREE_EMPTY" : "INTENT_TREE_NO_VALID_LEAVES";
-        return knowledgeFallback(plan, span, trace, reason);
-      }
-      if (leaves.size() > 32) {
-        return knowledgeFallback(plan, span, trace, "INTENT_TREE_NO_VALID_LEAVES");
-      }
-      Map<UUID, IntentNode> byId = snapshot.activeLeavesById();
-      Map<UUID, String> paths = snapshot.paths();
-      Map<String, Object> input = new LinkedHashMap<>();
-      input.put("standaloneQuestion", plan.standaloneQuestion());
-      input.put("subQuestions", plan.subQuestions());
-      input.put("leaves", snapshot.promptLeaves());
-      Future<ChatClient.Generation> future =
-          executor.submit(
-              () ->
-                  chat.generate(IntentTreeRoutingPrompts.system(), json.writeValueAsString(input)));
-      ChatClient.Generation generation;
-      try {
-        generation =
-            future.get(config.getPipeline().getRouting().getTimeoutMs(), TimeUnit.MILLISECONDS);
-      } catch (InterruptedException error) {
-        future.cancel(true);
-        Thread.currentThread().interrupt();
-        span.cancelled(ErrorCode.GENERATION_CANCELLED.code());
-        throw ApiException.cancelled();
-      } catch (TimeoutException error) {
-        future.cancel(true);
-        return knowledgeFallback(plan, span, trace, "INTENT_TREE_TIMEOUT");
-      } catch (ExecutionException error) {
-        future.cancel(true);
-        if (isCancelled(error.getCause())) {
-          span.cancelled(ErrorCode.GENERATION_CANCELLED.code());
-          throw ApiException.cancelled();
-        }
-        return knowledgeFallback(plan, span, trace, "INTENT_TREE_CLASSIFICATION_FAILED");
-      }
-      span.model(generation.id(), generation.provider(), generation.model());
-      ParsedRouting parsed;
-      try {
-        parsed = parse(plan, byId, generation.content());
-      } catch (RuntimeException error) {
-        if (isCancelled(error)) {
-          span.cancelled(ErrorCode.GENERATION_CANCELLED.code());
-          throw ApiException.cancelled();
-        }
-        return knowledgeFallback(plan, span, trace, "INTENT_TREE_INVALID_OUTPUT");
-      }
-      if (Thread.currentThread().isInterrupted()) {
-        span.cancelled(ErrorCode.GENERATION_CANCELLED.code());
-        throw ApiException.cancelled();
-      }
-      RoutingPlan routed = parsed.plan();
-      if (parsed.fallbacks().isEmpty()) {
-        span.success(routed.routes().size());
-      } else {
-        span.degraded(routed.routes().size(), parsed.traceReason());
-      }
-      RagDecisionLog.emit(
-          () ->
-              log.info(
-                  "intent routing completed runId={} fallbackReasons={} routes={}",
-                  trace.runId(),
-                  parsed.fallbacks(),
-                  routeSummary(routed, paths)));
-      return routed;
-    } catch (ApiException error) {
-      if (ErrorCode.GENERATION_CANCELLED.code().equals(error.code())) {
-        span.cancelled(error.code());
-        throw error;
-      }
-      return knowledgeFallback(plan, span, trace, "INTENT_TREE_CLASSIFICATION_FAILED");
-    } catch (RuntimeException error) {
-      if (Thread.currentThread().isInterrupted()) {
-        span.cancelled(ErrorCode.GENERATION_CANCELLED.code());
-        throw ApiException.cancelled();
-      }
-      return knowledgeFallback(plan, span, trace, "INTENT_TREE_CLASSIFICATION_FAILED");
-    }
+  public RoutingPlan execute(QueryPlan plan, TraceContext trace) {
+    return trace.execute(
+        RagStageName.INTENT_ROUTING,
+        null,
+        plan.subQuestions().size(),
+        span -> {
+          if (Thread.currentThread().isInterrupted()) {
+            span.cancelled(ErrorCode.GENERATION_CANCELLED.code());
+            throw ApiException.cancelled();
+          }
+          try {
+            IntentTreeSnapshot snapshot = snapshots.snapshot();
+            List<IntentNode> leaves = snapshot.activeLeaves();
+            if (leaves.isEmpty()) {
+              String reason =
+                  snapshot.nodes().isEmpty() ? "INTENT_TREE_EMPTY" : "INTENT_TREE_NO_VALID_LEAVES";
+              return knowledgeFallback(plan, span, trace, reason);
+            }
+            if (leaves.size() > 32) {
+              return knowledgeFallback(plan, span, trace, "INTENT_TREE_NO_VALID_LEAVES");
+            }
+            Map<UUID, IntentNode> byId = snapshot.activeLeavesById();
+            Map<UUID, String> paths = snapshot.paths();
+            Map<String, Object> input = new LinkedHashMap<>();
+            input.put("standaloneQuestion", plan.standaloneQuestion());
+            input.put("subQuestions", plan.subQuestions());
+            input.put("leaves", snapshot.promptLeaves());
+            Future<ChatClient.Generation> future =
+                executor.submit(
+                    () ->
+                        chat.generate(
+                            IntentTreeRoutingPrompts.system(), json.writeValueAsString(input)));
+            ChatClient.Generation generation;
+            try {
+              generation =
+                  future.get(
+                      config.getPipeline().getRouting().getTimeoutMs(), TimeUnit.MILLISECONDS);
+            } catch (InterruptedException error) {
+              future.cancel(true);
+              Thread.currentThread().interrupt();
+              span.cancelled(ErrorCode.GENERATION_CANCELLED.code());
+              throw ApiException.cancelled();
+            } catch (TimeoutException error) {
+              future.cancel(true);
+              return knowledgeFallback(plan, span, trace, "INTENT_TREE_TIMEOUT");
+            } catch (ExecutionException error) {
+              future.cancel(true);
+              if (isCancelled(error.getCause())) {
+                span.cancelled(ErrorCode.GENERATION_CANCELLED.code());
+                throw ApiException.cancelled();
+              }
+              return knowledgeFallback(plan, span, trace, "INTENT_TREE_CLASSIFICATION_FAILED");
+            }
+            span.model(generation.id(), generation.provider(), generation.model());
+            ParsedRouting parsed;
+            try {
+              parsed = parse(plan, byId, generation.content());
+            } catch (RuntimeException error) {
+              if (isCancelled(error)) {
+                span.cancelled(ErrorCode.GENERATION_CANCELLED.code());
+                throw ApiException.cancelled();
+              }
+              return knowledgeFallback(plan, span, trace, "INTENT_TREE_INVALID_OUTPUT");
+            }
+            if (Thread.currentThread().isInterrupted()) {
+              span.cancelled(ErrorCode.GENERATION_CANCELLED.code());
+              throw ApiException.cancelled();
+            }
+            RoutingPlan routed = parsed.plan();
+            if (parsed.fallbacks().isEmpty()) {
+              span.success(routed.routes().size());
+            } else {
+              span.degraded(routed.routes().size(), parsed.traceReason());
+            }
+            RagDecisionLog.emit(
+                () ->
+                    log.info(
+                        "intent routing completed runId={} fallbackReasons={} routes={}",
+                        trace.runId(),
+                        parsed.fallbacks(),
+                        routeSummary(routed, paths)));
+            return routed;
+          } catch (ApiException error) {
+            if (ErrorCode.GENERATION_CANCELLED.code().equals(error.code())) {
+              span.cancelled(error.code());
+              throw error;
+            }
+            return knowledgeFallback(plan, span, trace, "INTENT_TREE_CLASSIFICATION_FAILED");
+          } catch (RuntimeException error) {
+            if (Thread.currentThread().isInterrupted()) {
+              span.cancelled(ErrorCode.GENERATION_CANCELLED.code());
+              throw ApiException.cancelled();
+            }
+            return knowledgeFallback(plan, span, trace, "INTENT_TREE_CLASSIFICATION_FAILED");
+          }
+        });
   }
 
   private RoutingPlan knowledgeFallback(
-      QueryPlan plan, RagRunTrace.Span span, RagRunTrace trace, String reason) {
+      QueryPlan plan, RagRunTrace.Span span, TraceContext trace, String reason) {
     if (Thread.currentThread().isInterrupted()) {
       span.cancelled(ErrorCode.GENERATION_CANCELLED.code());
       throw ApiException.cancelled();
@@ -379,4 +386,9 @@ public class IntentTreeRoutingStage {
   }
 
   private record ScoredNode(IntentNode node, double score) {}
+
+  /** 兼容根 Trace 入口；内部显式传递父节点上下文。 */
+  public RoutingPlan execute(QueryPlan plan, RagRunTrace trace) {
+    return execute(plan, trace.context());
+  }
 }

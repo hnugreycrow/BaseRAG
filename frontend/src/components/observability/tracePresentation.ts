@@ -1,6 +1,7 @@
 import type {
   RagExecutionMode,
   RagRunStatus,
+  RagRunSummary,
   RagStageName,
   RagStageRun,
   RagStageStatus,
@@ -29,6 +30,11 @@ export const EXECUTION_MODE_LABELS: Record<RagExecutionMode, string> = {
 }
 
 export const STAGE_NAME_LABELS: Record<RagStageName, string> = {
+  MEMORY: '会话记忆',
+  PLANNING: '问题规划',
+  RETRIEVAL: '检索',
+  EVIDENCE: '证据整理',
+  ANSWER: '回答生成',
   MEMORY_LOAD: '加载会话记忆',
   MEMORY_SUMMARY: '生成记忆摘要',
   QUERY_PLANNING: '问题改写与拆分',
@@ -92,19 +98,26 @@ export interface WaterfallLayout {
  *
  * 极短阶段保留 0.8% 的可视宽度，但不改变旁边展示的真实耗时。
  */
-export function buildWaterfall(stages: RagStageRun[]): WaterfallLayout {
+export function buildWaterfall(
+  stages: RagStageRun[],
+  run?: Pick<RagRunSummary, 'startedAt' | 'totalMs'>,
+): WaterfallLayout {
   if (stages.length === 0) return { durationMs: 0, stages: [] }
 
   const ordered = [...stages].sort((left, right) => left.sequenceNo - right.sequenceNo)
   const starts = ordered.map((stage) => Date.parse(stage.startedAt)).filter(Number.isFinite)
-  const base = starts.length > 0 ? Math.min(...starts) : 0
+  const runStart = run ? Date.parse(run.startedAt) : NaN
+  const base = Number.isFinite(runStart) ? runStart : starts.length > 0 ? Math.min(...starts) : 0
   const ends = ordered.map((stage) => {
     const completed = Date.parse(stage.completedAt)
     const started = Date.parse(stage.startedAt)
     if (Number.isFinite(completed)) return completed
     return Number.isFinite(started) ? started + Math.max(0, stage.elapsedMs) : base
   })
-  const finish = Math.max(base, ...ends)
+  const finish =
+    run?.totalMs != null && Number.isFinite(run.totalMs) && Number.isFinite(runStart)
+      ? base + Math.max(0, run.totalMs)
+      : Math.max(base, ...ends)
   const durationMs = Math.max(1, finish - base)
 
   // 所有并发 span 都换算到同一墙钟区间，因此重叠关系不会被 sequenceNo 拉平。
@@ -125,4 +138,117 @@ export function buildWaterfall(stages: RagStageRun[]): WaterfallLayout {
 export function shortId(value?: string): string {
   if (!value) return '—'
   return value.length > 12 ? value.slice(0, 8) : value
+}
+
+export interface TraceTreeNode extends WaterfallStage {
+  depth: number
+  parentId: string | null
+  children: TraceTreeNode[]
+}
+
+/** 历史数据保持平铺；孤儿与循环断开后，每个节点仍只出现一次。 */
+export function buildTraceTree(stages: WaterfallStage[]): TraceTreeNode[] {
+  const nodes = new Map<string, TraceTreeNode>()
+  for (const stage of stages) {
+    nodes.set(stage.id, { ...stage, depth: 0, parentId: stage.parentStageId ?? null, children: [] })
+  }
+  for (const node of nodes.values()) {
+    const seen = new Set([node.id])
+    let parentId = node.parentId
+    while (parentId) {
+      const parent = nodes.get(parentId)
+      if (!parent || seen.has(parentId)) {
+        node.parentId = null
+        break
+      }
+      seen.add(parentId)
+      parentId = parent.parentId
+    }
+  }
+  const roots: TraceTreeNode[] = []
+  for (const node of nodes.values()) {
+    const parent = node.parentId ? nodes.get(node.parentId) : undefined
+    if (parent) {
+      parent.children.push(node)
+    } else {
+      roots.push(node)
+    }
+  }
+  const pending = roots.map((node) => ({ node, depth: 0 }))
+  while (pending.length) {
+    const { node, depth } = pending.pop()!
+    node.depth = depth
+    node.children.sort((a, b) => a.sequenceNo - b.sequenceNo)
+    pending.push(...node.children.map((child) => ({ node: child, depth: depth + 1 })))
+  }
+  return roots.sort((a, b) => a.sequenceNo - b.sequenceNo)
+}
+
+/** 默认展开异常节点祖先，正常跳过与调用策略不触发展开。 */
+export function initiallyExpanded(roots: TraceTreeNode[]): Set<string> {
+  const expanded = new Set<string>()
+  const pending = roots.map((node) => ({ node, ancestors: [] as string[] }))
+  while (pending.length) {
+    const { node, ancestors } = pending.pop()!
+    if (['FAILED', 'DEGRADED', 'CANCELLED'].includes(node.status)) {
+      ancestors.forEach((id) => expanded.add(id))
+    }
+    pending.push(
+      ...node.children.map((child) => ({ node: child, ancestors: [...ancestors, node.id] })),
+    )
+  }
+  return expanded
+}
+
+export function visibleTraceRows(roots: TraceTreeNode[], expanded: Set<string>): TraceTreeNode[] {
+  const rows: TraceTreeNode[] = []
+  const pending = [...roots].reverse()
+  while (pending.length) {
+    const node = pending.pop()!
+    rows.push(node)
+    if (expanded.has(node.id)) {
+      pending.push(...[...node.children].reverse())
+    }
+  }
+  return rows
+}
+
+const REASON_LABELS: Record<string, string> = {
+  PRIMARY: '使用主模型',
+  PROVIDER_FALLBACK: '切换至备用模型',
+  CITATION_REPAIR: '重新生成以修复引用',
+  SUMMARY_NOT_DUE: '尚未达到摘要生成条件',
+  INTENT_TREE_INVALID_OUTPUT: '路由输出不符合结构要求，回退到公共知识库检索',
+  INTENT_TREE_LOW_CONFIDENCE: '意图识别置信度不足，回退到公共知识库检索',
+  INTENT_TREE_EMPTY: '未配置意图树，使用公共知识库检索',
+  INTENT_TREE_TIMEOUT: '路由超时，回退到公共知识库检索',
+  INTENT_TREE_CLASSIFICATION_FAILED: '路由分类失败，回退到公共知识库检索',
+  INTENT_TREE_PARTIAL_FALLBACK: '部分子问题路由降级',
+  SYSTEM_CHAT: '系统闲聊无需检索证据',
+  SYSTEM_CHAT_ROUTED: '子问题路由为系统闲聊',
+  RERANK_DISABLED: '未启用重排',
+  NO_RERANK_INPUT: '无可重排的候选',
+  NO_EVIDENCE: '证据不足，返回固定回答',
+  VECTOR_DISABLED: '未启用向量检索',
+  EMPTY_KNOWLEDGE_SCOPE: '知识库范围为空',
+  NO_EMBEDDING_BINDINGS: '没有可用的向量模型绑定',
+  SUBQUESTION_TIMEOUT: '子问题超过执行预算',
+  INVALID_CITATIONS: '回答包含无效引用',
+}
+
+export function reasonLabel(code: string): string {
+  return REASON_LABELS[code] ?? '未收录的原因'
+}
+
+export function reasonKind(stage: Pick<RagStageRun, 'status' | 'reasonCode'>): string {
+  if (stage.status === 'SKIPPED') {
+    return '跳过原因'
+  }
+  if (stage.status === 'DEGRADED') {
+    return '降级原因'
+  }
+  if (stage.reasonCode === 'PROVIDER_FALLBACK' || stage.reasonCode === 'CITATION_REPAIR') {
+    return '调用策略'
+  }
+  return stage.status === 'FAILED' || stage.status === 'CANCELLED' ? '状态原因' : '调用策略'
 }

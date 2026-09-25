@@ -11,6 +11,64 @@ vi.mock('../../api', async () => {
 })
 
 describe('ObservabilityDetailView', () => {
+  it('supports keyboard-operable collapse controls and nullable stage details', async () => {
+    const base = {
+      startedAt: '2026-01-01T00:00:00Z',
+      completedAt: '2026-01-01T00:00:01Z',
+      elapsedMs: 1000,
+    }
+    vi.mocked(getRagRun).mockResolvedValue({
+      run: {
+        id: 'run',
+        requestId: 'request',
+        status: 'COMPLETED',
+        executionMode: 'FULL_PIPELINE',
+        candidateCount: 0,
+        evidenceCount: 0,
+        degraded: false,
+        startedAt: base.startedAt,
+        totalMs: 1000,
+      },
+      stages: [
+        { ...base, id: 'parent', stageName: 'MEMORY', sequenceNo: 1, status: 'SUCCESS' },
+        {
+          ...base,
+          id: 'child',
+          parentStageId: 'parent',
+          stageName: 'MEMORY_SUMMARY',
+          sequenceNo: 2,
+          status: 'SKIPPED',
+          elapsedMs: 0,
+          ttftMs: null,
+          reasonCode: 'SUMMARY_NOT_DUE',
+        },
+      ],
+      degradationReasons: [],
+    })
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/observability/:runId', component: { template: '<div />' } }],
+    })
+    await router.push('/observability/run')
+    const wrapper = shallowMount(ObservabilityDetailView, { global: { plugins: [router] } })
+    await flushPromises()
+    expect(wrapper.findAll('.waterfall-row')).toHaveLength(1)
+    const toggle = wrapper.get('.tree-toggle')
+    expect(toggle.attributes('aria-expanded')).toBe('false')
+    await toggle.trigger('click')
+    expect(toggle.attributes('aria-expanded')).toBe('true')
+    expect(wrapper.findAll('.waterfall-row')).toHaveLength(2)
+    expect(wrapper.text()).toContain('尚未达到摘要生成条件')
+    expect(wrapper.text()).not.toContain('首内容 —')
+    await wrapper.findAll('.stage-select')[1].trigger('click')
+    expect(wrapper.get('.stage-inspector').text()).toContain('SUMMARY_NOT_DUE')
+    const collapse = wrapper.findAll('.trace-controls button')[1]
+    await collapse.trigger('click')
+    expect(wrapper.findAll('.waterfall-row')).toHaveLength(1)
+    await wrapper.findAll('.trace-controls button')[0].trigger('click')
+    expect(wrapper.findAll('.waterfall-row')).toHaveLength(2)
+  })
+
   it('separates safe error messages and codes from degradation reasons', async () => {
     vi.mocked(getRagRun).mockResolvedValue({
       run: {
@@ -56,7 +114,7 @@ describe('ObservabilityDetailView', () => {
     const text = wrapper.text()
     expect(text).toContain('模型请求超时，请稍后重试')
     expect(text).toContain('MODEL_TIMEOUT')
-    expect(text).toContain('降级/决策原因')
+    expect(text).toContain('调用策略')
     expect(text).toContain('PROVIDER_FALLBACK')
     expect(text).toContain('模型服务请求失败')
     expect(text).toContain('MODEL_HTTP_ERROR')

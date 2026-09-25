@@ -10,6 +10,7 @@ import com.hnu.backend.conversation.mapper.MessageMapper;
 import com.hnu.backend.model.client.ChatClient;
 import com.hnu.backend.observability.RagStageName;
 import com.hnu.backend.observability.trace.RagRunTrace;
+import com.hnu.backend.observability.trace.TraceContext;
 import com.hnu.backend.rag.memory.MemoryProvider;
 import com.hnu.backend.rag.memory.MemoryTurn;
 import com.hnu.backend.rag.memory.RagMemory;
@@ -70,10 +71,32 @@ public class ConversationMemoryProvider implements MemoryProvider {
 
   /** {@inheritDoc} */
   @Override
-  public RagMemory load(UUID ownerId, UUID conversationId, int beforeTurn, RagRunTrace trace) {
-    Conversation conversation = conversationMapper.find(ownerId, conversationId);
-    if (conversation == null) throw new IllegalArgumentException("conversation does not exist");
-    List<MemoryTurn> turns = completeTurns(ownerId, conversationId, beforeTurn);
+  public RagMemory load(UUID ownerId, UUID conversationId, int beforeTurn, TraceContext trace) {
+    LoadedMemory loaded =
+        trace.execute(
+            RagStageName.MEMORY_LOAD,
+            null,
+            beforeTurn - 1,
+            span -> {
+              try {
+                Conversation value = conversationMapper.find(ownerId, conversationId);
+                if (value == null) {
+                  throw new IllegalArgumentException("conversation does not exist");
+                }
+                List<MemoryTurn> history = completeTurns(ownerId, conversationId, beforeTurn);
+                span.success(history.size());
+                return new LoadedMemory(value, history);
+              } catch (RuntimeException error) {
+                if (error instanceof ApiException) {
+                  span.error(error);
+                } else {
+                  span.failed("MEMORY_LOAD_FAILED");
+                }
+                throw error;
+              }
+            });
+    Conversation conversation = loaded.conversation();
+    List<MemoryTurn> turns = loaded.turns();
     conversation = refreshSummaryIfNeeded(conversation, turns, trace);
     RagMemory memory =
         toMemory(
@@ -112,7 +135,7 @@ public class ConversationMemoryProvider implements MemoryProvider {
    * @return 更新成功、并发胜出或降级后的会话快照
    */
   private Conversation refreshSummaryIfNeeded(
-      Conversation conversation, List<MemoryTurn> turns, RagRunTrace trace) {
+      Conversation conversation, List<MemoryTurn> turns, TraceContext trace) {
     int recentStart = turns.size() - config.getRecentTurns();
     if (recentStart <= 0) {
       trace.skipped(RagStageName.MEMORY_SUMMARY, null, "SUMMARY_NOT_DUE");
@@ -135,43 +158,48 @@ public class ConversationMemoryProvider implements MemoryProvider {
     }
     List<MemoryTurn> batch = pending.subList(0, Math.min(pending.size(), batchSize));
     int through = batch.getLast().turnIndex();
-    RagRunTrace.Span span = trace.start(RagStageName.MEMORY_SUMMARY, null, batch.size());
-    try {
-      Map<String, Object> input = new LinkedHashMap<>();
-      input.put("oldSummary", conversation.getSummaryText());
-      input.put("completedTurns", batch);
-      String prompt = json.writeValueAsString(input);
-      ChatClient.Generation generation =
-          chat.generate(MemorySummaryPrompts.system(config.getSummaryMaxChars()), prompt);
-      span.model(generation.id(), generation.provider(), generation.model());
-      String candidate = validateSummary(generation.content());
-      int updated =
-          conversationMapper.updateSummary(
-              conversation.getOwnerId(),
-              conversation.getId(),
-              candidate,
-              through,
-              conversation.getSummaryRevision());
-      if (updated == 1) {
-        Conversation refreshed =
-            conversationMapper.find(conversation.getOwnerId(), conversation.getId());
-        span.success(1);
-        return refreshed == null ? conversation : refreshed;
-      }
-      Conversation winner =
-          conversationMapper.find(conversation.getOwnerId(), conversation.getId());
-      span.success(1);
-      return winner == null ? conversation : winner;
-    } catch (RuntimeException e) {
-      String reasonCode = summaryErrorCode(e);
-      span.degraded(0, reasonCode);
-      log.warn(
-          "conversation={} summary degraded reasonCode={} exceptionType={}",
-          conversation.getId(),
-          reasonCode,
-          e.getClass().getSimpleName());
-      return conversation;
-    }
+    return trace.execute(
+        RagStageName.MEMORY_SUMMARY,
+        null,
+        batch.size(),
+        span -> {
+          try {
+            Map<String, Object> input = new LinkedHashMap<>();
+            input.put("oldSummary", conversation.getSummaryText());
+            input.put("completedTurns", batch);
+            String prompt = json.writeValueAsString(input);
+            ChatClient.Generation generation =
+                chat.generate(MemorySummaryPrompts.system(config.getSummaryMaxChars()), prompt);
+            span.model(generation.id(), generation.provider(), generation.model());
+            String candidate = validateSummary(generation.content());
+            int updated =
+                conversationMapper.updateSummary(
+                    conversation.getOwnerId(),
+                    conversation.getId(),
+                    candidate,
+                    through,
+                    conversation.getSummaryRevision());
+            if (updated == 1) {
+              Conversation refreshed =
+                  conversationMapper.find(conversation.getOwnerId(), conversation.getId());
+              span.success(1);
+              return refreshed == null ? conversation : refreshed;
+            }
+            Conversation winner =
+                conversationMapper.find(conversation.getOwnerId(), conversation.getId());
+            span.success(1);
+            return winner == null ? conversation : winner;
+          } catch (RuntimeException e) {
+            String reasonCode = summaryErrorCode(e);
+            span.degraded(0, reasonCode);
+            log.warn(
+                "conversation={} summary degraded reasonCode={} exceptionType={}",
+                conversation.getId(),
+                reasonCode,
+                e.getClass().getSimpleName());
+            return conversation;
+          }
+        });
   }
 
   /** 将摘要异常归一化为不包含异常正文的稳定原因码。 */
@@ -244,4 +272,12 @@ public class ConversationMemoryProvider implements MemoryProvider {
             });
     return List.copyOf(result);
   }
+
+  /** 兼容根 Trace 入口；内部显式传递父节点上下文。 */
+  public RagMemory load(UUID ownerId, UUID conversationId, int beforeTurn, RagRunTrace trace) {
+    return load(ownerId, conversationId, beforeTurn, trace.context());
+  }
+
+  /** 会话读取与摘要生成分开计时所需的内存快照。 */
+  private record LoadedMemory(Conversation conversation, List<MemoryTurn> turns) {}
 }

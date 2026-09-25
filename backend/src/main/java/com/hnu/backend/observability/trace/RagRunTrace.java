@@ -4,13 +4,17 @@ import com.hnu.backend.observability.RagExecutionMode;
 import com.hnu.backend.observability.RagRunStatus;
 import com.hnu.backend.observability.RagStageName;
 import com.hnu.backend.observability.RagStageStatus;
+import com.hnu.backend.shared.error.ApiException;
 import com.hnu.backend.shared.error.ErrorCode;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 
 /**
  * 显式跨线程传递的单次问答 Trace。
@@ -28,8 +32,12 @@ public final class RagRunTrace {
   private final Set<Span> openSpans = new LinkedHashSet<>();
   private int nextSequence = 1;
   private boolean sealed;
+  private boolean terminating;
   private boolean degraded;
   private Long firstDeltaNanos;
+  private Long firstReasoningNanos;
+  private Long firstAnswerNanos;
+  private final Map<UUID, Span> spansById = new HashMap<>();
   private RagExecutionMode executionMode = RagExecutionMode.FULL_PIPELINE;
   private int candidateCount;
   private int evidenceCount;
@@ -92,11 +100,95 @@ public final class RagRunTrace {
    * @param inputCount 可选输入项数量
    * @return 可接收阶段结果的句柄
    */
-  public synchronized Span start(RagStageName name, String subQuestionId, Integer inputCount) {
-    if (!enabled || sealed) return Span.noop();
+  public Span start(RagStageName name, String subQuestionId, Integer inputCount) {
+    return start(context(), name, subQuestionId, inputCount);
+  }
+
+  /** 返回可显式跨线程传递的根上下文。 */
+  public TraceContext context() {
+    return new TraceContext(this, null);
+  }
+
+  /** 在已经创建且仍处于执行范围内的父节点下开始阶段。 */
+  synchronized Span start(
+      TraceContext context, RagStageName name, String subQuestionId, Integer inputCount) {
+    if (context.trace() != this) {
+      throw new IllegalArgumentException("Trace context belongs to another run");
+    }
+    if (!enabled || sealed || (terminating && name != RagStageName.RESULT_PERSISTENCE)) {
+      return Span.noop();
+    }
+    Span parent = context.parentStageId() == null ? null : spansById.get(context.parentStageId());
+    if (context.parentStageId() != null && parent == null) {
+      throw new IllegalArgumentException("Unknown parent stage");
+    }
+    if (parent != null && parent.finished) {
+      return Span.noop();
+    }
     Span span = new Span(this, name, subQuestionId, nextSequence++, inputCount, System.nanoTime());
+    span.parentStageId = context.parentStageId();
     openSpans.add(span);
+    spansById.put(span.id, span);
     return span;
+  }
+
+  /** 同步执行阶段；保留业务声明的终态，并原样传播异常。 */
+  public <T> T execute(
+      TraceContext context,
+      RagStageName name,
+      String subQuestionId,
+      Integer inputCount,
+      Function<Span, T> operation) {
+    Span span = start(context, name, subQuestionId, inputCount);
+    try {
+      T result = operation.apply(span);
+      span.success(null);
+      return result;
+    } catch (RuntimeException | Error error) {
+      boolean cancelled =
+          error instanceof ApiException api
+              && ErrorCode.GENERATION_CANCELLED.code().equals(api.code());
+      span.stopChildren(
+          cancelled,
+          error instanceof ApiException api ? api.code() : ErrorCode.INTERNAL_ERROR.code());
+      span.error(error);
+      throw error;
+    }
+  }
+
+  /** 在成功发送非空增量后记录运行级首内容，发送失败不得调用。 */
+  public synchronized void deltaSent(boolean reasoning, String text) {
+    if (!enabled || sealed || terminating || text == null || text.isEmpty()) {
+      return;
+    }
+    long now = System.nanoTime();
+    if (firstDeltaNanos == null) {
+      firstDeltaNanos = now;
+    }
+    if (reasoning && firstReasoningNanos == null) {
+      firstReasoningNanos = now;
+    }
+    if (!reasoning && firstAnswerNanos == null) {
+      firstAnswerNanos = now;
+    }
+  }
+
+  /** 先结束执行阶段再保存终态，防止取消等待与数据库保存污染执行耗时。 */
+  public synchronized void terminateStages(boolean cancelled, String code) {
+    if (!enabled || sealed || terminating) {
+      return;
+    }
+    terminating = true;
+    long now = System.nanoTime();
+    for (Span span : new ArrayList<>(openSpans).reversed()) {
+      finishSpan(
+          span,
+          cancelled ? RagStageStatus.CANCELLED : RagStageStatus.FAILED,
+          null,
+          null,
+          code,
+          now);
+    }
   }
 
   /**
@@ -211,7 +303,9 @@ public final class RagRunTrace {
             elapsedMillis(startedNanos, completedNanos),
             endToEndTtft,
             modelTtft,
-            List.copyOf(stages));
+            List.copyOf(stages),
+            relativeMillis(startedNanos, firstReasoningNanos),
+            relativeMillis(startedNanos, firstAnswerNanos));
     return terminalSnapshot;
   }
 
@@ -224,11 +318,27 @@ public final class RagRunTrace {
       String errorCode,
       long completedNanos) {
     if (span.finished || !openSpans.remove(span)) return;
+    if (status == RagStageStatus.SUCCESS && span.childDegraded) {
+      status = RagStageStatus.DEGRADED;
+      if (reasonCode == null) {
+        reasonCode = span.childReason;
+      }
+    }
     span.finished = true;
+    Span parent = spansById.get(span.parentStageId);
+    if (parent != null
+        && (status == RagStageStatus.DEGRADED
+            || status == RagStageStatus.FAILED
+            || "PROVIDER_FALLBACK".equals(reasonCode)
+            || "CITATION_REPAIR".equals(reasonCode)
+            || (status == RagStageStatus.CANCELLED && "SUBQUESTION_TIMEOUT".equals(errorCode)))) {
+      parent.childDegraded = true;
+      parent.childReason = reasonCode != null ? reasonCode : errorCode;
+    }
     if (status == RagStageStatus.DEGRADED) degraded = true;
     stages.add(
         new StageSnapshot(
-            UUID.randomUUID(),
+            span.id,
             runId,
             span.name,
             span.subQuestionId,
@@ -247,12 +357,23 @@ public final class RagRunTrace {
             elapsedMillis(span.startedNanos, completedNanos),
             span.firstContentNanos == null
                 ? null
-                : elapsedMillis(span.startedNanos, span.firstContentNanos)));
+                : elapsedMillis(span.startedNanos, span.firstContentNanos),
+            span.parentStageId,
+            span.queueMs,
+            span.attemptId,
+            span.attemptIndex,
+            relativeMillis(span.startedNanos, span.firstReasoningNanos),
+            relativeMillis(span.startedNanos, span.firstAnswerNanos)));
   }
 
   /** 将单调时钟偏移映射到请求开始时捕获的墙钟时间。 */
   private OffsetDateTime wallTime(long nanos) {
     return startedAt.plusNanos(Math.max(0, nanos - startedNanos));
+  }
+
+  /** 将可空事件时间转换为相对毫秒。 */
+  private static Long relativeMillis(long start, Long end) {
+    return end == null ? null : elapsedMillis(start, end);
   }
 
   /** 返回两个单调时钟读数之间向下取整的非负毫秒数。 */
@@ -263,6 +384,15 @@ public final class RagRunTrace {
   /** 可由一个阶段的执行线程更新并且只能结束一次的句柄。 */
   public static final class Span {
     private static final Span NOOP_SPAN = new Span();
+    private final UUID id = UUID.randomUUID();
+    private UUID parentStageId;
+    private Long queueMs;
+    private UUID attemptId;
+    private Integer attemptIndex;
+    private Long firstReasoningNanos;
+    private Long firstAnswerNanos;
+    private boolean childDegraded;
+    private String childReason;
     private final RagRunTrace trace;
     private final RagStageName name;
     private final String subQuestionId;
@@ -305,6 +435,101 @@ public final class RagRunTrace {
     /** 返回无副作用阶段句柄。 */
     private static Span noop() {
       return NOOP_SPAN;
+    }
+
+    /** 返回以当前阶段为父节点的不可变上下文。 */
+    public TraceContext context() {
+      return trace == null ? RagRunTrace.noop().context() : new TraceContext(trace, id);
+    }
+
+    /** 附加从提交到开始执行的非负排队毫秒。 */
+    public Span queued(long submittedNanos) {
+      if (trace != null) {
+        synchronized (trace) {
+          if (!finished && !trace.sealed) {
+            queueMs = elapsedMillis(submittedNanos, startedNanos);
+          }
+        }
+      }
+      return this;
+    }
+
+    /** 绑定数据库中的模型尝试标识和从 1 开始的序号。 */
+    public Span attempt(UUID attemptId, int attemptIndex) {
+      if (trace != null) {
+        synchronized (trace) {
+          if (!finished && !trace.sealed) {
+            this.attemptId = attemptId;
+            this.attemptIndex = attemptIndex;
+          }
+        }
+      }
+      return this;
+    }
+
+    /** 分别记录模型首个非空思考与正文，兼容旧的首内容口径。 */
+    public void content(boolean reasoning, String text) {
+      if (trace == null || text == null || text.isEmpty()) {
+        return;
+      }
+      synchronized (trace) {
+        if (finished || trace.sealed) {
+          return;
+        }
+        long now = System.nanoTime();
+        if (firstContentNanos == null) {
+          firstContentNanos = now;
+        }
+        if (reasoning && firstReasoningNanos == null) {
+          firstReasoningNanos = now;
+        }
+        if (!reasoning && firstAnswerNanos == null) {
+          firstAnswerNanos = now;
+        }
+      }
+    }
+
+    /** 根据异常记录取消或失败；业务异常保留原错误码。 */
+    public void error(Throwable error) {
+      String code =
+          error instanceof ApiException api ? api.code() : ErrorCode.INTERNAL_ERROR.code();
+      if (ErrorCode.GENERATION_CANCELLED.code().equals(code)
+          || error instanceof java.util.concurrent.CancellationException) {
+        cancelled(ErrorCode.GENERATION_CANCELLED.code());
+      } else {
+        failed(code);
+      }
+    }
+
+    /** 排队期间即结束的任务没有执行区间，保留排队时间并记录零时长取消节点。 */
+    public void cancelledBeforeStart(String code) {
+      if (trace == null) {
+        return;
+      }
+      synchronized (trace) {
+        if (!trace.sealed) {
+          trace.finishSpan(this, RagStageStatus.CANCELLED, null, null, code, startedNanos);
+        }
+      }
+    }
+
+    /** 超时或取消时关闭尚未结束的后代，阻止迟到任务继续写入其执行范围。 */
+    public void stopChildren(boolean cancelled, String code) {
+      if (trace == null) {
+        return;
+      }
+      synchronized (trace) {
+        for (Span child : List.copyOf(trace.openSpans)) {
+          if (id.equals(child.parentStageId)) {
+            child.stopChildren(cancelled, code);
+            if (cancelled) {
+              child.cancelled(code);
+            } else {
+              child.failed(code);
+            }
+          }
+        }
+      }
     }
 
     /**
@@ -424,6 +649,8 @@ public final class RagRunTrace {
    * @param totalMs 总耗时
    * @param endToEndTtftMs 端到端首 Token 耗时
    * @param modelTtftMs 最终有效模型尝试首内容耗时
+   * @param firstReasoningMs 服务端首次发送思考的相对毫秒
+   * @param firstAnswerMs 服务端首次发送正文的相对毫秒
    * @param stages 阶段快照
    */
   public record RunSnapshot(
@@ -442,7 +669,9 @@ public final class RagRunTrace {
       long totalMs,
       Long endToEndTtftMs,
       Long modelTtftMs,
-      List<StageSnapshot> stages) {
+      List<StageSnapshot> stages,
+      Long firstReasoningMs,
+      Long firstAnswerMs) {
     /** 创建空 Trace 的占位快照。 */
     private static RunSnapshot noop() {
       return new RunSnapshot(
@@ -461,7 +690,9 @@ public final class RagRunTrace {
           0,
           null,
           null,
-          List.of());
+          List.of(),
+          null,
+          null);
     }
   }
 
@@ -485,6 +716,12 @@ public final class RagRunTrace {
    * @param firstTokenAt 可选首内容时间
    * @param completedAt 完成时间
    * @param elapsedMs 阶段耗时
+   * @param parentStageId 可空父阶段标识
+   * @param queueMs 可空排队毫秒
+   * @param attemptId 可空模型尝试标识
+   * @param attemptIndex 可空模型尝试序号
+   * @param firstReasoningMs 模型首次思考的相对毫秒
+   * @param firstAnswerMs 模型首次正文的相对毫秒
    * @param ttftMs 可选阶段首内容耗时
    */
   public record StageSnapshot(
@@ -505,5 +742,11 @@ public final class RagRunTrace {
       OffsetDateTime firstTokenAt,
       OffsetDateTime completedAt,
       long elapsedMs,
-      Long ttftMs) {}
+      Long ttftMs,
+      UUID parentStageId,
+      Long queueMs,
+      UUID attemptId,
+      Integer attemptIndex,
+      Long firstReasoningMs,
+      Long firstAnswerMs) {}
 }

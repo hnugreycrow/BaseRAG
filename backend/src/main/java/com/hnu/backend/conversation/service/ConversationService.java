@@ -16,7 +16,9 @@ import com.hnu.backend.observability.RagExecutionMode;
 import com.hnu.backend.observability.RagRunStatus;
 import com.hnu.backend.observability.RagStageName;
 import com.hnu.backend.observability.service.RagTraceManager;
+import com.hnu.backend.observability.trace.AnswerTraceObserver;
 import com.hnu.backend.observability.trace.RagRunTrace;
+import com.hnu.backend.observability.trace.TraceContext;
 import com.hnu.backend.rag.answer.AnswerGenerator;
 import com.hnu.backend.rag.answer.AnswerResult;
 import com.hnu.backend.rag.answer.AnswerStage;
@@ -324,7 +326,6 @@ public class ConversationService {
    * @param conversationId 会话 ID
    * @param clientMessageId 客户端幂等消息 ID
    * @param rawQuestion 未归一化用户问题
-   * @param timing HTTP 请求起始信息
    * @return 当前生成或历史幂等结果的 SSE 通道
    */
   public SseEmitter ask(
@@ -467,7 +468,6 @@ public class ConversationService {
    * @param conversationId 会话 ID
    * @param assistantMessageId 原回答 ID
    * @param clientRequestId 新回答版本的幂等 ID
-   * @param requestId HTTP 请求追踪 ID
    * @param regenerate true 表示重新生成成功回答，false 表示重试失败回答
    * @return 新回答版本的 SSE 通道
    */
@@ -710,60 +710,92 @@ public class ConversationService {
         return;
       }
       active.trace.executionMode(RagExecutionMode.FULL_PIPELINE);
-      var execution =
+      var retrieved =
           active.trace.enabled()
-              ? executionStage.execute(
+              ? executionStage.executeRetrieval(
                   active.ownerId,
                   prepared.queryPlan(),
                   prepared.routingPlan(),
                   null,
                   active.control::cancelled,
-                  active.trace)
+                  active.trace.context())
               : executionStage.execute(
                   active.ownerId,
                   prepared.queryPlan(),
                   prepared.routingPlan(),
                   null,
                   active.control::cancelled);
-      ensureNotCancelled(active);
-      RagRunTrace.Span deduplicationSpan =
-          active.trace.start(RagStageName.DEDUPLICATION, null, execution.candidates().size());
-      var deduplicated = deduplicationStage.execute(execution.candidates(), execution.budget());
-      deduplicationSpan.success(deduplicated.candidates().size());
-      ensureNotCancelled(active);
-      var reranked =
-          active.trace.enabled()
-              ? rerankStage.execute(
-                  prepared.queryPlan(),
-                  execution,
-                  deduplicated.candidates(),
-                  active.control::cancelled,
-                  active.trace)
-              : rerankStage.execute(
-                  prepared.queryPlan(),
-                  execution,
-                  deduplicated.candidates(),
-                  active.control::cancelled);
-      ensureNotCancelled(active);
-      int promptInputCount =
-          reranked.selectedCandidates().size()
-              + (int)
-                  execution.subQuestions().stream()
-                      .filter(result -> result.toolObservation() != null)
-                      .count();
-      RagRunTrace.Span promptSpan =
-          active.trace.start(RagStageName.PROMPT_ASSEMBLY, null, promptInputCount);
       AssembledPrompt prompt =
-          prompts.assemblePipeline(
-              prepared.memory(),
-              active.user.getContent(),
-              prepared.queryPlan(),
-              prepared.routingPlan(),
-              execution,
-              reranked.selectedCandidates());
-      promptSpan.success(reranked.selectedCandidates().size() + prompt.toolReferenceIds().size());
+          active
+              .trace
+              .context()
+              .execute(
+                  RagStageName.EVIDENCE,
+                  null,
+                  null,
+                  evidenceSpan -> {
+                    TraceContext evidence = evidenceSpan.context();
+                    var execution =
+                        active.trace.enabled()
+                            ? executionStage.merge(retrieved, evidence)
+                            : retrieved;
+                    ensureNotCancelled(active);
+                    var deduplicated =
+                        evidence.execute(
+                            RagStageName.DEDUPLICATION,
+                            null,
+                            execution.candidates().size(),
+                            span -> {
+                              var result =
+                                  deduplicationStage.execute(
+                                      execution.candidates(), execution.budget());
+                              span.success(result.candidates().size());
+                              return result;
+                            });
+                    ensureNotCancelled(active);
+                    var reranked =
+                        active.trace.enabled()
+                            ? rerankStage.execute(
+                                prepared.queryPlan(),
+                                execution,
+                                deduplicated.candidates(),
+                                active.control::cancelled,
+                                evidence)
+                            : rerankStage.execute(
+                                prepared.queryPlan(),
+                                execution,
+                                deduplicated.candidates(),
+                                active.control::cancelled);
+                    ensureNotCancelled(active);
+                    int promptInputCount =
+                        reranked.selectedCandidates().size()
+                            + (int)
+                                execution.subQuestions().stream()
+                                    .filter(result -> result.toolObservation() != null)
+                                    .count();
+                    AssembledPrompt assembledPrompt =
+                        evidence.execute(
+                            RagStageName.PROMPT_ASSEMBLY,
+                            null,
+                            promptInputCount,
+                            promptSpan -> {
+                              AssembledPrompt assembled =
+                                  prompts.assemblePipeline(
+                                      prepared.memory(),
+                                      active.user.getContent(),
+                                      prepared.queryPlan(),
+                                      prepared.routingPlan(),
+                                      execution,
+                                      reranked.selectedCandidates());
+                              promptSpan.success(
+                                  reranked.selectedCandidates().size()
+                                      + assembled.toolReferenceIds().size());
+                              return assembled;
+                            });
+                    active.trace.evidenceCount(reranked.selectedCandidates().size());
+                    return assembledPrompt;
+                  });
       // sources 为文档数；evidence_count 仍是进入 Prompt 的原始证据分块数。
-      active.trace.evidenceCount(reranked.selectedCandidates().size());
       messageMapper.prepare(
           active.ownerId,
           active.assistant.getId(),
@@ -772,12 +804,7 @@ public class ConversationService {
       ensureNotCancelled(active);
       active.assistant.setRetrievalQuery(standaloneQuestion);
       active.assistant.setSourcesJson(json.writeValueAsString(prompt.sources()));
-      AnswerResult answer =
-          answers.execute(
-              prompt,
-              new ConversationAnswerObserver(active),
-              active.control,
-              active.assistant.isThinkingEnabled());
+      AnswerResult answer = generateAnswer(active, prompt);
       complete(active, answer.content(), answer.citations(), answer.generation());
     } catch (ApiException e) {
       if (active.control.cancelled() || ErrorCode.GENERATION_CANCELLED.code().equals(e.code()))
@@ -812,32 +839,90 @@ public class ConversationService {
     ensureNotCancelled(active);
     active.assistant.setRetrievalQuery(null);
     active.assistant.setSourcesJson("[]");
-    prepared
-        .queryPlan()
-        .subQuestions()
-        .forEach(
-            question ->
-                active.trace.skipped(
-                    RagStageName.SUBQUESTION_EXECUTION, question.id(), "SYSTEM_CHAT_ROUTED"));
-    active.trace.skipped(RagStageName.CANDIDATE_MERGE, null, "SYSTEM_CHAT");
-    active.trace.skipped(RagStageName.DEDUPLICATION, null, "SYSTEM_CHAT");
-    active.trace.skipped(RagStageName.RERANK, null, "SYSTEM_CHAT");
-    RagRunTrace.Span promptSpan = active.trace.start(RagStageName.PROMPT_ASSEMBLY, null, 0);
+    active
+        .trace
+        .context()
+        .execute(
+            RagStageName.RETRIEVAL,
+            null,
+            null,
+            span -> {
+              prepared
+                  .queryPlan()
+                  .subQuestions()
+                  .forEach(
+                      question ->
+                          span.context()
+                              .skipped(
+                                  RagStageName.SUBQUESTION_EXECUTION,
+                                  question.id(),
+                                  "SYSTEM_CHAT_ROUTED"));
+              span.skipped(0, "SYSTEM_CHAT");
+              return null;
+            });
     AssembledPrompt prompt =
-        prompts.assembleSystemChat(
-            prepared.memory(),
-            active.user.getContent(),
-            prepared.queryPlan(),
-            prepared.routingPlan());
-    promptSpan.success(0);
+        active
+            .trace
+            .context()
+            .execute(
+                RagStageName.EVIDENCE,
+                null,
+                null,
+                span -> {
+                  TraceContext evidence = span.context();
+                  evidence.skipped(RagStageName.CANDIDATE_MERGE, null, "SYSTEM_CHAT");
+                  evidence.skipped(RagStageName.DEDUPLICATION, null, "SYSTEM_CHAT");
+                  evidence.skipped(RagStageName.RERANK, null, "SYSTEM_CHAT");
+                  return evidence.execute(
+                      RagStageName.PROMPT_ASSEMBLY,
+                      null,
+                      0,
+                      promptSpan -> {
+                        AssembledPrompt assembled =
+                            prompts.assembleSystemChat(
+                                prepared.memory(),
+                                active.user.getContent(),
+                                prepared.queryPlan(),
+                                prepared.routingPlan());
+                        promptSpan.success(0);
+                        return assembled;
+                      });
+                });
     active.trace.evidenceCount(0);
-    AnswerResult answer =
-        answers.execute(
-            prompt,
-            new ConversationAnswerObserver(active),
-            active.control,
-            active.assistant.isThinkingEnabled());
+    AnswerResult answer = generateAnswer(active, prompt);
     complete(active, answer.content(), answer.citations(), answer.generation());
+  }
+
+  /** 回答父阶段涵盖模型尝试和引用校验，保存结果在其结束后单独计时。 */
+  private AnswerResult generateAnswer(ActiveGeneration active, AssembledPrompt prompt) {
+    return active
+        .trace
+        .context()
+        .execute(
+            RagStageName.ANSWER,
+            null,
+            1,
+            span -> {
+              active.answerTrace =
+                  new AnswerTraceObserver(
+                      span.context(),
+                      new ConversationAnswerObserver(active),
+                      () -> active.currentAttemptId,
+                      () -> active.attemptCounter.get(),
+                      active.control::cancelled);
+              try {
+                return answers.execute(
+                    prompt,
+                    active.answerTrace,
+                    active.control,
+                    active.assistant.isThinkingEnabled());
+              } catch (RuntimeException error) {
+                if (active.control.cancelled()) {
+                  throw ApiException.cancelled();
+                }
+                throw error;
+              }
+            });
   }
 
   /**
@@ -890,8 +975,6 @@ public class ConversationService {
         active.lastCheckpointAt = System.currentTimeMillis();
         send(active.emitter, "reset", event("reason", "PROVIDER_FALLBACK"));
       }
-      active.currentAttemptReason = reason;
-      if (reason != AnswerGenerator.AttemptReason.PRIMARY) active.trace.markDegraded();
       int index = active.attemptCounter.incrementAndGet();
       // 消息状态只在首个候选开始时迁移一次；provider fallback 和引用修复沿用 STREAMING。
       if (index == 1
@@ -920,33 +1003,20 @@ public class ConversationService {
 
     /** {@inheritDoc} */
     @Override
-    public void requesting(AnswerGenerator.ModelTarget target) {
-      active.currentModelSpan =
-          active
-              .trace
-              .start(RagStageName.ANSWER_MODEL, null, 1)
-              .model(target.id(), target.provider(), target.model());
-    }
-
-    /** {@inheritDoc} */
-    @Override
     public void delta(String text) {
       ensureNotCancelled(active);
-      if (active.currentModelSpan != null) active.currentModelSpan.firstContent();
       active.buffer.append(text);
       send(active.emitter, "delta", event("text", text));
-      // 只有 SSE 发送成功才算用户真正看到首个增量。
-      active.trace.endToEndDeltaSent();
+      active.answerTrace.sent(false, text);
       checkpoint(active);
     }
 
     @Override
     public void reasoningDelta(String text) {
       ensureNotCancelled(active);
-      if (active.currentModelSpan != null) active.currentModelSpan.firstContent();
       active.reasoningBuffer.append(text);
       send(active.emitter, "reasoning_delta", event("text", text));
-      active.trace.endToEndDeltaSent();
+      active.answerTrace.sent(true, text);
       checkpoint(active);
     }
 
@@ -957,20 +1027,12 @@ public class ConversationService {
           active.ownerId, active.currentAttemptId, content, finishReason);
       generationAttemptMapper.saveReasoning(
           active.ownerId, active.currentAttemptId, active.reasoningBuffer.toString());
-      if (active.currentModelSpan != null) {
-        active.currentModelSpan.success(
-            1, active.currentAttemptReason == null ? null : active.currentAttemptReason.name());
-      }
     }
 
     /** {@inheritDoc} */
     @Override
     public void failed(
         AnswerGenerator.ModelTarget target, String partialContent, ApiException error) {
-      if (active.currentModelSpan != null) {
-        if (active.control.cancelled()) active.currentModelSpan.cancelled(error.code());
-        else active.currentModelSpan.failed(error.code());
-      }
       if (active.currentAttemptId != null) {
         generationAttemptMapper.fail(
             active.ownerId,
@@ -988,27 +1050,7 @@ public class ConversationService {
 
     /** {@inheritDoc} */
     @Override
-    public void generationSkipped(String reasonCode) {
-      active.trace.skipped(RagStageName.ANSWER_MODEL, null, reasonCode);
-      active.trace.skipped(RagStageName.CITATION_VALIDATION, null, reasonCode);
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    public void validationStarted() {
-      active.citationSpan = active.trace.start(RagStageName.CITATION_VALIDATION, null, 1);
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    public void validationCompleted(int citationCount) {
-      if (active.citationSpan != null) active.citationSpan.success(citationCount);
-    }
-
-    /** {@inheritDoc} */
-    @Override
     public void invalidReferences(String reasonCode, boolean repairScheduled) {
-      if (active.citationSpan != null) active.citationSpan.degraded(0, reasonCode);
       if (active.currentAttemptId != null) {
         // 模型流已经正常结束，引用校验发生在其后，因此需要显式作废 COMPLETED 尝试。
         generationAttemptMapper.invalidateCompleted(
@@ -1088,7 +1130,10 @@ public class ConversationService {
     if (!active.terminal.compareAndSet(false, true)) return;
     if (generation != null) {
       active.trace.finalAnswer(
-          active.currentModelSpan, generation.modelId(), generation.provider(), generation.model());
+          active.answerTrace == null ? null : active.answerTrace.finalModelSpan(),
+          generation.modelId(),
+          generation.provider(),
+          generation.model());
     }
     RagRunTrace.Span persistenceSpan = active.trace.start(RagStageName.RESULT_PERSISTENCE, null, 1);
     try {
@@ -1133,6 +1178,7 @@ public class ConversationService {
    */
   private void cancelTerminal(ActiveGeneration active) {
     if (!active.terminal.compareAndSet(false, true)) return;
+    active.trace.terminateStages(true, ErrorCode.GENERATION_CANCELLED.code());
     String content = active.buffer.toString();
     RagRunTrace.Span persistenceSpan = active.trace.start(RagStageName.RESULT_PERSISTENCE, null, 1);
     try {
@@ -1170,6 +1216,7 @@ public class ConversationService {
    */
   private void errorTerminal(ActiveGeneration active, String code, String message) {
     if (!active.terminal.compareAndSet(false, true)) return;
+    active.trace.terminateStages(false, code);
     String content = active.buffer.toString();
     RagRunTrace.Span persistenceSpan = active.trace.start(RagStageName.RESULT_PERSISTENCE, null, 1);
     try {
@@ -1532,9 +1579,7 @@ public class ConversationService {
     private final StringBuilder buffer = new StringBuilder();
     private final StringBuilder reasoningBuffer = new StringBuilder();
     private volatile UUID currentAttemptId;
-    private volatile AnswerGenerator.AttemptReason currentAttemptReason;
-    private volatile RagRunTrace.Span currentModelSpan;
-    private volatile RagRunTrace.Span citationSpan;
+    private volatile AnswerTraceObserver answerTrace;
     private volatile Future<?> future;
     private int lastCheckpointLength;
     private long lastCheckpointAt = System.currentTimeMillis();

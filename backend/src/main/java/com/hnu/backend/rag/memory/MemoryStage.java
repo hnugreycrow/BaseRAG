@@ -1,8 +1,7 @@
 package com.hnu.backend.rag.memory;
 
-import com.hnu.backend.observability.RagStageName;
 import com.hnu.backend.observability.trace.RagRunTrace;
-import com.hnu.backend.shared.error.ErrorCode;
+import com.hnu.backend.observability.trace.TraceContext;
 import java.util.Objects;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
@@ -46,26 +45,16 @@ public final class MemoryStage {
    * @param trace 当前问答 Trace
    * @return 已校验的会话记忆
    */
-  public RagMemory execute(UUID ownerId, UUID conversationId, int beforeTurn, RagRunTrace trace) {
+  public RagMemory execute(UUID ownerId, UUID conversationId, int beforeTurn, TraceContext trace) {
     Objects.requireNonNull(ownerId, "ownerId");
     Objects.requireNonNull(conversationId, "conversationId");
     if (beforeTurn < 1) throw new IllegalArgumentException("beforeTurn must be positive");
-    RagRunTrace.Span span = trace.start(RagStageName.MEMORY_LOAD, null, beforeTurn - 1);
-    try {
-      RagMemory memory =
-          Objects.requireNonNull(
-              provider.load(ownerId, conversationId, beforeTurn, trace),
-              "MemoryProvider returned null");
-      span.success(memory.unsummarizedTurns().size() + memory.recentTurns().size());
-      return memory;
-    } catch (RuntimeException error) {
-      span.failed(errorCode(error, ErrorCode.MEMORY_LOAD_FAILED.code()));
-      throw error;
-    }
+    return Objects.requireNonNull(
+        provider.load(ownerId, conversationId, beforeTurn, trace), "MemoryProvider returned null");
   }
 
-  /** 返回异常携带的稳定业务码或指定兜底码。 */
-  private String errorCode(RuntimeException error, String fallback) {
-    return error instanceof com.hnu.backend.shared.error.ApiException api ? api.code() : fallback;
+  /** 兼容根 Trace 入口；内部显式传递父节点上下文。 */
+  public RagMemory execute(UUID ownerId, UUID conversationId, int beforeTurn, RagRunTrace trace) {
+    return execute(ownerId, conversationId, beforeTurn, trace.context());
   }
 }

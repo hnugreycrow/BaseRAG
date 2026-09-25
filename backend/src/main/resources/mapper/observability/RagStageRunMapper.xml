@@ -7,7 +7,7 @@
         INSERT INTO rag_stage_runs (
             id, rag_run_id, stage_name, sub_question_id, sequence_no, status,
             input_count, output_count, model_id, provider, model, reason_code,
-            error_code, started_at, first_token_at, completed_at, elapsed_ms, ttft_ms
+            error_code, started_at, first_token_at, completed_at, elapsed_ms, ttft_ms, parent_stage_id, queue_ms, attempt_id, attempt_index, first_reasoning_ms, first_answer_ms
         ) VALUES
         <foreach collection="stages" item="stage" separator=",">
             (
@@ -15,7 +15,7 @@
                 #{stage.sequenceNo}, #{stage.status}, #{stage.inputCount}, #{stage.outputCount},
                 #{stage.modelId}, #{stage.provider}, #{stage.model}, #{stage.reasonCode},
                 #{stage.errorCode}, #{stage.startedAt}, #{stage.firstTokenAt},
-                #{stage.completedAt}, #{stage.elapsedMs}, #{stage.ttftMs}
+                #{stage.completedAt}, #{stage.elapsedMs}, #{stage.ttftMs}, #{stage.parentStageId}, #{stage.queueMs}, #{stage.attemptId}, #{stage.attemptIndex}, #{stage.firstReasoningMs}, #{stage.firstAnswerMs}
             )
         </foreach>
     </insert>

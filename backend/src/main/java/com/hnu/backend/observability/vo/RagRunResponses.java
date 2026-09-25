@@ -41,6 +41,8 @@ public final class RagRunResponses {
    * @param completedAt 完成时间
    * @param totalMs 总耗时
    * @param endToEndTtftMs 端到端首 Token 耗时
+   * @param firstReasoningMs 服务端首次发送思考的相对毫秒
+   * @param firstAnswerMs 服务端首次发送正文的相对毫秒
    * @param modelTtftMs 最终有效回答模型首内容耗时
    */
   @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -69,7 +71,9 @@ public final class RagRunResponses {
       OffsetDateTime completedAt,
       Long totalMs,
       Long endToEndTtftMs,
-      Long modelTtftMs) {}
+      Long modelTtftMs,
+      Long firstReasoningMs,
+      Long firstAnswerMs) {}
 
   /**
    * 单个阶段的瀑布信息。
@@ -91,6 +95,12 @@ public final class RagRunResponses {
    * @param firstTokenAt 首内容时间
    * @param completedAt 完成时间
    * @param elapsedMs 阶段耗时
+   * @param parentStageId 父阶段标识，根节点为空
+   * @param queueMs 任务排队毫秒
+   * @param attemptId 模型尝试标识
+   * @param attemptIndex 模型尝试序号
+   * @param firstReasoningMs 首次思考相对毫秒
+   * @param firstAnswerMs 首次正文相对毫秒
    * @param ttftMs 阶段首内容耗时
    */
   public record Stage(
@@ -111,7 +121,13 @@ public final class RagRunResponses {
       OffsetDateTime firstTokenAt,
       OffsetDateTime completedAt,
       long elapsedMs,
-      Long ttftMs) {}
+      Long ttftMs,
+      UUID parentStageId,
+      Long queueMs,
+      UUID attemptId,
+      Integer attemptIndex,
+      Long firstReasoningMs,
+      Long firstAnswerMs) {}
 
   /**
    * 单次运行详情。

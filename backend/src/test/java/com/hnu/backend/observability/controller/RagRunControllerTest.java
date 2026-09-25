@@ -136,6 +136,8 @@ class RagRunControllerTest {
             null,
             null,
             null,
+            null,
+            null,
             null);
     when(ragRunQueryService.get(actor, runId))
         .thenReturn(new RagRunResponses.Detail(summary, List.of(), List.of()));

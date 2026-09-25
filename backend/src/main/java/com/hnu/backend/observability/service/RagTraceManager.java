@@ -117,6 +117,12 @@ public class RagTraceManager {
     stage.setCompletedAt(value.completedAt());
     stage.setElapsedMs(value.elapsedMs());
     stage.setTtftMs(value.ttftMs());
+    stage.setParentStageId(value.parentStageId());
+    stage.setQueueMs(value.queueMs());
+    stage.setAttemptId(value.attemptId());
+    stage.setAttemptIndex(value.attemptIndex());
+    stage.setFirstReasoningMs(value.firstReasoningMs());
+    stage.setFirstAnswerMs(value.firstAnswerMs());
     return stage;
   }
 }

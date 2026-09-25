@@ -7,6 +7,11 @@ import { ApiRequestError, getErrorMessage, getRagRun, type RagRunDetail } from '
 import TraceStatusBadge from '../components/observability/TraceStatusBadge.vue'
 import {
   buildWaterfall,
+  buildTraceTree,
+  initiallyExpanded,
+  visibleTraceRows,
+  reasonKind,
+  reasonLabel,
   EXECUTION_MODE_LABELS,
   formatDateTime,
   formatDuration,
@@ -23,9 +28,43 @@ const error = ref('')
 const notFound = ref(false)
 let requestSequence = 0
 
-const waterfall = computed(() => buildWaterfall(detail.value?.stages ?? []))
+const waterfall = computed(() => buildWaterfall(detail.value?.stages ?? [], detail.value?.run))
+const tree = computed(() => buildTraceTree(waterfall.value.stages))
+const expanded = ref(new Set<string>())
+const selectedId = ref<string | null>(null)
+const visibleRows = computed(() => visibleTraceRows(tree.value, expanded.value))
+watch(tree, (roots) => {
+  expanded.value = initiallyExpanded(roots)
+  selectedId.value = null
+})
+function toggleStage(id: string) {
+  const next = new Set(expanded.value)
+  if (next.has(id)) {
+    next.delete(id)
+  } else {
+    next.add(id)
+  }
+  expanded.value = next
+}
+function expandAll() {
+  expanded.value = new Set(waterfall.value.stages.map((stage) => stage.id))
+}
+const firstModelOffset = computed(() => {
+  const attempts = waterfall.value.stages.filter(
+    (stage) => stage.stageName === 'ANSWER_MODEL' && stage.status !== 'SKIPPED',
+  )
+  return attempts.length ? Math.min(...attempts.map((stage) => stage.offsetMs)) : null
+})
+const answerDuration = computed(() => {
+  if (firstModelOffset.value == null) {
+    return null
+  }
+  return waterfall.value.stages.find((stage) => stage.stageName === 'ANSWER')?.elapsedMs ?? null
+})
 const modelAttempts = computed(() =>
-  (detail.value?.stages ?? []).filter((stage) => stage.stageName === 'ANSWER_MODEL'),
+  (detail.value?.stages ?? []).filter(
+    (stage) => stage.stageName === 'ANSWER_MODEL' && stage.status !== 'SKIPPED',
+  ),
 )
 const candidateStages = computed(() =>
   (detail.value?.stages ?? []).filter((stage) =>
@@ -125,12 +164,28 @@ onMounted(loadDetail)
         </div>
         <dl>
           <div>
-            <dt>首字耗时（思考或正文）</dt>
+            <dt>服务端首次发送（思考或正文）</dt>
             <dd>{{ formatDuration(detail.run.endToEndTtftMs) }}</dd>
           </div>
           <div>
             <dt>模型首字耗时（思考或正文）</dt>
             <dd>{{ formatDuration(detail.run.modelTtftMs) }}</dd>
+          </div>
+          <div>
+            <dt>生成前准备</dt>
+            <dd>{{ firstModelOffset == null ? '不适用' : formatDuration(firstModelOffset) }}</dd>
+          </div>
+          <div>
+            <dt>回答生成（含重试与校验）</dt>
+            <dd>{{ firstModelOffset == null ? '不适用' : formatDuration(answerDuration) }}</dd>
+          </div>
+          <div v-if="detail.run.firstReasoningMs != null">
+            <dt>服务端首次发送思考</dt>
+            <dd>{{ formatDuration(detail.run.firstReasoningMs) }}</dd>
+          </div>
+          <div v-if="detail.run.firstAnswerMs != null">
+            <dt>服务端首次发送正文</dt>
+            <dd>{{ formatDuration(detail.run.firstAnswerMs) }}</dd>
           </div>
           <div>
             <dt>候选数</dt>
@@ -162,29 +217,53 @@ onMounted(loadDetail)
           <div>
             <h2 id="waterfall-title">阶段瀑布</h2>
           </div>
-          <strong>{{ formatDuration(waterfall.durationMs) }}</strong>
+          <div class="trace-controls">
+            <button type="button" @click="expandAll">全部展开</button>
+            <button type="button" @click="expanded = new Set()">全部折叠</button>
+            <strong>{{ formatDuration(waterfall.durationMs) }}</strong>
+          </div>
         </div>
 
         <div v-if="waterfall.stages.length" class="waterfall">
           <div class="waterfall-axis" aria-hidden="true">
-            <span>阶段 / 顺序</span>
+            <span>阶段 / 状态</span>
             <div>
-              <i>0</i><i>25%</i><i>50%</i><i>75%</i
-              ><i>{{ formatDuration(waterfall.durationMs) }}</i>
+              <i v-for="fraction in [0, 0.25, 0.5, 0.75, 1]" :key="fraction">{{
+                formatDuration(waterfall.durationMs * fraction)
+              }}</i>
             </div>
             <span>耗时</span>
           </div>
           <article
-            v-for="stage in waterfall.stages"
+            v-for="stage in visibleRows"
             :key="stage.id"
             class="waterfall-row"
             :class="`stage-${stage.status.toLowerCase()}`"
           >
-            <div class="stage-name">
-              <span>{{ String(stage.sequenceNo).padStart(2, '0') }}</span>
+            <div class="stage-name" :style="{ paddingLeft: `${Math.min(stage.depth, 6) * 14}px` }">
+              <button
+                v-if="stage.children.length"
+                type="button"
+                class="tree-toggle"
+                :aria-label="`${expanded.has(stage.id) ? '折叠' : '展开'}${STAGE_NAME_LABELS[stage.stageName]}`"
+                :aria-expanded="expanded.has(stage.id)"
+                @click="toggleStage(stage.id)"
+              >
+                <span aria-hidden="true">{{ expanded.has(stage.id) ? '−' : '+' }}</span>
+              </button>
+              <span v-else class="tree-spacer" aria-hidden="true"></span>
               <div>
-                <strong>{{ STAGE_NAME_LABELS[stage.stageName] }}</strong>
-                <small v-if="stage.subQuestionId">子问题 {{ shortId(stage.subQuestionId) }}</small>
+                <button
+                  class="stage-select"
+                  type="button"
+                  :aria-expanded="selectedId === stage.id"
+                  :aria-controls="`stage-detail-${stage.id}`"
+                  @click="selectedId = selectedId === stage.id ? null : stage.id"
+                >
+                  {{ STAGE_NAME_LABELS[stage.stageName] }}
+                  <small v-if="stage.subQuestionId">{{ stage.subQuestionId }}</small>
+                </button>
+                <TraceStatusBadge :status="stage.status" />
               </div>
             </div>
             <div class="stage-lane">
@@ -193,6 +272,12 @@ onMounted(loadDetail)
               <span class="grid-line line-75"></span>
               <div
                 class="stage-bar"
+                :class="{ 'stage-event': stage.status === 'SKIPPED' }"
+                :title="
+                  stage.elapsedMs === 0 && stage.status !== 'SKIPPED'
+                    ? '毫秒精度；标记宽度不代表实际耗时'
+                    : stageAriaLabel(stage)
+                "
                 :style="{
                   left: `${stage.leftPercent}%`,
                   width: `${stage.widthPercent}%`,
@@ -204,29 +289,93 @@ onMounted(loadDetail)
               </div>
             </div>
             <div class="stage-duration">
-              <strong>{{ formatDuration(stage.elapsedMs) }}</strong>
+              <strong>{{
+                stage.status === 'SKIPPED' ? '未执行' : formatDuration(stage.elapsedMs)
+              }}</strong>
+              <small v-if="stage.elapsedMs === 0 && stage.status !== 'SKIPPED'">毫秒精度</small>
               <small>+{{ formatDuration(stage.offsetMs) }}</small>
             </div>
             <div class="stage-mobile-detail">
               <TraceStatusBadge :status="stage.status" />
               <span>偏移 +{{ formatDuration(stage.offsetMs) }}</span>
-              <span>耗时 {{ formatDuration(stage.elapsedMs) }}</span>
+              <span>{{
+                stage.status === 'SKIPPED' ? '未执行' : `耗时 ${formatDuration(stage.elapsedMs)}`
+              }}</span>
+              <span v-if="stage.elapsedMs === 0 && stage.status !== 'SKIPPED'">毫秒精度</span>
             </div>
             <div
-              v-if="stage.reasonCode || stage.errorCode || stage.ttftMs !== undefined"
+              v-if="stage.reasonCode || stage.errorCode || stage.ttftMs != null"
               class="stage-note"
             >
               <span v-if="stage.reasonCode"
-                >降级/决策原因 <code>{{ stage.reasonCode }}</code></span
+                >{{ reasonKind(stage) }}：{{ reasonLabel(stage.reasonCode) }}</span
               >
               <span v-if="stage.errorCode">
                 {{ stage.errorMessage || '处理失败，请根据请求 ID 查询日志' }}
                 <code>{{ stage.errorCode }}</code>
               </span>
-              <span v-if="stage.ttftMs !== undefined"
-                >首内容 {{ formatDuration(stage.ttftMs) }}</span
-              >
+              <span v-if="stage.ttftMs != null">首内容 {{ formatDuration(stage.ttftMs) }}</span>
             </div>
+            <dl
+              v-if="selectedId === stage.id"
+              :id="`stage-detail-${stage.id}`"
+              class="stage-inspector"
+            >
+              <div>
+                <dt>开始偏移</dt>
+                <dd>+{{ formatDuration(stage.offsetMs) }}</dd>
+              </div>
+              <div>
+                <dt>耗时</dt>
+                <dd>
+                  {{ stage.status === 'SKIPPED' ? '未执行' : formatDuration(stage.elapsedMs) }}
+                </dd>
+              </div>
+              <div v-if="stage.inputCount != null">
+                <dt>输入数</dt>
+                <dd>{{ stage.inputCount }}</dd>
+              </div>
+              <div v-if="stage.outputCount != null">
+                <dt>输出数</dt>
+                <dd>{{ stage.outputCount }}</dd>
+              </div>
+              <div v-if="stage.model">
+                <dt>模型</dt>
+                <dd>{{ stage.provider }} / {{ stage.model }}</dd>
+              </div>
+              <div v-if="stage.queueMs != null">
+                <dt>排队耗时</dt>
+                <dd>{{ formatDuration(stage.queueMs) }}</dd>
+              </div>
+              <div v-if="stage.attemptIndex != null">
+                <dt>模型尝试</dt>
+                <dd>第 {{ stage.attemptIndex }} 次</dd>
+              </div>
+              <div v-if="stage.ttftMs != null">
+                <dt>模型首内容</dt>
+                <dd>{{ formatDuration(stage.ttftMs) }}</dd>
+              </div>
+              <div v-if="stage.firstReasoningMs != null">
+                <dt>模型首次思考</dt>
+                <dd>{{ formatDuration(stage.firstReasoningMs) }}</dd>
+              </div>
+              <div v-if="stage.firstAnswerMs != null">
+                <dt>模型首次正文</dt>
+                <dd>{{ formatDuration(stage.firstAnswerMs) }}</dd>
+              </div>
+              <div v-if="stage.reasonCode">
+                <dt>{{ reasonKind(stage) }}</dt>
+                <dd>
+                  {{ reasonLabel(stage.reasonCode) }} <code>{{ stage.reasonCode }}</code>
+                </dd>
+              </div>
+              <div v-if="stage.errorCode">
+                <dt>错误</dt>
+                <dd>
+                  {{ stage.errorMessage }} <code>{{ stage.errorCode }}</code>
+                </dd>
+              </div>
+            </dl>
           </article>
         </div>
         <el-empty v-else description="暂无阶段记录" :image-size="72" />
@@ -244,7 +393,7 @@ onMounted(loadDetail)
         </div>
         <ul>
           <li v-for="reason in detail.degradationReasons" :key="reason">
-            <code>{{ reason }}</code>
+            {{ reasonLabel(reason) }} <code>{{ reason }}</code>
           </li>
         </ul>
       </section>
@@ -267,8 +416,11 @@ onMounted(loadDetail)
               </div>
               <dl>
                 <div>
-                  <dt>降级/决策原因</dt>
-                  <dd>{{ attempt.reasonCode ?? '—' }}</dd>
+                  <dt>{{ reasonKind(attempt) }}</dt>
+                  <dd :title="attempt.reasonCode ? reasonLabel(attempt.reasonCode) : undefined">
+                    {{ attempt.reasonCode ? reasonLabel(attempt.reasonCode) : '—' }}
+                    <code v-if="attempt.reasonCode">{{ attempt.reasonCode }}</code>
+                  </dd>
                 </div>
                 <div>
                   <dt>TTFT</dt>
