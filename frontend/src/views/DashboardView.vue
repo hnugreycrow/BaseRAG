@@ -243,7 +243,6 @@ function seconds(value: number | null) {
 .dashboard-page {
   max-width: 1600px;
   margin: 0 auto;
-  padding: 30px;
   color: #253147;
 }
 .page-heading,
@@ -458,9 +457,6 @@ td {
   }
 }
 @media (max-width: 700px) {
-  .dashboard-page {
-    padding: 20px 16px;
-  }
   .count-grid {
     grid-template-columns: 1fr;
   }

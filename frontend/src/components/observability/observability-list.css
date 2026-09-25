@@ -1,7 +1,6 @@
 .observability-page {
   max-width: 1600px;
   margin: 0 auto;
-  padding: 29px 30px 45px;
 }
 
 .trace-heading,
@@ -432,10 +431,6 @@
 }
 
 @media (max-width: 880px) {
-  .observability-page {
-    padding: 28px 22px 40px;
-  }
-
   .telemetry-board {
     grid-template-columns: 1fr 2fr;
   }
@@ -528,10 +523,6 @@
 }
 
 @media (max-width: 620px) {
-  .observability-page {
-    padding: 24px 14px 34px;
-  }
-
   .trace-heading {
     align-items: flex-start;
   }

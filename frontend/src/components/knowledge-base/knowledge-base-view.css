@@ -1,7 +1,6 @@
 .knowledge-page {
   max-width: 1600px;
   margin: 0 auto;
-  padding: 29px 30px 45px;
 }
 
 .scope-rail {
@@ -195,10 +194,6 @@
 }
 
 @media (max-width: 600px) {
-  .knowledge-page {
-    padding: 22px 14px 32px;
-  }
-
   .scope-rail {
     margin-bottom: 14px;
   }

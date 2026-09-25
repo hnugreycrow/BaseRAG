@@ -502,7 +502,6 @@ onMounted(load)
 <style scoped>
 .intent-page {
   margin: 0 auto;
-  padding: 29px 30px 45px;
 }
 .intent-header {
   display: flex;
@@ -803,9 +802,6 @@ onMounted(load)
   width: 118px;
 }
 @media (max-width: 640px) {
-  .intent-page {
-    padding: 20px 16px;
-  }
   .intent-header {
     align-items: flex-start;
   }

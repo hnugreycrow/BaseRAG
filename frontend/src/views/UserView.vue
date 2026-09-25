@@ -144,7 +144,13 @@ onMounted(load)
           clearable
           @clear="search"
         /><el-button native-type="submit">搜索</el-button
-        ><el-button style="margin-left: 0;" :icon="Refresh" aria-label="刷新用户" :loading="loading" @click="load" />
+        ><el-button
+          style="margin-left: 0"
+          :icon="Refresh"
+          aria-label="刷新用户"
+          :loading="loading"
+          @click="load"
+        />
       </form>
       <div v-if="error" role="alert" class="user-error">
         <p>{{ error }}</p>
@@ -256,7 +262,6 @@ onMounted(load)
 .users-page {
   max-width: 1600px;
   margin: auto;
-  padding: 29px 30px 45px;
 }
 header {
   display: flex;
@@ -360,9 +365,6 @@ footer {
   }
 }
 @media (max-width: 600px) {
-  .users-page {
-    padding: 24px 16px;
-  }
   .user-search {
     padding: 16px;
     gap: 6px;

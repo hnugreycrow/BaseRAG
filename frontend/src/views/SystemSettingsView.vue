@@ -252,7 +252,6 @@ onMounted(load)
 }
 
 .settings-page {
-  padding: 29px 30px 45px;
   color: var(--color-ink);
 }
 .page-header,
@@ -424,9 +423,6 @@ dd small {
   font-size: 13px;
 }
 @media (max-width: 760px) {
-  .settings-page {
-    padding: 24px 16px;
-  }
   .configuration-note,
   .group-header {
     align-items: flex-start;

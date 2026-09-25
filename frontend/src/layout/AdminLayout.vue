@@ -68,6 +68,7 @@ const collapsed = computed(() => tablet.value || sidebarCollapsed.value)
 </template>
 <style scoped>
 .admin-layout {
+  --main-content-padding: 29px 30px 45px;
   min-height: 100dvh;
   display: flex;
   background: var(--color-canvas);
@@ -104,6 +105,7 @@ const collapsed = computed(() => tablet.value || sidebarCollapsed.value)
   color: #738096;
 }
 .main-content {
+  padding: var(--main-content-padding);
   min-height: calc(100dvh - 70px);
 }
 .breadcrumb,
@@ -201,6 +203,11 @@ const collapsed = computed(() => tablet.value || sidebarCollapsed.value)
 @media (max-width: 1000px) {
   .desktop-toggle {
     display: none;
+  }
+}
+@media (max-width: 760px) {
+  .admin-layout {
+    --main-content-padding: 24px 16px 36px;
   }
 }
 @media (max-width: 600px) {

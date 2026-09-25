@@ -1,7 +1,6 @@
 .trace-detail-page {
   max-width: 1600px;
   margin: 0 auto;
-  padding: 29px 30px 45px;
 }
 
 .back-link {
@@ -689,10 +688,6 @@
 }
 
 @media (max-width: 900px) {
-  .trace-detail-page {
-    padding: 25px 22px 42px;
-  }
-
   .run-facts {
     grid-template-columns: 190px minmax(0, 1fr);
   }
@@ -719,10 +714,6 @@
 }
 
 @media (max-width: 680px) {
-  .trace-detail-page {
-    padding: 22px 14px 36px;
-  }
-
   .privacy-seal {
     display: none;
   }
