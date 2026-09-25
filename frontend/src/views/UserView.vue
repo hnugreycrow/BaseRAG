@@ -133,7 +133,7 @@ onMounted(load)
       <h1>用户管理</h1>
       <el-button type="primary" :icon="Plus" @click="openCreate">创建用户</el-button>
     </header>
-    <section class="users-panel">
+    <section class="users-panel admin-card">
       <form class="user-search" @submit.prevent="search">
         <el-input
           v-model="query"
@@ -275,16 +275,13 @@ h1 {
   font-size: 25px;
 }
 .users-panel {
-  background: white;
-  border: 1px solid var(--color-line);
-  border-radius: 17px;
   overflow: hidden;
 }
 .user-search {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 20px 24px;
+  padding: var(--card-padding);
 }
 .user-search .el-input {
   max-width: 320px;
@@ -293,7 +290,7 @@ h1 {
   display: grid;
   grid-template-columns: minmax(150px, 1.5fr) 0.8fr 0.7fr 1.2fr 80px;
   gap: 16px;
-  padding: 18px 24px;
+  padding: 18px var(--card-padding);
   align-items: center;
   border-top: 1px dashed var(--color-line);
   font-size: 13px;
@@ -333,7 +330,7 @@ time,
   color: var(--color-muted);
 }
 footer {
-  padding: 16px;
+  padding: var(--card-padding);
   display: flex;
   justify-content: space-between;
   gap: 8px;
@@ -366,7 +363,7 @@ footer {
 }
 @media (max-width: 600px) {
   .user-search {
-    padding: 16px;
+    padding: var(--card-padding);
     gap: 6px;
   }
   .user-search .el-button {

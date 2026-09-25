@@ -70,11 +70,8 @@
 }
 
 .question-panel {
-  margin-top: 24px;
-  padding: 20px 24px;
-  background: #ffffff;
-  border: 1px solid var(--color-line);
-  border-radius: 17px;
+  margin-top: var(--card-gap);
+  padding: var(--card-padding);
 }
 
 .question-panel > span {
@@ -104,11 +101,8 @@
 .run-facts {
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr);
-  margin-top: 18px;
+  margin-top: var(--card-gap);
   overflow: hidden;
-  background: #ffffff;
-  border: 1px solid var(--color-line);
-  border-radius: 17px;
 }
 
 .fact-primary {
@@ -116,7 +110,7 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 28px;
+  padding: var(--card-padding);
   color: var(--color-ink);
   background: white;
   border-right: 1px solid var(--color-line);
@@ -176,10 +170,7 @@
 .degradation-panel,
 .attempt-panel,
 .candidate-panel {
-  margin-top: 18px;
-  background: #ffffff;
-  border: 1px solid var(--color-line);
-  border-radius: 17px;
+  margin-top: var(--card-gap);
 }
 
 .section-heading {
@@ -188,7 +179,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  padding: 17px 22px;
+  padding: var(--card-padding);
   border-bottom: 1px solid var(--color-line);
 }
 
@@ -493,7 +484,7 @@
 .detail-grid {
   display: grid;
   grid-template-columns: 1.15fr 0.85fr;
-  gap: 18px;
+  gap: var(--card-gap);
 }
 
 .detail-list {

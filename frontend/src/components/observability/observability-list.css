@@ -47,20 +47,16 @@
 .telemetry-board {
   display: grid;
   grid-template-columns: minmax(100px, 0.5fr) minmax(170px, 0.7fr) minmax(300px, 1.5fr);
-  margin-top: 27px;
+  margin-top: var(--card-gap);
   overflow: hidden;
   color: var(--color-text);
-  background: white;
-  border: 1px solid var(--color-line);
-  border-radius: 17px;
-  box-shadow: none;
 }
 
 .request-volume,
 .rate-ledger,
 .latency-ledger {
   min-width: 0;
-  padding: 24px 26px;
+  padding: var(--card-padding);
 }
 
 .request-volume,
@@ -166,14 +162,11 @@
 
 .filter-panel,
 .runs-panel {
-  margin-top: 18px;
-  background: #ffffff;
-  border: 1px solid var(--color-line);
-  border-radius: 17px;
+  margin-top: var(--card-gap);
 }
 
 .filter-panel {
-  padding: 20px 22px 22px;
+  padding: var(--card-padding);
 }
 
 .filter-intro {
@@ -248,7 +241,7 @@
 
 .panel-heading {
   min-height: 70px;
-  padding: 16px 22px;
+  padding: var(--card-padding);
   border-bottom: 1px solid var(--color-line);
 }
 
@@ -408,7 +401,7 @@
 .pagination-footer {
   display: flex;
   justify-content: flex-end;
-  padding: 16px 20px;
+  padding: var(--card-padding);
   border-top: 1px solid var(--color-line);
 }
 
@@ -552,7 +545,7 @@
   .request-volume,
   .rate-ledger,
   .latency-ledger {
-    padding: 16px;
+    padding: var(--card-padding);
   }
 
   .latency-ledger {

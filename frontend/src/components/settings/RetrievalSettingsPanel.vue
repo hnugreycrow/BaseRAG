@@ -147,7 +147,7 @@ onMounted(load)
       <section
         v-for="(group, index) in groups"
         :key="group.title"
-        class="retrieval-section"
+        class="retrieval-section admin-card"
         :aria-labelledby="`retrieval-group-${index}`"
       >
         <header>
@@ -188,15 +188,12 @@ p {
   flex-wrap: wrap;
 }
 .retrieval-section {
-  background: white;
-  border: 1px solid var(--color-line);
-  border-radius: 12px;
   overflow: hidden;
-  margin-bottom: 18px;
+  margin-bottom: var(--card-gap);
 }
 header {
-  padding: 20px 24px;
-  background: #fafbfd;
+  padding: var(--card-padding);
+  background: var(--card-background);
   border-bottom: 1px solid var(--color-line);
 }
 h3 {
@@ -211,7 +208,7 @@ dl {
   display: grid;
   grid-template-columns: minmax(140px, 25%) 1fr;
   gap: 24px;
-  padding: 18px 24px;
+  padding: var(--card-padding);
 }
 .setting-row + .setting-row {
   border-top: 1px solid var(--color-line);
@@ -247,12 +244,12 @@ dd strong {
 }
 @media (max-width: 600px) {
   header {
-    padding: 18px;
+    padding: var(--card-padding);
   }
   .setting-row {
     grid-template-columns: 1fr;
     gap: 8px;
-    padding: 16px 18px;
+    padding: var(--card-padding);
   }
 }
 </style>

@@ -106,18 +106,18 @@ function seconds(value: number | null) {
         >
       </div>
     </header>
-    <div v-if="error" class="state-panel" role="alert">
+    <div v-if="error" class="state-panel admin-card" role="alert">
       <h2>统计暂时无法加载</h2>
       <p>{{ error }}</p>
       <el-button @click="load">重新加载</el-button>
     </div>
-    <div v-else-if="loading" class="state-panel" role="status">
+    <div v-else-if="loading" class="state-panel admin-card" role="status">
       <el-skeleton :rows="8" animated />
       <p>正在加载运行趋势…</p>
     </div>
     <template v-else-if="data">
       <div class="count-grid">
-        <section v-for="card in cards" :key="card.key" class="chart-card">
+        <section v-for="card in cards" :key="card.key" class="chart-card admin-card">
           <div class="card-heading">
             <h2>{{ card.title }}</h2>
             <span class="series-dot" :style="{ background: card.color }" aria-hidden="true" />
@@ -156,7 +156,7 @@ function seconds(value: number | null) {
           </p>
         </section>
       </div>
-      <section class="chart-card latency-card">
+      <section class="chart-card latency-card admin-card">
         <div class="card-heading">
           <div>
             <h2>响应耗时</h2>
@@ -289,15 +289,11 @@ h2 {
 .count-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
+  gap: var(--card-gap);
 }
 .chart-card {
   min-width: 0;
-  background: #fff;
-  border: 1px solid #e8edf3;
-  border-radius: 18px;
-  padding: 24px;
-  box-shadow: 0 2px 5px #24365303;
+  padding: var(--card-padding);
 }
 .series-dot {
   width: 8px;
@@ -360,7 +356,7 @@ h2 {
   line-height: 1.8;
 }
 .latency-card {
-  margin-top: 20px;
+  margin-top: var(--card-gap);
 }
 .latency-meta {
   display: flex;
@@ -397,9 +393,7 @@ h2 {
   line-height: 1.8;
 }
 .state-panel {
-  padding: 40px;
-  background: white;
-  border-radius: 18px;
+  padding: var(--card-padding);
   color: #64748b;
 }
 .empty-chart {
@@ -461,7 +455,7 @@ td {
     grid-template-columns: 1fr;
   }
   .chart-card {
-    padding: 20px 16px;
+    padding: var(--card-padding);
   }
   .card-heading,
   .latency-footer {

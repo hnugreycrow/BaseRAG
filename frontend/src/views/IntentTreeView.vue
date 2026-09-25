@@ -304,7 +304,7 @@ onMounted(load)
     </div>
 
     <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" />
-    <section class="intent-tree-panel" :aria-busy="loading">
+    <section class="intent-tree-panel admin-card" :aria-busy="loading">
       <div v-if="loading" class="intent-loading">正在加载意图节点…</div>
       <div v-else-if="tree.length === 0" class="intent-empty">
         <div class="empty-path" aria-hidden="true">
@@ -560,12 +560,9 @@ onMounted(load)
 .intent-tree-panel {
   min-height: 170px;
   overflow: hidden;
-  border: 1px solid var(--color-line);
-  border-radius: 17px;
-  background: var(--color-surface);
 }
 .intent-loading {
-  padding: 36px 38px;
+  padding: var(--card-padding);
   color: var(--color-muted);
   font-size: 14px;
 }
@@ -574,7 +571,7 @@ onMounted(load)
   align-items: flex-start;
   gap: 22px;
   max-width: 690px;
-  padding: 34px 38px;
+  padding: var(--card-padding);
 }
 .empty-path {
   display: flex;
@@ -618,7 +615,7 @@ onMounted(load)
   margin-top: 5px;
 }
 .intent-tree {
-  padding: 10px 14px;
+  padding: var(--card-padding);
 }
 .intent-tree :deep(.el-tree-node__content) {
   min-height: 62px;
@@ -815,12 +812,12 @@ onMounted(load)
     display: none;
   }
   .intent-loading {
-    padding: 36px 38px;
+    padding: var(--card-padding);
     color: var(--color-muted);
     font-size: 14px;
   }
   .intent-empty {
-    padding: 28px 20px;
+    padding: var(--card-padding);
   }
   .intent-node {
     align-items: flex-start;

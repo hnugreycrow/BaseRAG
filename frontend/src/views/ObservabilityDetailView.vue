@@ -160,12 +160,12 @@ onMounted(loadDetail)
         </div>
       </header>
 
-      <section class="question-panel" aria-labelledby="question-title">
+      <section class="question-panel admin-card" aria-labelledby="question-title">
         <span id="question-title">提问问题</span>
         <p>{{ detail.run.question ?? '问题不可用' }}</p>
       </section>
 
-      <section class="run-facts" aria-label="运行摘要">
+      <section class="run-facts admin-card" aria-label="运行摘要">
         <div class="fact-primary">
           <span>总耗时</span>
           <strong>{{ formatDuration(detail.run.totalMs) }}</strong>
@@ -221,7 +221,7 @@ onMounted(loadDetail)
         </dl>
       </section>
 
-      <section class="waterfall-panel" aria-labelledby="waterfall-title">
+      <section class="waterfall-panel admin-card" aria-labelledby="waterfall-title">
         <div class="section-heading">
           <div>
             <h2 id="waterfall-title">阶段瀑布</h2>
@@ -390,7 +390,7 @@ onMounted(loadDetail)
 
       <section
         v-if="degradationReasons.length"
-        class="degradation-panel"
+        class="degradation-panel admin-card"
         aria-labelledby="degradation-title"
       >
         <div class="section-heading compact">
@@ -410,7 +410,7 @@ onMounted(loadDetail)
       </section>
 
       <div class="detail-grid">
-        <section class="attempt-panel" aria-labelledby="attempt-title">
+        <section class="attempt-panel admin-card" aria-labelledby="attempt-title">
           <div class="section-heading compact">
             <div>
               <h2 id="attempt-title">回答模型尝试</h2>
@@ -455,7 +455,7 @@ onMounted(loadDetail)
           <p v-else class="quiet-empty">本次运行未调用回答模型。</p>
         </section>
 
-        <section class="candidate-panel" aria-labelledby="candidate-title">
+        <section class="candidate-panel admin-card" aria-labelledby="candidate-title">
           <div class="section-heading compact">
             <div>
               <h2 id="candidate-title">候选流转</h2>

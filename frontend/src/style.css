@@ -8,6 +8,12 @@
   --color-surface: #ffffff;
   --color-canvas: #f5f7f9;
   --color-line: #e9edf3;
+  --card-background: var(--color-surface);
+  --card-border: 1px solid var(--color-line);
+  --card-radius: 24px;
+  --card-shadow: 0 2px 6px rgb(24 42 75 / 3%);
+  --card-padding: 24px;
+  --card-gap: 24px;
   --motion-duration-fast: 100ms;
   --motion-duration-layout: 150ms;
   --motion-ease: cubic-bezier(0.2, 0, 0, 1);
@@ -260,5 +266,19 @@ h1 {
   }
   *::-webkit-scrollbar-thumb {
     background-color: ButtonText;
+  }
+}
+
+/* 后台外层卡片共用外观；分区卡片由各内容区使用统一内边距。 */
+.admin-card {
+  background: var(--card-background);
+  border: var(--card-border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+}
+
+@media (max-width: 760px) {
+  :root {
+    --card-padding: 16px;
   }
 }

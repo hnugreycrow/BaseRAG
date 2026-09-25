@@ -150,7 +150,7 @@ function openPreview(row: KnowledgeDocument) {
       </div>
     </header>
 
-    <section class="table-panel">
+    <section class="table-panel admin-card">
       <div class="table-toolbar">
         <div v-if="level === 'documents'" class="batch-actions">
           <span v-if="selectedCount > 0">已选 {{ selectedCount }} 篇</span>

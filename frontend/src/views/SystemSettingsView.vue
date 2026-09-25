@@ -141,7 +141,7 @@ onMounted(load)
         <section
           v-for="group in groups"
           :key="group.key"
-          class="model-section"
+          class="model-section admin-card"
           :aria-labelledby="`${group.key}-title`"
         >
           <header class="group-header">
@@ -188,7 +188,7 @@ onMounted(load)
             </li>
           </ol>
         </section>
-        <section class="policy-section" aria-labelledby="policy-title">
+        <section class="policy-section admin-card" aria-labelledby="policy-title">
           <div>
             <h3 id="policy-title">调用保护</h3>
             <p>对可重试的错误进行重试，达到失败阈值后暂时熔断。</p>
@@ -304,15 +304,12 @@ h2 {
 }
 .model-section,
 .policy-section {
-  background: white;
-  border: 1px solid var(--color-line);
-  border-radius: 12px;
-  margin-bottom: 18px;
+  margin-bottom: var(--card-gap);
   overflow: hidden;
 }
 .group-header {
-  padding: 22px 24px;
-  background: #fafbfd;
+  padding: var(--card-padding);
+  background: var(--card-background);
   border-bottom: 1px solid var(--color-line);
 }
 h3 {
@@ -335,7 +332,7 @@ h3 {
   grid-template-columns: 32px minmax(0, 1fr) auto 110px;
   align-items: center;
   gap: 18px;
-  padding: 20px 24px;
+  padding: var(--card-padding);
 }
 .model-row + .model-row {
   border-top: 1px solid var(--color-line);
@@ -382,7 +379,7 @@ h3 {
   align-items: flex-end;
 }
 .policy-section {
-  padding: 22px 24px;
+  padding: var(--card-padding);
 }
 dl {
   display: grid;
@@ -436,7 +433,7 @@ dd small {
   .model-row {
     grid-template-columns: 24px minmax(0, 1fr);
     gap: 12px;
-    padding: 18px;
+    padding: var(--card-padding);
   }
   .model-properties {
     grid-column: 2;
@@ -449,7 +446,7 @@ dd small {
   }
   .group-header,
   .policy-section {
-    padding: 18px;
+    padding: var(--card-padding);
   }
   dl {
     gap: 10px;

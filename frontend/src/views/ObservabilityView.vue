@@ -99,7 +99,7 @@ onMounted(() => {
       </div>
     </header>
 
-    <section class="telemetry-board" aria-label="当前筛选范围汇总">
+    <section class="telemetry-board admin-card" aria-label="当前筛选范围汇总">
       <div class="request-volume">
         <span>问答运行</span>
         <strong>{{ aggregate?.requestCount ?? '—' }}</strong>
@@ -130,7 +130,7 @@ onMounted(() => {
       </div>
     </section>
 
-    <section class="filter-panel" aria-labelledby="trace-filter-title">
+    <section class="filter-panel admin-card" aria-labelledby="trace-filter-title">
       <div class="filter-intro">
         <div>
           <span id="trace-filter-title">筛选运行</span>
@@ -223,7 +223,7 @@ onMounted(() => {
       <p v-if="validationError" class="validation-error" role="alert">{{ validationError }}</p>
     </section>
 
-    <section class="runs-panel" aria-labelledby="run-list-title">
+    <section class="runs-panel admin-card" aria-labelledby="run-list-title">
       <div class="panel-heading">
         <div>
           <h2 id="run-list-title">运行记录</h2>
