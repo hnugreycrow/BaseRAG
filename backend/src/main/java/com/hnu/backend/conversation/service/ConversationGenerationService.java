@@ -46,7 +46,7 @@ public class ConversationGenerationService {
   private final GenerationAttemptMapper generationAttemptMapper;
   private final AnswerStage answers;
   private final RagProperties rag;
-  private final TransactionTemplate tx;
+  private final ConversationGenerationPreparation preparation;
   private final RagTraceManager traces;
   private final ConversationTerminalWriter terminalWriter;
   private final ConversationGenerationRunner runner;
@@ -88,7 +88,7 @@ public class ConversationGenerationService {
    * @param generationAttemptMapper 模型生成尝试持久化接口
    * @param answers 最终回答、引用校验和修复阶段
    * @param rag RAG 输入配置
-   * @param tx 终态持久化事务模板
+   * @param tx 消息与回答版本准备的事务模板
    * @param traces 单次问答 Trace 管理器
    * @param terminalWriter 回答终态的事务写入服务
    * @param runner 回答流水线执行器
@@ -108,7 +108,8 @@ public class ConversationGenerationService {
     this.generationAttemptMapper = generationAttemptMapper;
     this.answers = answers;
     this.rag = rag;
-    this.tx = tx;
+    this.preparation =
+        new ConversationGenerationPreparation(conversationMapper, messageMapper, tx, traces);
     this.traces = traces;
     this.terminalWriter = terminalWriter;
     this.runner = runner;
@@ -189,24 +190,8 @@ public class ConversationGenerationService {
         return replayOrConflict(conversation, existing, assistant, timing.requestId());
       }
       ensureIdle(ownerId, conversationId);
-      PreparedMessages prepared =
-          tx.execute(
-              ignored -> {
-                int turn = messageMapper.nextTurn(ownerId, conversationId);
-                Message user = userMessage(conversationId, clientMessageId, turn, question);
-                messageMapper.insert(user);
-                Message assistant = assistantMessage(conversationId, null, turn, 1, user.getId());
-                assistant.setThinkingEnabled(conversation.isThinkingEnabled());
-                messageMapper.insert(assistant);
-                RagRunTrace trace =
-                    traces.start(
-                        ownerId, conversationId, user.getId(), assistant.getId(), question, timing);
-                conversationMapper.touch(ownerId, conversationId);
-                return new PreparedMessages(user, assistant, trace);
-              });
-      if (prepared == null) {
-        throw new IllegalStateException("创建会话消息事务未返回结果");
-      }
+      var prepared =
+          preparation.prepareNew(ownerId, conversation, clientMessageId, question, timing);
       return launch(
           conversation,
           prepared.user(),
@@ -308,55 +293,10 @@ public class ConversationGenerationService {
         return replayOrConflict(conversation, user, duplicate, timing.requestId());
       }
       ensureIdle(ownerId, conversationId);
-      Message previous = messageMapper.find(ownerId, assistantMessageId);
-      if (previous == null
-          || !conversationId.equals(previous.getConversationId())
-          || previous.getRole() != MessageRole.ASSISTANT) {
-        throw ApiException.notFound(ErrorCode.MESSAGE_NOT_FOUND, "回答不存在");
-      }
-      if (regenerate) {
-        int lastTurn = messageMapper.nextTurn(ownerId, conversationId) - 1;
-        if (!previous.isActive()
-            || previous.getStatus() != MessageStatus.COMPLETED
-            || previous.getTurnIndex() != lastTurn) {
-          throw ApiException.conflict(ErrorCode.REGENERATE_NOT_ALLOWED, "只能重新生成会话最后一轮的当前成功回答");
-        }
-      } else if (!(previous.getStatus() == MessageStatus.FAILED
-          || previous.getStatus() == MessageStatus.CANCELLED)) {
-        throw ApiException.conflict(ErrorCode.RETRY_NOT_ALLOWED, "只能重试失败或已停止的回答");
-      }
-      Message user = messageMapper.find(ownerId, previous.getReplyToId());
-      if (user == null) {
-        throw ApiException.notFound(ErrorCode.MESSAGE_NOT_FOUND, "原用户消息不存在");
-      }
-      PreparedAnswer next =
-          tx.execute(
-              ignored -> {
-                messageMapper.deactivateReplies(ownerId, user.getId());
-                Message value =
-                    assistantMessage(
-                        conversationId,
-                        clientRequestId,
-                        user.getTurnIndex(),
-                        messageMapper.nextVariant(ownerId, user.getId()),
-                        user.getId());
-                value.setThinkingEnabled(conversation.isThinkingEnabled());
-                messageMapper.insert(value);
-                RagRunTrace trace =
-                    traces.start(
-                        ownerId,
-                        conversationId,
-                        user.getId(),
-                        value.getId(),
-                        user.getContent(),
-                        timing);
-                conversationMapper.touch(ownerId, conversationId);
-                return new PreparedAnswer(value, trace);
-              });
-      if (next == null) {
-        throw new IllegalStateException("创建回答版本事务未返回结果");
-      }
-      return launch(conversation, user, next.assistant(), timing.requestId(), next.trace());
+      var next =
+          preparation.prepareRestart(
+              ownerId, conversation, assistantMessageId, clientRequestId, timing, regenerate);
+      return launch(conversation, next.user(), next.assistant(), timing.requestId(), next.trace());
     }
   }
 
@@ -755,75 +695,4 @@ public class ConversationGenerationService {
     }
     return value;
   }
-
-  /**
-   * 创建尚未写入数据库的用户消息实体。
-   *
-   * @param conversationId 会话 ID
-   * @param clientId 客户端幂等 ID
-   * @param turn 轮次编号
-   * @param content 用户问题
-   * @return 初始化完成的用户消息
-   */
-  private Message userMessage(UUID conversationId, UUID clientId, int turn, String content) {
-    Message value = new Message();
-    value.setId(UUID.randomUUID());
-    value.setConversationId(conversationId);
-    value.setClientRequestId(clientId);
-    value.setRole(MessageRole.USER);
-    value.setTurnIndex(turn);
-    value.setVariantIndex(0);
-    value.setActive(true);
-    value.setStatus(MessageStatus.COMPLETED);
-    value.setContent(content);
-    value.setSourcesJson("[]");
-    value.setCitationsJson("[]");
-    return value;
-  }
-
-  /**
-   * 创建尚未写入数据库的待生成回答实体。
-   *
-   * @param conversationId 会话 ID
-   * @param clientId 客户端幂等 ID
-   * @param turn 轮次编号
-   * @param variant 回答版本编号
-   * @param replyTo 对应用户消息 ID
-   * @return 初始化完成的回答消息
-   */
-  private Message assistantMessage(
-      UUID conversationId, UUID clientId, int turn, int variant, UUID replyTo) {
-    Message value = new Message();
-    value.setId(UUID.randomUUID());
-    value.setConversationId(conversationId);
-    value.setClientRequestId(clientId);
-    value.setRole(MessageRole.ASSISTANT);
-    value.setTurnIndex(turn);
-    value.setVariantIndex(variant);
-    value.setActive(true);
-    value.setReplyToId(replyTo);
-    value.setStatus(MessageStatus.PENDING);
-    value.setContent("");
-    value.setReasoningContent("");
-    value.setSourcesJson("[]");
-    value.setCitationsJson("[]");
-    return value;
-  }
-
-  /**
-   * 同一事务中创建的一对用户消息和初始回答。
-   *
-   * @param user 已持久化用户消息
-   * @param assistant 已持久化待生成回答
-   * @param trace 与回答版本一一对应的内存 Trace
-   */
-  private record PreparedMessages(Message user, Message assistant, RagRunTrace trace) {}
-
-  /**
-   * 重试或重新生成事务创建的回答与 Trace。
-   *
-   * @param assistant 新回答版本
-   * @param trace 新回答版本的内存 Trace
-   */
-  private record PreparedAnswer(Message assistant, RagRunTrace trace) {}
 }
