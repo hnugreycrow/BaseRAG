@@ -22,28 +22,20 @@ import jakarta.annotation.PreDestroy;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /** 按子问题路由并发执行检索或 MCP 调用，再生成可供重排的全局候选池。 */
 @Component
 public class ExecutionStage {
-  private static final Logger log = LoggerFactory.getLogger(ExecutionStage.class);
-  private static final long CANCELLATION_POLL_MS = 50;
 
   private final RetrievalService retrievalService;
   private final McpToolExecutor tools;
   private final CandidateMerge candidateMerge;
   private final RagProperties config;
-  private final ExecutorService executor;
+  private final SubQuestionScheduler scheduler;
 
   /**
    * 创建子问题执行阶段。
@@ -79,7 +71,7 @@ public class ExecutionStage {
     this.tools = tools;
     this.candidateMerge = candidateMerge;
     this.config = config;
-    this.executor = executor;
+    this.scheduler = new SubQuestionScheduler(executor);
   }
 
   /**
@@ -170,87 +162,47 @@ public class ExecutionStage {
       throw new IllegalArgumentException("Query plan exceeds max sub-questions");
     }
 
-    List<TaskHandle> handles = new ArrayList<>();
+    List<SubQuestionScheduler.Task> tasks = new ArrayList<>();
     List<SubQuestionExecution> results = new ArrayList<>();
-    try {
-      for (int index = 0; index < plan.subQuestions().size(); index++) {
-        SubQuestion question = plan.subQuestions().get(index);
-        IntentRoute route = routing.routes().get(index);
-        if (route.intent() == IntentType.SYSTEM_CHAT) {
-          trace.skipped(
-              RagStageName.SUBQUESTION_EXECUTION,
-              question.id(),
-              TraceReasonCatalog.SYSTEM_CHAT_ROUTED.code());
-          results.add(
-              new SubQuestionExecution(
-                  question.id(),
-                  route.intent(),
-                  SubQuestionExecution.Status.SKIPPED,
-                  List.of(),
-                  null,
-                  TraceReasonCatalog.SYSTEM_CHAT_ROUTED.code(),
-                  0));
-          continue;
-        }
-        // 向量通道预算由检索服务仅在数据库召回时扣除，Embedding 不占用该预算。
-        long timeoutMs =
-            route.intent() == IntentType.MCP_TOOL
-                ? config.getPipeline().getMcp().getTimeoutMs()
-                : 0;
-        long submittedAt = System.nanoTime();
-        TaskObservation observation = new TaskObservation(trace, question.id(), submittedAt);
-        Future<SubQuestionExecution> future =
-            executor.submit(
-                () -> {
-                  RagRunTrace.Span span = observation.begin();
-                  if (span == null) {
-                    throw ApiException.cancelled();
-                  }
-                  try {
-                    SubQuestionExecution result =
-                        executeOne(
-                            ownerId,
-                            question,
-                            route,
-                            knowledgeBaseIds,
-                            snapshot,
-                            cancellationToken,
-                            span.context(),
-                            submittedAt);
-                    // 业务预算仍包含排队；观测耗时只覆盖工作线程执行区间。
-                    if (timeoutMs > 0 && result.elapsedMs() > timeoutMs) {
-                      result =
-                          result(
-                              question,
-                              route,
-                              SubQuestionExecution.Status.TIMEOUT,
-                              List.of(),
-                              null,
-                              ErrorCode.SUBQUESTION_TIMEOUT.code(),
-                              submittedAt);
-                    }
-                    observation.completed(result);
-                    return result;
-                  } catch (RuntimeException | Error error) {
-                    observation.failed(error);
-                    throw error;
-                  }
-                });
-        handles.add(new TaskHandle(question, route, future, submittedAt, timeoutMs, observation));
+    for (int index = 0; index < plan.subQuestions().size(); index++) {
+      SubQuestion question = plan.subQuestions().get(index);
+      IntentRoute route = routing.routes().get(index);
+      if (route.intent() == IntentType.SYSTEM_CHAT) {
+        trace.skipped(
+            RagStageName.SUBQUESTION_EXECUTION,
+            question.id(),
+            TraceReasonCatalog.SYSTEM_CHAT_ROUTED.code());
+        results.add(
+            new SubQuestionExecution(
+                question.id(),
+                route.intent(),
+                SubQuestionExecution.Status.SKIPPED,
+                List.of(),
+                null,
+                TraceReasonCatalog.SYSTEM_CHAT_ROUTED.code(),
+                0));
+        continue;
       }
-
-      for (TaskHandle handle : handles) {
-        SubQuestionExecution result = await(handle, cancellationToken);
-        results.add(result);
-      }
-    } catch (RuntimeException error) {
-      handles.forEach(
-          handle -> {
-            handle.observation().failed(error);
-            handle.future().cancel(true);
-          });
-      throw error;
+      // 向量通道预算由检索服务仅在数据库召回时扣除，Embedding 不占用该预算。
+      long timeoutMs =
+          route.intent() == IntentType.MCP_TOOL ? config.getPipeline().getMcp().getTimeoutMs() : 0;
+      tasks.add(
+          new SubQuestionScheduler.Task(
+              question,
+              route,
+              timeoutMs,
+              (taskTrace, submittedAt) ->
+                  executeOne(
+                      ownerId,
+                      question,
+                      route,
+                      knowledgeBaseIds,
+                      snapshot,
+                      cancellationToken,
+                      taskTrace,
+                      submittedAt)));
     }
+    results.addAll(scheduler.execute(tasks, cancellationToken, trace));
     cancellationToken.throwIfCancelled();
 
     results.sort(
@@ -289,25 +241,7 @@ public class ExecutionStage {
   /** 停止并发子问题执行器。 */
   @PreDestroy
   void close() {
-    executor.shutdownNow();
-  }
-
-  private SubQuestionExecution executeOne(
-      UUID ownerId,
-      SubQuestion question,
-      IntentRoute route,
-      List<UUID> knowledgeBaseIds,
-      RagBudgetSnapshot snapshot,
-      CancellationToken cancellationToken) {
-    return executeOne(
-        ownerId,
-        question,
-        route,
-        knowledgeBaseIds,
-        snapshot,
-        cancellationToken,
-        RagRunTrace.noop().context(),
-        System.nanoTime());
+    scheduler.close();
   }
 
   /** 执行并观测单个子问题。 */
@@ -411,75 +345,6 @@ public class ExecutionStage {
     }
   }
 
-  /** 根据子问题终态结束其外层阶段。 */
-  private void observed(RagRunTrace.Span span, SubQuestionExecution execution) {
-    if (execution.status() == SubQuestionExecution.Status.FAILED
-        || execution.status() == SubQuestionExecution.Status.TIMEOUT) {
-      span.degraded(execution.candidates().size(), execution.reasonCode());
-    } else if (execution.status() == SubQuestionExecution.Status.SKIPPED) {
-      span.skipped(0, execution.reasonCode());
-    } else {
-      span.success(execution.candidates().size());
-    }
-  }
-
-  private SubQuestionExecution await(TaskHandle handle, CancellationToken cancellationToken) {
-    long deadline =
-        handle.timeoutMs() > 0
-            ? handle.startedAt() + TimeUnit.MILLISECONDS.toNanos(handle.timeoutMs())
-            : Long.MAX_VALUE;
-    while (true) {
-      cancellationToken.throwIfCancelled();
-      try {
-        // 先读取已经完成的结果，避免等待前序任务后把早已结束的后序任务误判为超时。
-        if (handle.future().isDone()) {
-          return enforceTimeout(handle, handle.future().get());
-        }
-        long remaining = deadline - System.nanoTime();
-        if (remaining <= 0) {
-          handle.observation().timeout();
-          handle.future().cancel(true);
-          return result(
-              handle.question(),
-              handle.route(),
-              SubQuestionExecution.Status.TIMEOUT,
-              List.of(),
-              null,
-              ErrorCode.SUBQUESTION_TIMEOUT.code(),
-              handle.startedAt());
-        }
-        long waitNanos = Math.min(remaining, TimeUnit.MILLISECONDS.toNanos(CANCELLATION_POLL_MS));
-        return enforceTimeout(handle, handle.future().get(waitNanos, TimeUnit.NANOSECONDS));
-      } catch (TimeoutException ignored) {
-        // 短轮询让仅改变取消令牌、未中断父线程的调用方也能快速停止所有子任务。
-      } catch (InterruptedException error) {
-        handle.future().cancel(true);
-        Thread.currentThread().interrupt();
-        throw ApiException.cancelled();
-      } catch (ExecutionException error) {
-        Throwable cause = error.getCause();
-        if (cause instanceof RuntimeException runtime) {
-          throw runtime;
-        }
-        throw new IllegalStateException(cause);
-      }
-    }
-  }
-
-  private SubQuestionExecution enforceTimeout(TaskHandle handle, SubQuestionExecution completed) {
-    if (handle.timeoutMs() == 0 || completed.elapsedMs() <= handle.timeoutMs()) {
-      return completed;
-    }
-    return result(
-        handle.question(),
-        handle.route(),
-        SubQuestionExecution.Status.TIMEOUT,
-        List.of(),
-        null,
-        ErrorCode.SUBQUESTION_TIMEOUT.code(),
-        handle.startedAt());
-  }
-
   private SubQuestionExecution result(
       SubQuestion question,
       IntentRoute route,
@@ -524,94 +389,4 @@ public class ExecutionStage {
   private long elapsedMillis(long startedAt) {
     return Math.max(0, (System.nanoTime() - startedAt) / 1_000_000);
   }
-
-  /** 保证排队取消、超时与工作线程完成只有一个终态获胜。 */
-  private final class TaskObservation {
-    private final TraceContext parent;
-    private final String questionId;
-    private final long submittedAt;
-    private RagRunTrace.Span span;
-    private boolean ended;
-
-    private TaskObservation(TraceContext parent, String questionId, long submittedAt) {
-      this.parent = parent;
-      this.questionId = questionId;
-      this.submittedAt = submittedAt;
-    }
-
-    private synchronized RagRunTrace.Span begin() {
-      if (ended) {
-        return null;
-      }
-      span = parent.start(RagStageName.SUBQUESTION_EXECUTION, questionId, 1).queued(submittedAt);
-      return span;
-    }
-
-    private synchronized void completed(SubQuestionExecution result) {
-      if (ended) {
-        return;
-      }
-      ended = true;
-      observed(span, result);
-    }
-
-    private synchronized void timeout() {
-      if (ended) {
-        return;
-      }
-      boolean queued = span == null;
-      if (queued) {
-        begin();
-      }
-      ended = true;
-      span.stopChildren(false, ErrorCode.SUBQUESTION_TIMEOUT.code());
-      if (queued) {
-        span.cancelledBeforeStart(ErrorCode.SUBQUESTION_TIMEOUT.code());
-      } else {
-        span.degraded(0, ErrorCode.SUBQUESTION_TIMEOUT.code());
-      }
-      parent.markDegraded();
-    }
-
-    private synchronized void failed(Throwable error) {
-      if (ended) {
-        return;
-      }
-      boolean queued = span == null;
-      if (queued) {
-        begin();
-      }
-      ended = true;
-      boolean cancelled =
-          error instanceof ApiException api
-              && ErrorCode.GENERATION_CANCELLED.code().equals(api.code());
-      span.stopChildren(
-          cancelled,
-          cancelled ? ErrorCode.GENERATION_CANCELLED.code() : ErrorCode.EXECUTION_FAILED.code());
-      if (queued) {
-        span.cancelledBeforeStart(
-            cancelled ? ErrorCode.GENERATION_CANCELLED.code() : ErrorCode.EXECUTION_FAILED.code());
-      } else {
-        span.error(error);
-      }
-    }
-  }
-
-  /**
-   * 已提交子任务及其独立计时边界。
-   *
-   * @param question 子任务对应的规划问题
-   * @param route 决定任务执行检索还是工具调用的安全路由
-   * @param future 用于等待、超时中断和总取消传播的并发句柄
-   * @param startedAt 提交任务时的单调时钟值，MCP 任务的排队时间也计入其预算
-   * @param timeoutMs MCP 任务允许占用的最长时间；知识检索由检索服务单独计时，值为 0
-   * @param observation 工作线程与超时线程共享的幂等观测句柄
-   */
-  private record TaskHandle(
-      SubQuestion question,
-      IntentRoute route,
-      Future<SubQuestionExecution> future,
-      long startedAt,
-      long timeoutMs,
-      TaskObservation observation) {}
 }
