@@ -1,4 +1,4 @@
-package com.hnu.backend.conversation.service;
+package com.hnu.backend.conversation.generation;
 
 import com.hnu.backend.conversation.vo.ConversationStreamEvents.Kind;
 import com.hnu.backend.shared.error.ApiException;

@@ -1,4 +1,4 @@
-package com.hnu.backend.conversation.service;
+package com.hnu.backend.conversation.generation;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;

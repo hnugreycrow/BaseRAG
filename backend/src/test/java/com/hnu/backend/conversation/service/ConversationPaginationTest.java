@@ -6,6 +6,7 @@ import static org.mockito.Mockito.*;
 import com.hnu.backend.conversation.entity.Conversation;
 import com.hnu.backend.conversation.entity.Message;
 import com.hnu.backend.conversation.entity.MessageRole;
+import com.hnu.backend.conversation.generation.ConversationGenerationService;
 import com.hnu.backend.conversation.mapper.ConversationMapper;
 import com.hnu.backend.conversation.mapper.MessageMapper;
 import com.hnu.backend.shared.error.ApiException;

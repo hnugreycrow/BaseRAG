@@ -1,4 +1,4 @@
-package com.hnu.backend.conversation.service;
+package com.hnu.backend.conversation.generation;
 
 import com.hnu.backend.conversation.entity.Conversation;
 import com.hnu.backend.conversation.entity.Message;

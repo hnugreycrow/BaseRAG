@@ -1,4 +1,4 @@
-package com.hnu.backend.conversation.service;
+package com.hnu.backend.conversation.generation;
 
 import com.hnu.backend.conversation.entity.Conversation;
 import com.hnu.backend.conversation.entity.Message;
@@ -7,6 +7,7 @@ import com.hnu.backend.conversation.entity.MessageStatus;
 import com.hnu.backend.conversation.mapper.ConversationMapper;
 import com.hnu.backend.conversation.mapper.GenerationAttemptMapper;
 import com.hnu.backend.conversation.mapper.MessageMapper;
+import com.hnu.backend.conversation.presentation.ConversationMessagePresenter;
 import com.hnu.backend.conversation.vo.ConversationStreamEvents;
 import com.hnu.backend.conversation.vo.ConversationStreamEvents.Kind;
 import com.hnu.backend.observability.service.RagTraceManager;
@@ -132,7 +133,7 @@ public class ConversationGenerationService {
 
   /** 取消全部内存生成任务并关闭虚拟线程执行器。 */
   @PreDestroy
-  void close() {
+  public void close() {
     activeByConversation.values().forEach(ActiveGeneration::cancel);
     executor.shutdownNow();
   }
@@ -672,12 +673,12 @@ public class ConversationGenerationService {
   }
 
   /** 返回指定会话是否存在本进程内的活动生成。 */
-  boolean isActive(UUID conversationId) {
+  public boolean isActive(UUID conversationId) {
     return activeByConversation.containsKey(conversationId);
   }
 
-  /** 删除已删除会话的锁对象。 */
-  void forgetConversation(UUID conversationId) {
+  /** 删除已删除会话的锁对象；调用方必须先确认没有活动生成并完成会话记录删除。 */
+  public void forgetConversation(UUID conversationId) {
     conversationLocks.remove(conversationId);
   }
 

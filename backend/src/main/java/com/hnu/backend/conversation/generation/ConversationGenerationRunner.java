@@ -1,10 +1,11 @@
-package com.hnu.backend.conversation.service;
+package com.hnu.backend.conversation.generation;
 
 import com.hnu.backend.conversation.configuration.ConversationProperties;
 import com.hnu.backend.conversation.entity.GenerationAttempt;
 import com.hnu.backend.conversation.entity.GenerationAttemptStatus;
 import com.hnu.backend.conversation.mapper.GenerationAttemptMapper;
 import com.hnu.backend.conversation.mapper.MessageMapper;
+import com.hnu.backend.conversation.service.ConversationContextService;
 import com.hnu.backend.conversation.vo.ConversationStreamEvents;
 import com.hnu.backend.conversation.vo.ConversationStreamEvents.Kind;
 import com.hnu.backend.observability.RagExecutionMode;

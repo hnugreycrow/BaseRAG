@@ -1,4 +1,4 @@
-package com.hnu.backend.conversation.service;
+package com.hnu.backend.conversation.presentation;
 
 import com.hnu.backend.conversation.entity.Message;
 import com.hnu.backend.conversation.vo.ConversationResponses;
@@ -10,8 +10,11 @@ import java.util.List;
 import tools.jackson.databind.json.JsonMapper;
 
 /** 将持久化回答快照映射为对外响应。 */
-final class ConversationMessagePresenter {
+public final class ConversationMessagePresenter {
   private final JsonMapper json = JsonCodecs.snapshots();
+
+  /** 创建供会话查询与生成结果共用的无状态响应映射器。 */
+  public ConversationMessagePresenter() {}
 
   /**
    * 将消息实体中的 JSON 快照转换为前端回答结构。
@@ -19,7 +22,7 @@ final class ConversationMessagePresenter {
    * @param message 回答消息实体
    * @return 前端回答版本
    */
-  ConversationResponses.AssistantMessage assistantResponse(Message message) {
+  public ConversationResponses.AssistantMessage assistantResponse(Message message) {
     List<SourceResponse> sources = new SourceSnapshotDecoder().decode(message.getSourcesJson());
     List<String> citations = readArray(message.getCitationsJson(), String[].class);
     ModelInfoResponse modelInfo =

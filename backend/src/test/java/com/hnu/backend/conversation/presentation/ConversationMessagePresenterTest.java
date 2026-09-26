@@ -1,4 +1,4 @@
-package com.hnu.backend.conversation.service;
+package com.hnu.backend.conversation.presentation;
 
 import static org.junit.jupiter.api.Assertions.*;
 

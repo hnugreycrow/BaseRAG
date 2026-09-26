@@ -58,7 +58,10 @@ com.hnu.backend
 │  ├─ controller/
 │  ├─ dto/
 │  ├─ vo/
-│  ├─ service/
+│  ├─ service/                # 会话管理与上下文查询
+│  ├─ generation/             # 生成协调、状态、准备、执行、终态写入与 SSE 通道
+│  ├─ presentation/           # 查询与生成共用的回答响应映射
+│  ├─ adapter/                # 对接 RAG 的会话记忆实现
 │  ├─ entity/
 │  └─ mapper/
 ├─ model/
@@ -104,6 +107,8 @@ src/main/resources
 ```
 
 测试目录镜像主代码包；真实 PostgreSQL、pgvector 与 RustFS 测试集中在 `integration/`。
+
+会话生成内部协作类集中在 `conversation/generation/`，包级可见的状态和通道不对外开放。`service/` 通过生成服务入口发起任务和执行会话删除前的活动检查；共用的消息映射放在 `presentation/`，避免生成内部类依赖会话查询实现。生成服务仍负责执行器关闭，跨包只暴露必要操作。
 
 业务参数统一放在所属模块的 `configuration/`；根 `configuration/` 只放全局装配。包移动不改变 `@ConfigurationProperties` 前缀，仍由启动类从 `com.hnu.backend` 根包扫描。意图节点模型和数据库实体分开，快照缓存通过 `event/` 中的事件失效；此次分层不改变跨模块调用关系。
 
