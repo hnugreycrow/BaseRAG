@@ -13,8 +13,7 @@ import com.hnu.backend.document.mapper.DocumentMapper;
 import com.hnu.backend.document.mapper.DocumentVersionMapper;
 import com.hnu.backend.document.parser.MarkdownChunker;
 import com.hnu.backend.document.storage.FileStorage;
-import com.hnu.backend.knowledgebase.entity.KnowledgeBase;
-import com.hnu.backend.knowledgebase.service.KnowledgeBaseService;
+import com.hnu.backend.knowledgebase.api.KnowledgeBaseAccess;
 import com.hnu.backend.model.client.EmbeddingClient;
 import com.hnu.backend.shared.error.ApiException;
 import com.hnu.backend.shared.persistence.UuidTypeHandler;
@@ -41,7 +40,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 class DocumentServiceParsingTest {
   private final UUID owner = UUID.randomUUID();
   private final UUID kbId = UUID.randomUUID();
-  private final KnowledgeBaseService knowledgeBaseService = mock(KnowledgeBaseService.class);
+  private final KnowledgeBaseAccess knowledgeBaseService = mock(KnowledgeBaseAccess.class);
   private final DocumentMapper documentMapper = mock(DocumentMapper.class);
   private final DocumentVersionMapper documentVersionMapper = mock(DocumentVersionMapper.class);
   private final DocumentChunkMapper documentChunkMapper = mock(DocumentChunkMapper.class);
@@ -87,12 +86,8 @@ class DocumentServiceParsingTest {
 
   @Test
   void invalidPdfIsRejectedBeforeObjectStorage() {
-    KnowledgeBase kb = new KnowledgeBase();
-    kb.setEmbeddingModelId("model-id");
-    kb.setEmbeddingProvider("local");
-    kb.setEmbeddingModel("embedding");
-    kb.setEmbeddingDimensions(2);
-    when(knowledgeBaseService.ensureModel(owner, kbId)).thenReturn(kb);
+    var kb = new KnowledgeBaseAccess.EmbeddingBinding("model-id", "local", "embedding", 2);
+    when(knowledgeBaseService.ensureEmbedding(owner, kbId)).thenReturn(kb);
     var service =
         new DocumentService(
             knowledgeBaseService,
@@ -120,12 +115,8 @@ class DocumentServiceParsingTest {
     var assistant = new MapperBuilderAssistant(configuration, "");
     TableInfoHelper.initTableInfo(assistant, DocumentVersion.class);
     TableInfoHelper.initTableInfo(assistant, DocumentChunk.class);
-    KnowledgeBase kb = new KnowledgeBase();
-    kb.setEmbeddingModelId("model-id");
-    kb.setEmbeddingProvider("local");
-    kb.setEmbeddingModel("embedding");
-    kb.setEmbeddingDimensions(2);
-    when(knowledgeBaseService.ensureModel(owner, kbId)).thenReturn(kb);
+    var kb = new KnowledgeBaseAccess.EmbeddingBinding("model-id", "local", "embedding", 2);
+    when(knowledgeBaseService.ensureEmbedding(owner, kbId)).thenReturn(kb);
     doAnswer(
             invocation -> {
               Consumer<TransactionStatus> callback = invocation.getArgument(0);

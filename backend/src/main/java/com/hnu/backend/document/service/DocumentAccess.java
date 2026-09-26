@@ -5,19 +5,19 @@ import com.hnu.backend.document.entity.Document;
 import com.hnu.backend.document.entity.DocumentVersion;
 import com.hnu.backend.document.mapper.DocumentMapper;
 import com.hnu.backend.document.mapper.DocumentVersionMapper;
-import com.hnu.backend.knowledgebase.service.KnowledgeBaseService;
+import com.hnu.backend.knowledgebase.api.KnowledgeBaseAccess;
 import com.hnu.backend.shared.error.ApiException;
 import com.hnu.backend.shared.error.ErrorCode;
 import java.util.UUID;
 
 /** 统一文档归属校验与最新版本查找。 */
 final class DocumentAccess {
-  private final KnowledgeBaseService knowledgeBases;
+  private final KnowledgeBaseAccess knowledgeBases;
   private final DocumentMapper documents;
   private final DocumentVersionMapper versions;
 
   DocumentAccess(
-      KnowledgeBaseService knowledgeBases,
+      KnowledgeBaseAccess knowledgeBases,
       DocumentMapper documents,
       DocumentVersionMapper versions) {
     this.knowledgeBases = knowledgeBases;
@@ -26,7 +26,7 @@ final class DocumentAccess {
   }
 
   Document requireDocument(UUID ownerId, UUID knowledgeBaseId, UUID documentId) {
-    knowledgeBases.requireEntity(ownerId, knowledgeBaseId);
+    knowledgeBases.requireOwned(ownerId, knowledgeBaseId);
     Document document = documents.selectById(documentId);
     if (document == null || !document.getKnowledgeBaseId().equals(knowledgeBaseId)) {
       throw new ApiException(ErrorCode.DOCUMENT_NOT_FOUND, "文档不存在");

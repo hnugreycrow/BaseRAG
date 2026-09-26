@@ -1,6 +1,7 @@
 package com.hnu.backend.knowledgebase.controller;
 
 import cn.dev33.satoken.annotation.SaCheckRole;
+import com.hnu.backend.application.service.KnowledgeBaseDeletionService;
 import com.hnu.backend.auth.service.CurrentUserService;
 import com.hnu.backend.knowledgebase.dto.KnowledgeBaseRequest;
 import com.hnu.backend.knowledgebase.service.KnowledgeBaseService;
@@ -36,17 +37,22 @@ import org.springframework.web.bind.annotation.RestController;
 public class KnowledgeBaseController {
   private final KnowledgeBaseService knowledgeBaseService;
   private final CurrentUserService currentUserService;
+  private final KnowledgeBaseDeletionService deletion;
 
   /**
    * 创建知识库控制器。
    *
    * @param knowledgeBaseService 知识库服务
+   * @param deletion 跨模块删除编排服务
    * @param currentUserService 当前用户解析服务
    */
   public KnowledgeBaseController(
-      KnowledgeBaseService knowledgeBaseService, CurrentUserService currentUserService) {
+      KnowledgeBaseService knowledgeBaseService,
+      KnowledgeBaseDeletionService deletion,
+      CurrentUserService currentUserService) {
     this.knowledgeBaseService = knowledgeBaseService;
     this.currentUserService = currentUserService;
+    this.deletion = deletion;
   }
 
   /**
@@ -117,6 +123,6 @@ public class KnowledgeBaseController {
   @DeleteMapping("/{id}")
   @ResponseStatus(HttpStatus.NO_CONTENT)
   public void delete(@PathVariable UUID id) {
-    knowledgeBaseService.delete(id);
+    deletion.delete(id);
   }
 }

@@ -9,8 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.hnu.backend.document.service.DocumentService;
 import com.hnu.backend.document.vo.DocumentBatchUploadResponse;
 import com.hnu.backend.document.vo.DocumentChunkBatchResponse;
-import com.hnu.backend.knowledgebase.entity.KnowledgeBase;
-import com.hnu.backend.knowledgebase.service.KnowledgeBaseService;
+import com.hnu.backend.knowledgebase.api.KnowledgeBaseAccess;
 import com.hnu.backend.shared.error.GlobalExceptionHandler;
 import com.hnu.backend.shared.web.ApiResponseAdvice;
 import java.nio.charset.StandardCharsets;
@@ -25,16 +24,14 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class DocumentControllerBatchTest {
   private final DocumentService documentService = mock(DocumentService.class);
-  private final KnowledgeBaseService knowledgeBaseService = mock(KnowledgeBaseService.class);
+  private final KnowledgeBaseAccess knowledgeBaseService = mock(KnowledgeBaseAccess.class);
   private final UUID ownerId = UUID.randomUUID();
   private final UUID knowledgeBaseId = UUID.randomUUID();
   private MockMvc mvc;
 
   @BeforeEach
   void setUp() {
-    KnowledgeBase managed = new KnowledgeBase();
-    managed.setOwnerId(ownerId);
-    when(knowledgeBaseService.requireAdminOwned(knowledgeBaseId)).thenReturn(managed);
+    when(knowledgeBaseService.requireManagedOwner(knowledgeBaseId)).thenReturn(ownerId);
     mvc =
         MockMvcBuilders.standaloneSetup(
                 new DocumentController(documentService, knowledgeBaseService))

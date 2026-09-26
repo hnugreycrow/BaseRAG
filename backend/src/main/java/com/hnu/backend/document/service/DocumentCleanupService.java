@@ -2,6 +2,7 @@ package com.hnu.backend.document.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.hnu.backend.document.api.DocumentCleanup;
 import com.hnu.backend.document.entity.Document;
 import com.hnu.backend.document.entity.DocumentVersion;
 import com.hnu.backend.document.entity.DocumentVersionStatus;
@@ -20,13 +21,21 @@ import org.springframework.stereotype.Service;
 
 /** 封装知识库级联删除时的文档数据与对象存储清理。 */
 @Service
-public class DocumentCleanupService {
+public class DocumentCleanupService implements DocumentCleanup {
   private static final Logger log = LoggerFactory.getLogger(DocumentCleanupService.class);
   private final DocumentMapper documentMapper;
   private final DocumentVersionMapper documentVersionMapper;
   private final DocumentChunkMapper documentChunkMapper;
   private final FileStorage storage;
 
+  /**
+   * 创建文档清理服务。
+   *
+   * @param documentMapper 文档记录访问接口
+   * @param documentVersionMapper 版本记录访问接口
+   * @param documentChunkMapper 分块记录访问接口
+   * @param storage 原文件存储接口
+   */
   public DocumentCleanupService(
       DocumentMapper documentMapper,
       DocumentVersionMapper documentVersionMapper,
@@ -38,8 +47,10 @@ public class DocumentCleanupService {
     this.storage = storage;
   }
 
-  /** 查询知识库全部文档版本对应的对象存储键。 */
+  /** {@inheritDoc} */
+  @Override
   public List<String> storageKeys(UUID knowledgeBaseId) {
+    requireId(knowledgeBaseId);
     return documentVersionMapper
         .selectList(
             new LambdaQueryWrapper<DocumentVersion>()
@@ -49,12 +60,10 @@ public class DocumentCleanupService {
         .toList();
   }
 
-  /**
-   * 按外键依赖顺序删除知识库下的文档记录。
-   *
-   * <p>调用方应在事务中执行该方法。
-   */
+  /** {@inheritDoc} */
+  @Override
   public void deleteRecords(UUID knowledgeBaseId) {
+    requireId(knowledgeBaseId);
     if (documentVersionMapper.selectCount(
             new LambdaQueryWrapper<DocumentVersion>()
                 .eq(DocumentVersion::getKnowledgeBaseId, knowledgeBaseId)
@@ -74,9 +83,17 @@ public class DocumentCleanupService {
         new LambdaQueryWrapper<Document>().eq(Document::getKnowledgeBaseId, knowledgeBaseId));
   }
 
-  /** 逐个尽力删除对象存储文件，单个文件失败不影响其余清理。 */
+  /** {@inheritDoc} */
+  @Override
   public void removeStoredFiles(List<String> storageKeys) {
     storageKeys.forEach(this::removeStoredFile);
+  }
+
+  /** 在构造范围条件前拒绝缺失标识，避免将误调用传入持久化层。 */
+  private void requireId(UUID knowledgeBaseId) {
+    if (knowledgeBaseId == null) {
+      throw ApiException.bad(ErrorCode.INVALID_REQUEST, "知识库标识不能为空");
+    }
   }
 
   private void removeStoredFile(String key) {

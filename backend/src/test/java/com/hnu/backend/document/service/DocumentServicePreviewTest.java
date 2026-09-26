@@ -13,8 +13,7 @@ import com.hnu.backend.document.mapper.DocumentMapper;
 import com.hnu.backend.document.mapper.DocumentVersionMapper;
 import com.hnu.backend.document.parser.MarkdownChunker;
 import com.hnu.backend.document.storage.FileStorage;
-import com.hnu.backend.knowledgebase.entity.KnowledgeBase;
-import com.hnu.backend.knowledgebase.service.KnowledgeBaseService;
+import com.hnu.backend.knowledgebase.api.KnowledgeBaseAccess;
 import com.hnu.backend.model.client.EmbeddingClient;
 import com.hnu.backend.shared.error.ApiException;
 import com.hnu.backend.shared.persistence.UuidTypeHandler;
@@ -33,7 +32,7 @@ class DocumentServicePreviewTest {
   private final UUID owner = UUID.randomUUID();
   private final UUID kbId = UUID.randomUUID();
   private final UUID documentId = UUID.randomUUID();
-  private final KnowledgeBaseService knowledgeBaseService = mock(KnowledgeBaseService.class);
+  private final KnowledgeBaseAccess knowledgeBaseService = mock(KnowledgeBaseAccess.class);
   private final DocumentMapper documentMapper = mock(DocumentMapper.class);
   private final DocumentVersionMapper versionMapper = mock(DocumentVersionMapper.class);
   private final DocumentChunkMapper chunkMapper = mock(DocumentChunkMapper.class);
@@ -120,7 +119,6 @@ class DocumentServicePreviewTest {
 
   @Test
   void rejectsDocumentFromAnotherKnowledgeBaseBeforeReadingStorage() {
-    when(knowledgeBaseService.requireEntity(owner, kbId)).thenReturn(new KnowledgeBase());
     Document document = new Document();
     document.setId(documentId);
     document.setKnowledgeBaseId(UUID.randomUUID());
@@ -134,7 +132,6 @@ class DocumentServicePreviewTest {
   }
 
   private DocumentVersion arrange(String name, String format, String mediaType, byte[] bytes) {
-    when(knowledgeBaseService.requireEntity(owner, kbId)).thenReturn(new KnowledgeBase());
     Document document = new Document();
     document.setId(documentId);
     document.setKnowledgeBaseId(kbId);

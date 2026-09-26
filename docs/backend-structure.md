@@ -2,7 +2,7 @@
 
 ## 1. 设计结论
 
-后端保持单个 Spring Boot / Maven 模块，采用“按业务能力分包，包内使用直白职责目录”的模块化单体结构。RAG 内部按流水线阶段聚合相关模型、端口和实现，其他模块继续使用 Controller / Service / Mapper 等职责目录。当前业务规模不使用 `api/application/domain/infrastructure` 四层模板，避免只有一两个文件的抽象目录。
+后端保持单个 Spring Boot / Maven 模块，采用“按业务能力分包，包内使用直白职责目录”的模块化单体结构。RAG 内部按流水线阶段聚合相关模型、端口和实现，其他模块继续使用 Controller / Service / Mapper 等职责目录。不为每个模块套用 `api/application/domain/infrastructure` 四层模板；存在实际跨模块依赖时，通过模块内 `api/` 定义窄接口，由顶层 `application/service/` 编排跨模块事务。
 
 顶层模块围绕 RAG 主链路划分：知识库、文档与索引、RAG 检索生成、会话交付、模型接入。Controller / Service / Mapper 分层仍是强制规则，DTO、VO、Entity 必须分离。
 
@@ -15,7 +15,10 @@ com.hnu.backend
 │  ├─ web/                    # 统一响应、ResponseBodyAdvice、请求 ID
 │  ├─ error/                  # 业务异常与全局异常处理
 │  └─ persistence/            # 通用 MyBatis 类型处理
+├─ application/
+│  └─ service/                # 知识库与文档的跨模块删除编排
 ├─ knowledgebase/
+│  ├─ api/                    # 访问校验、不可变模型绑定与记录删除
 │  ├─ controller/
 │  ├─ dto/
 │  ├─ vo/
@@ -23,6 +26,7 @@ com.hnu.backend
 │  ├─ entity/
 │  └─ mapper/
 ├─ document/
+│  ├─ api/                    # 对外提供关联文档清理能力
 │  ├─ controller/
 │  ├─ dto/
 │  ├─ vo/
@@ -123,3 +127,22 @@ Mapper → Entity
 2. 将 `ConversationService` 拆为会话 CRUD、生成协调和 SSE 适配，避免 Service 长期直接承担所有传输与并发职责。
 
 只有出现独立部署、不同团队独立发布或稳定模块边界等真实需求后，才评估 Maven 多模块或微服务。
+
+## 知识库与文档的协作边界
+
+- 文档模块只依赖 `knowledgebase.api.KnowledgeBaseAccess`。访问校验返回创建者标识或不返回值，模型绑定返回不可变的 `EmbeddingBinding`；不传递知识库持久化实体。
+- `KnowledgeBaseController` 将删除请求交给 `application.service.KnowledgeBaseDeletionService`，其他知识库操作仍由知识库服务处理。
+- 删除编排只调用 `KnowledgeBaseAccess`、`KnowledgeBaseRemoval` 和 `document.api.DocumentCleanup`。知识库核心不反向依赖文档或应用编排。
+- 文档记录与知识库记录在同一事务内删除。正在处理的文档会阻止删除；任何数据库异常都会触发回滚。
+- 意图树失效事件在事务内发布，由现有 `AFTER_COMMIT` 监听器处理；对象存储清理注册提交回调。加入外层事务时，两者等待实际提交，回滚不清理文件。文件删除失败只记录日志，并继续处理其他文件。
+
+`ModuleBoundaryTest` 使用仅在测试阶段引入的 ArchUnit 1.4.2 检查 Controller/Mapper 隔离、核心不依赖 Controller、上述公开接口边界，以及知识库、文档、应用编排核心之间的依赖环。HTTP Controller 属于入口，不计入核心环检测。其他模块既有依赖环尚未纳入治理，不能把此测试通过解释为整个项目已无环。
+
+运行专项回归：
+
+```powershell
+cd backend
+./mvnw.cmd '-Dtest=ModuleBoundaryTest,KnowledgeBaseDeletionServiceTest,DocumentCleanupServiceTest,KnowledgeBaseServiceTest' test
+```
+
+删除编排测试使用真实 Spring JDBC 事务管理器和模拟 JDBC 连接，验证提交、回滚与外层事务回调顺序；它不替代真实 PostgreSQL 集成测试。

@@ -18,7 +18,7 @@ import com.hnu.backend.document.storage.FileStorage;
 import com.hnu.backend.document.vo.DocumentBatchUploadResponse;
 import com.hnu.backend.document.vo.DocumentChunkBatchResponse;
 import com.hnu.backend.document.vo.DocumentImportResponse;
-import com.hnu.backend.knowledgebase.service.KnowledgeBaseService;
+import com.hnu.backend.knowledgebase.api.KnowledgeBaseAccess;
 import com.hnu.backend.model.client.EmbeddingClient;
 import com.hnu.backend.shared.error.ApiException;
 import com.hnu.backend.shared.error.ErrorCode;
@@ -46,7 +46,7 @@ import org.springframework.web.multipart.MultipartFile;
 /** 管理文档导入、分块、异步排队和失败恢复。 */
 final class DocumentImportService {
   private static final Logger log = LoggerFactory.getLogger(DocumentImportService.class);
-  private final KnowledgeBaseService knowledgeBaseService;
+  private final KnowledgeBaseAccess knowledgeBaseService;
   private final DocumentMapper documentMapper;
   private final DocumentVersionMapper documentVersionMapper;
   private final DocumentChunkMapper documentChunkMapper;
@@ -78,7 +78,7 @@ final class DocumentImportService {
    * @param access 文档归属与版本查找
    */
   DocumentImportService(
-      KnowledgeBaseService knowledgeBaseService,
+      KnowledgeBaseAccess knowledgeBaseService,
       DocumentMapper documentMapper,
       DocumentVersionMapper documentVersionMapper,
       DocumentChunkMapper documentChunkMapper,
@@ -123,7 +123,7 @@ final class DocumentImportService {
    * @return 状态为 {@code UPLOADED} 的导入结果
    */
   public DocumentImportResponse upload(UUID ownerId, UUID knowledgeBaseId, MultipartFile file) {
-    var knowledgeBase = knowledgeBaseService.ensureModel(ownerId, knowledgeBaseId);
+    var knowledgeBase = knowledgeBaseService.ensureEmbedding(ownerId, knowledgeBaseId);
     String name = Optional.ofNullable(file.getOriginalFilename()).orElse("");
     name = name.replace('\\', '/');
     name = name.substring(name.lastIndexOf('/') + 1);
@@ -175,16 +175,16 @@ final class DocumentImportService {
     version.setStatus(DocumentVersionStatus.UPLOADED);
     version.setParserVersion(format.parserVersion());
     version.setChunkerVersion("structured-block-v6");
-    version.setEmbeddingModelId(knowledgeBase.getEmbeddingModelId());
-    version.setEmbeddingProvider(knowledgeBase.getEmbeddingProvider());
-    version.setEmbeddingModel(knowledgeBase.getEmbeddingModel());
-    version.setEmbeddingDimensions(knowledgeBase.getEmbeddingDimensions());
+    version.setEmbeddingModelId(knowledgeBase.modelId());
+    version.setEmbeddingProvider(knowledgeBase.provider());
+    version.setEmbeddingModel(knowledgeBase.model());
+    version.setEmbeddingDimensions(knowledgeBase.dimensions());
 
     try {
       storage.put(version.getStorageKey(), bytes, version.getMediaType());
       tx.executeWithoutResult(
           status -> {
-            knowledgeBaseService.lockAndBindModel(
+            knowledgeBaseService.lockAndBind(
                 ownerId,
                 knowledgeBaseId,
                 version.getEmbeddingModelId(),
@@ -211,7 +211,7 @@ final class DocumentImportService {
     if (files == null || files.isEmpty() || files.size() > 10) {
       throw ApiException.bad(ErrorCode.INVALID_BATCH_SIZE, "每次请选择 1 至 10 个文件");
     }
-    knowledgeBaseService.ensureModel(ownerId, knowledgeBaseId);
+    knowledgeBaseService.ensureEmbedding(ownerId, knowledgeBaseId);
     List<DocumentBatchUploadResponse.Item> results = new ArrayList<>(files.size());
     for (int index = 0; index < files.size(); index++) {
       MultipartFile file = files.get(index);
@@ -288,7 +288,7 @@ final class DocumentImportService {
       result =
           tx.execute(
               status -> {
-                knowledgeBaseService.requireEntity(ownerId, knowledgeBaseId);
+                knowledgeBaseService.requireOwned(ownerId, knowledgeBaseId);
                 List<DocumentVersion> selectedVersions = new ArrayList<>(documentIds.size());
                 for (UUID documentId : documentIds) {
                   access.requireDocument(ownerId, knowledgeBaseId, documentId);
@@ -471,7 +471,7 @@ final class DocumentImportService {
       tx.executeWithoutResult(
           status -> {
             // 新分块和激活版本在同一事务内切换，查询端不会观察到半成品版本。
-            knowledgeBaseService.lockAndBindModel(
+            knowledgeBaseService.lockAndBind(
                 ownerId,
                 knowledgeBaseId,
                 version.getEmbeddingModelId(),

@@ -1,8 +1,8 @@
 package com.hnu.backend.knowledgebase.service;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
-import com.hnu.backend.document.service.DocumentCleanupService;
-import com.hnu.backend.intent.IntentTreeChangedEvent;
+import com.hnu.backend.knowledgebase.api.KnowledgeBaseAccess;
+import com.hnu.backend.knowledgebase.api.KnowledgeBaseRemoval;
 import com.hnu.backend.knowledgebase.entity.KnowledgeBase;
 import com.hnu.backend.knowledgebase.mapper.KnowledgeBaseMapper;
 import com.hnu.backend.knowledgebase.vo.EmbeddingModelResponse;
@@ -13,39 +13,28 @@ import com.hnu.backend.shared.error.ErrorCode;
 import com.hnu.backend.shared.web.PageResponse;
 import java.util.List;
 import java.util.UUID;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /** 处理知识库生命周期及其向量模型绑定规则。 */
 @Service
-public class KnowledgeBaseService {
+public class KnowledgeBaseService implements KnowledgeBaseAccess, KnowledgeBaseRemoval {
   private final KnowledgeBaseMapper knowledgeBaseMapper;
-  private final DocumentCleanupService documentCleanupService;
   private final TransactionTemplate tx;
   private final AiProperties ai;
-  private final ApplicationEventPublisher events;
 
   /**
    * 创建知识库服务。
    *
    * @param knowledgeBaseMapper 知识库持久化接口
-   * @param documentCleanupService 关联文档清理服务
    * @param tx 事务模板
    * @param ai 模型配置
-   * @param events 应用事件发布器
    */
   public KnowledgeBaseService(
-      KnowledgeBaseMapper knowledgeBaseMapper,
-      DocumentCleanupService documentCleanupService,
-      TransactionTemplate tx,
-      AiProperties ai,
-      ApplicationEventPublisher events) {
+      KnowledgeBaseMapper knowledgeBaseMapper, TransactionTemplate tx, AiProperties ai) {
     this.knowledgeBaseMapper = knowledgeBaseMapper;
-    this.documentCleanupService = documentCleanupService;
     this.tx = tx;
     this.ai = ai;
-    this.events = events;
   }
 
   /**
@@ -85,7 +74,7 @@ public class KnowledgeBaseService {
    * @param id 知识库标识
    * @return 持久化实体
    */
-  public KnowledgeBase requireEntity(UUID ownerId, UUID id) {
+  private KnowledgeBase requireEntity(UUID ownerId, UUID id) {
     KnowledgeBase kb =
         knowledgeBaseMapper.selectOne(
             Wrappers.<KnowledgeBase>lambdaQuery()
@@ -103,7 +92,7 @@ public class KnowledgeBaseService {
    * @param id 知识库标识
    * @return 公共知识库实体
    */
-  public KnowledgeBase requireAdminOwned(UUID id) {
+  private KnowledgeBase requireAdminOwned(UUID id) {
     KnowledgeBase kb = knowledgeBaseMapper.findAdminOwned(id);
     if (kb == null) {
       throw new ApiException(ErrorCode.KNOWLEDGE_BASE_NOT_FOUND, "知识库不存在");
@@ -162,7 +151,7 @@ public class KnowledgeBaseService {
    * @param id 知识库标识
    * @return 已绑定模型的知识库实体
    */
-  public KnowledgeBase ensureModel(UUID ownerId, UUID id) {
+  private KnowledgeBase ensureModel(UUID ownerId, UUID id) {
     KnowledgeBase kb = requireEntity(ownerId, id);
     if (kb.getEmbeddingModel() != null) {
       checkModel(
@@ -195,23 +184,42 @@ public class KnowledgeBaseService {
     return get(id);
   }
 
-  /**
-   * 删除知识库及其关联数据，并在数据库事务提交后尽力清理对象存储文件。
-   *
-   * <p>存储清理失败只记录日志，避免把已提交的数据库删除误报为整体失败。
-   *
-   * @param id 知识库标识
-   */
-  public void delete(UUID id) {
-    requireAdminOwned(id);
-    List<String> storageKeys = documentCleanupService.storageKeys(id);
-    tx.executeWithoutResult(
-        status -> {
-          documentCleanupService.deleteRecords(id);
-          knowledgeBaseMapper.deleteById(id);
-        });
-    events.publishEvent(new IntentTreeChangedEvent());
-    documentCleanupService.removeStoredFiles(storageKeys);
+  /** {@inheritDoc} */
+  @Override
+  public void deleteRecord(UUID id) {
+    if (id == null || knowledgeBaseMapper.deleteById(id) != 1) {
+      throw new ApiException(ErrorCode.KNOWLEDGE_BASE_NOT_FOUND, "知识库不存在");
+    }
+  }
+
+  /** {@inheritDoc} */
+  @Override
+  public UUID requireManagedOwner(UUID id) {
+    return requireAdminOwned(id).getOwnerId();
+  }
+
+  /** {@inheritDoc} */
+  @Override
+  public void requireOwned(UUID ownerId, UUID id) {
+    requireEntity(ownerId, id);
+  }
+
+  /** {@inheritDoc} */
+  @Override
+  public EmbeddingBinding ensureEmbedding(UUID ownerId, UUID id) {
+    KnowledgeBase kb = ensureModel(ownerId, id);
+    return new EmbeddingBinding(
+        kb.getEmbeddingModelId(),
+        kb.getEmbeddingProvider(),
+        kb.getEmbeddingModel(),
+        kb.getEmbeddingDimensions());
+  }
+
+  /** {@inheritDoc} */
+  @Override
+  public void lockAndBind(
+      UUID ownerId, UUID id, String modelId, String provider, String model, int dimensions) {
+    lockAndBindModel(ownerId, id, modelId, provider, model, dimensions);
   }
 
   /**
@@ -264,8 +272,7 @@ public class KnowledgeBaseService {
    * @param model 本次模型名称
    * @param dimensions 本次向量维度
    */
-  public void checkModel(
-      KnowledgeBase kb, String modelId, String provider, String model, int dimensions) {
+  void checkModel(KnowledgeBase kb, String modelId, String provider, String model, int dimensions) {
     if (kb.getEmbeddingModel() != null
         && (!kb.getEmbeddingModelId().equals(modelId)
             || !kb.getEmbeddingProvider().equals(provider)
@@ -297,7 +304,7 @@ public class KnowledgeBaseService {
    * @param dimensions 向量维度
    * @return 锁定并校验后的知识库实体
    */
-  public KnowledgeBase lockAndBindModel(
+  private KnowledgeBase lockAndBindModel(
       UUID ownerId, UUID id, String modelId, String provider, String model, int dimensions) {
     KnowledgeBase kb = knowledgeBaseMapper.lock(ownerId, id);
     if (kb == null) {

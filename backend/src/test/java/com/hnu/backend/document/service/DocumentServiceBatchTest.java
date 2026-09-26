@@ -12,8 +12,7 @@ import com.hnu.backend.document.mapper.DocumentMapper;
 import com.hnu.backend.document.mapper.DocumentVersionMapper;
 import com.hnu.backend.document.parser.MarkdownChunker;
 import com.hnu.backend.document.storage.FileStorage;
-import com.hnu.backend.knowledgebase.entity.KnowledgeBase;
-import com.hnu.backend.knowledgebase.service.KnowledgeBaseService;
+import com.hnu.backend.knowledgebase.api.KnowledgeBaseAccess;
 import com.hnu.backend.model.client.EmbeddingClient;
 import com.hnu.backend.shared.error.ApiException;
 import java.nio.charset.StandardCharsets;
@@ -33,7 +32,7 @@ import org.springframework.web.multipart.MultipartFile;
 class DocumentServiceBatchTest {
   private final UUID ownerId = UUID.randomUUID();
   private final UUID knowledgeBaseId = UUID.randomUUID();
-  private final KnowledgeBaseService knowledgeBaseService = mock(KnowledgeBaseService.class);
+  private final KnowledgeBaseAccess knowledgeBaseService = mock(KnowledgeBaseAccess.class);
   private final DocumentMapper documentMapper = mock(DocumentMapper.class);
   private final DocumentVersionMapper documentVersionMapper = mock(DocumentVersionMapper.class);
   private final FileStorage storage = mock(FileStorage.class);
@@ -42,12 +41,8 @@ class DocumentServiceBatchTest {
 
   @BeforeEach
   void setUp() {
-    KnowledgeBase kb = new KnowledgeBase();
-    kb.setEmbeddingModelId("model-id");
-    kb.setEmbeddingProvider("local");
-    kb.setEmbeddingModel("embedding");
-    kb.setEmbeddingDimensions(2);
-    when(knowledgeBaseService.ensureModel(ownerId, knowledgeBaseId)).thenReturn(kb);
+    var kb = new KnowledgeBaseAccess.EmbeddingBinding("model-id", "local", "embedding", 2);
+    when(knowledgeBaseService.ensureEmbedding(ownerId, knowledgeBaseId)).thenReturn(kb);
     doAnswer(
             invocation -> {
               Consumer<TransactionStatus> callback = invocation.getArgument(0);

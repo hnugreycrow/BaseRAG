@@ -6,8 +6,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.hnu.backend.document.service.DocumentService;
-import com.hnu.backend.knowledgebase.entity.KnowledgeBase;
-import com.hnu.backend.knowledgebase.service.KnowledgeBaseService;
+import com.hnu.backend.knowledgebase.api.KnowledgeBaseAccess;
 import com.hnu.backend.shared.web.ApiResponseAdvice;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
@@ -18,7 +17,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class DocumentContentTest {
   private final DocumentService documentService = mock(DocumentService.class);
-  private final KnowledgeBaseService knowledgeBaseService = mock(KnowledgeBaseService.class);
+  private final KnowledgeBaseAccess knowledgeBaseService = mock(KnowledgeBaseAccess.class);
   private final DocumentController controller =
       new DocumentController(documentService, knowledgeBaseService);
   private final UUID owner = UUID.randomUUID();
@@ -28,9 +27,7 @@ class DocumentContentTest {
 
   @Test
   void mvcReturnsRawPdfRangeWithoutJsonEnvelope() throws Exception {
-    KnowledgeBase managed = new KnowledgeBase();
-    managed.setOwnerId(owner);
-    when(knowledgeBaseService.requireAdminOwned(kb)).thenReturn(managed);
+    when(knowledgeBaseService.requireManagedOwner(kb)).thenReturn(owner);
     when(documentService.originalFile(owner, kb, document, version))
         .thenReturn(
             new DocumentService.OriginalFile(
@@ -56,9 +53,7 @@ class DocumentContentTest {
 
   @Test
   void servesPdfAndSingleByteRanges() {
-    KnowledgeBase managed = new KnowledgeBase();
-    managed.setOwnerId(owner);
-    when(knowledgeBaseService.requireAdminOwned(kb)).thenReturn(managed);
+    when(knowledgeBaseService.requireManagedOwner(kb)).thenReturn(owner);
     when(documentService.originalFile(owner, kb, document, version))
         .thenReturn(
             new DocumentService.OriginalFile(
@@ -91,9 +86,7 @@ class DocumentContentTest {
 
   @Test
   void currentContentResolvesTheDocumentWithoutAClientVersionId() {
-    KnowledgeBase managed = new KnowledgeBase();
-    managed.setOwnerId(owner);
-    when(knowledgeBaseService.requireAdminOwned(kb)).thenReturn(managed);
+    when(knowledgeBaseService.requireManagedOwner(kb)).thenReturn(owner);
     when(documentService.originalFile(owner, kb, document))
         .thenReturn(
             new DocumentService.OriginalFile(

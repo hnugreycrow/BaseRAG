@@ -3,8 +3,7 @@ package com.hnu.backend.document.service;
 import com.hnu.backend.conversation.entity.MessageStatus;
 import com.hnu.backend.conversation.service.ConversationService;
 import com.hnu.backend.conversation.vo.ConversationResponses;
-import com.hnu.backend.knowledgebase.entity.KnowledgeBase;
-import com.hnu.backend.knowledgebase.service.KnowledgeBaseService;
+import com.hnu.backend.knowledgebase.api.KnowledgeBaseAccess;
 import com.hnu.backend.rag.vo.SourceResponse;
 import com.hnu.backend.shared.error.ApiException;
 import com.hnu.backend.shared.error.ErrorCode;
@@ -15,13 +14,13 @@ import org.springframework.stereotype.Service;
 @Service
 public class CitedDocumentService {
   private final ConversationService conversationService;
-  private final KnowledgeBaseService knowledgeBaseService;
+  private final KnowledgeBaseAccess knowledgeBaseService;
   private final DocumentService documentService;
 
   /** 创建引用原文件授权服务。 */
   public CitedDocumentService(
       ConversationService conversationService,
-      KnowledgeBaseService knowledgeBaseService,
+      KnowledgeBaseAccess knowledgeBaseService,
       DocumentService documentService) {
     this.conversationService = conversationService;
     this.knowledgeBaseService = knowledgeBaseService;
@@ -55,12 +54,9 @@ public class CitedDocumentService {
             .filter(candidate -> candidate.citationId().equals(citationId))
             .findFirst()
             .orElseThrow(CitedDocumentService::notFound);
-    KnowledgeBase knowledgeBase = knowledgeBaseService.requireAdminOwned(source.knowledgeBaseId());
+    UUID ownerId = knowledgeBaseService.requireManagedOwner(source.knowledgeBaseId());
     return documentService.originalFile(
-        knowledgeBase.getOwnerId(),
-        source.knowledgeBaseId(),
-        source.documentId(),
-        source.versionId());
+        ownerId, source.knowledgeBaseId(), source.documentId(), source.versionId());
   }
 
   /** 对未授权引用使用统一的不存在响应，避免泄露文档标识。 */

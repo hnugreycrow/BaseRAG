@@ -6,8 +6,7 @@ import static org.mockito.Mockito.*;
 
 import com.hnu.backend.conversation.service.ConversationService;
 import com.hnu.backend.conversation.vo.ConversationResponses;
-import com.hnu.backend.knowledgebase.entity.KnowledgeBase;
-import com.hnu.backend.knowledgebase.service.KnowledgeBaseService;
+import com.hnu.backend.knowledgebase.api.KnowledgeBaseAccess;
 import com.hnu.backend.rag.vo.SourceResponse;
 import com.hnu.backend.shared.error.ApiException;
 import com.hnu.backend.shared.error.ErrorCode;
@@ -18,7 +17,7 @@ import org.junit.jupiter.api.Test;
 /** 引用原文件必须来自本人会话中已完成回答的实际引用。 */
 class CitedDocumentServiceTest {
   private final ConversationService conversationService = mock(ConversationService.class);
-  private final KnowledgeBaseService knowledgeBaseService = mock(KnowledgeBaseService.class);
+  private final KnowledgeBaseAccess knowledgeBaseService = mock(KnowledgeBaseAccess.class);
   private final DocumentService documentService = mock(DocumentService.class);
   private final CitedDocumentService citedDocumentService =
       new CitedDocumentService(conversationService, knowledgeBaseService, documentService);
@@ -33,9 +32,7 @@ class CitedDocumentServiceTest {
   @Test
   void readsOnlyActuallyCitedVersionUsingLibraryCreator() {
     answer("COMPLETED", List.of("S1"), "S1");
-    KnowledgeBase kb = new KnowledgeBase();
-    kb.setOwnerId(creatorId);
-    when(knowledgeBaseService.requireAdminOwned(knowledgeBaseId)).thenReturn(kb);
+    when(knowledgeBaseService.requireManagedOwner(knowledgeBaseId)).thenReturn(creatorId);
     var file = new DocumentService.OriginalFile("policy.pdf", "application/pdf", new byte[] {1});
     when(documentService.originalFile(creatorId, knowledgeBaseId, documentId, versionId))
         .thenReturn(file);

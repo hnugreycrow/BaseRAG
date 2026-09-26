@@ -11,7 +11,7 @@ import com.hnu.backend.document.vo.DocumentChunkResponse;
 import com.hnu.backend.document.vo.DocumentImportResponse;
 import com.hnu.backend.document.vo.DocumentPreviewResponse;
 import com.hnu.backend.document.vo.DocumentResponse;
-import com.hnu.backend.knowledgebase.service.KnowledgeBaseService;
+import com.hnu.backend.knowledgebase.api.KnowledgeBaseAccess;
 import com.hnu.backend.shared.web.PageResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -52,7 +52,7 @@ import org.springframework.web.multipart.MultipartFile;
 @SaCheckRole("ADMIN")
 public class DocumentController {
   private final DocumentService documentService;
-  private final KnowledgeBaseService knowledgeBaseService;
+  private final KnowledgeBaseAccess knowledgeBaseService;
 
   /**
    * 创建文档控制器。
@@ -61,7 +61,7 @@ public class DocumentController {
    * @param knowledgeBaseService 公共知识库查询服务
    */
   public DocumentController(
-      DocumentService documentService, KnowledgeBaseService knowledgeBaseService) {
+      DocumentService documentService, KnowledgeBaseAccess knowledgeBaseService) {
     this.documentService = documentService;
     this.knowledgeBaseService = knowledgeBaseService;
   }
@@ -73,7 +73,7 @@ public class DocumentController {
    * @return 知识库创建者标识
    */
   private UUID managedOwner(UUID knowledgeBaseId) {
-    return knowledgeBaseService.requireAdminOwned(knowledgeBaseId).getOwnerId();
+    return knowledgeBaseService.requireManagedOwner(knowledgeBaseId);
   }
 
   /** 上传原文件；分块和向量化由独立接口显式触发。 */

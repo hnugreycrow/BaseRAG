@@ -16,7 +16,7 @@ import com.hnu.backend.document.vo.DocumentChunkDetailResponse;
 import com.hnu.backend.document.vo.DocumentChunkResponse;
 import com.hnu.backend.document.vo.DocumentPreviewResponse;
 import com.hnu.backend.document.vo.DocumentResponse;
-import com.hnu.backend.knowledgebase.service.KnowledgeBaseService;
+import com.hnu.backend.knowledgebase.api.KnowledgeBaseAccess;
 import com.hnu.backend.shared.error.ApiException;
 import com.hnu.backend.shared.error.ErrorCode;
 import com.hnu.backend.shared.web.PageResponse;
@@ -27,7 +27,7 @@ import java.util.UUID;
 
 /** 查询文档、分块、预览和原始文件。 */
 final class DocumentReadService {
-  private final KnowledgeBaseService knowledgeBaseService;
+  private final KnowledgeBaseAccess knowledgeBaseService;
   private final DocumentMapper documentMapper;
   private final DocumentVersionMapper documentVersionMapper;
   private final DocumentChunkMapper documentChunkMapper;
@@ -36,7 +36,7 @@ final class DocumentReadService {
   private final DocumentAccess access;
 
   DocumentReadService(
-      KnowledgeBaseService knowledgeBaseService,
+      KnowledgeBaseAccess knowledgeBaseService,
       DocumentMapper documentMapper,
       DocumentVersionMapper documentVersionMapper,
       DocumentChunkMapper documentChunkMapper,
@@ -64,7 +64,7 @@ final class DocumentReadService {
    */
   public PageResponse<DocumentResponse> list(
       UUID ownerId, UUID id, int page, int pageSize, String rawQuery) {
-    knowledgeBaseService.requireEntity(ownerId, id);
+    knowledgeBaseService.requireOwned(ownerId, id);
     String query = normalizeQuery(rawQuery);
     long rowOffset = offset(page, pageSize);
     long total = documentMapper.selectCount(documentQuery(id, query));

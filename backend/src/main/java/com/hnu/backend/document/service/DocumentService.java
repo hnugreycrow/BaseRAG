@@ -20,7 +20,7 @@ import com.hnu.backend.document.vo.DocumentChunkResponse;
 import com.hnu.backend.document.vo.DocumentImportResponse;
 import com.hnu.backend.document.vo.DocumentPreviewResponse;
 import com.hnu.backend.document.vo.DocumentResponse;
-import com.hnu.backend.knowledgebase.service.KnowledgeBaseService;
+import com.hnu.backend.knowledgebase.api.KnowledgeBaseAccess;
 import com.hnu.backend.model.client.EmbeddingClient;
 import com.hnu.backend.shared.error.ApiException;
 import com.hnu.backend.shared.error.ErrorCode;
@@ -64,7 +64,7 @@ public class DocumentService {
    * @param processing 分块并发与排队容量配置
    */
   public DocumentService(
-      KnowledgeBaseService knowledgeBaseService,
+      KnowledgeBaseAccess knowledgeBaseService,
       DocumentMapper documentMapper,
       DocumentVersionMapper documentVersionMapper,
       DocumentChunkMapper documentChunkMapper,
