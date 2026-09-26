@@ -79,14 +79,27 @@ public class DocumentService {
     this.storage = storage;
     this.tx = tx;
     this.access = new DocumentAccess(knowledgeBaseService, documentMapper, documentVersionMapper);
+    DocumentParserRegistry parsers = new DocumentParserRegistry(chunker);
+    DocumentIndexService indexer =
+        new DocumentIndexService(
+            knowledgeBaseService,
+            documentMapper,
+            documentVersionMapper,
+            documentChunkMapper,
+            chunker,
+            parsers,
+            embedding,
+            storage,
+            tx,
+            access);
     this.importer =
         new DocumentImportService(
             knowledgeBaseService,
             documentMapper,
             documentVersionMapper,
             documentChunkMapper,
-            chunker,
-            embedding,
+            parsers,
+            indexer,
             storage,
             tx,
             processing,
@@ -97,7 +110,7 @@ public class DocumentService {
             documentMapper,
             documentVersionMapper,
             documentChunkMapper,
-            new DocumentParserRegistry(chunker),
+            parsers,
             storage,
             access);
   }

@@ -12,14 +12,11 @@ import com.hnu.backend.document.mapper.DocumentMapper;
 import com.hnu.backend.document.mapper.DocumentVersionMapper;
 import com.hnu.backend.document.parser.DocumentFormat;
 import com.hnu.backend.document.parser.DocumentParserRegistry;
-import com.hnu.backend.document.parser.MarkdownChunker;
-import com.hnu.backend.document.parser.StructuredChunkPacker;
 import com.hnu.backend.document.storage.FileStorage;
 import com.hnu.backend.document.vo.DocumentBatchUploadResponse;
 import com.hnu.backend.document.vo.DocumentChunkBatchResponse;
 import com.hnu.backend.document.vo.DocumentImportResponse;
 import com.hnu.backend.knowledgebase.api.KnowledgeBaseAccess;
-import com.hnu.backend.model.client.EmbeddingClient;
 import com.hnu.backend.shared.error.ApiException;
 import com.hnu.backend.shared.error.ErrorCode;
 import com.hnu.backend.shared.error.SafeExceptionLog;
@@ -43,19 +40,18 @@ import org.slf4j.LoggerFactory;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
-/** 管理文档导入、分块、异步排队和失败恢复。 */
+/** 管理原文件上传、索引任务准入、异步排队和中断恢复。 */
 final class DocumentImportService {
   private static final Logger log = LoggerFactory.getLogger(DocumentImportService.class);
   private final KnowledgeBaseAccess knowledgeBaseService;
   private final DocumentMapper documentMapper;
   private final DocumentVersionMapper documentVersionMapper;
   private final DocumentChunkMapper documentChunkMapper;
-  private final MarkdownChunker chunker;
 
   /** 按版本格式选择解析器，并在上传时验证原文件内容。 */
   private final DocumentParserRegistry parsers;
 
-  private final EmbeddingClient embedding;
+  private final DocumentIndexService indexer;
   private final FileStorage storage;
   private final TransactionTemplate tx;
   private final DocumentAccess access;
@@ -70,8 +66,8 @@ final class DocumentImportService {
    * @param documentMapper 文档持久化接口
    * @param documentVersionMapper 文档版本持久化接口
    * @param documentChunkMapper 文档分块持久化接口
-   * @param chunker Markdown 解析和通用结构块打包入口
-   * @param embedding 向量模型客户端
+   * @param parsers 上传内容校验器
+   * @param indexer 同步与异步共用的索引处理服务
    * @param storage 对象存储接口
    * @param tx 事务模板
    * @param processing 分块并发与排队容量配置
@@ -82,8 +78,8 @@ final class DocumentImportService {
       DocumentMapper documentMapper,
       DocumentVersionMapper documentVersionMapper,
       DocumentChunkMapper documentChunkMapper,
-      MarkdownChunker chunker,
-      EmbeddingClient embedding,
+      DocumentParserRegistry parsers,
+      DocumentIndexService indexer,
       FileStorage storage,
       TransactionTemplate tx,
       DocumentProcessingProperties processing,
@@ -92,9 +88,8 @@ final class DocumentImportService {
     this.documentMapper = documentMapper;
     this.documentVersionMapper = documentVersionMapper;
     this.documentChunkMapper = documentChunkMapper;
-    this.chunker = chunker;
-    this.parsers = new DocumentParserRegistry(chunker);
-    this.embedding = embedding;
+    this.parsers = parsers;
+    this.indexer = indexer;
     this.storage = storage;
     this.tx = tx;
     this.access = access;
@@ -252,7 +247,7 @@ final class DocumentImportService {
       throw new ApiException(ErrorCode.IMPORT_BUSY, "正在处理其他文档，请稍后重试");
     }
     try {
-      return processChunks(ownerId, knowledgeBaseId, documentId, false);
+      return indexer.process(ownerId, knowledgeBaseId, documentId, false);
     } finally {
       imports.release();
     }
@@ -306,7 +301,7 @@ final class DocumentImportService {
                     skipped.add(documentId);
                     continue;
                   }
-                  if (claimVersion(version) == 1) {
+                  if (indexer.claimVersion(version) == 1) {
                     accepted.add(documentId);
                     continue;
                   }
@@ -343,7 +338,7 @@ final class DocumentImportService {
         taskExecutor.execute(
             () -> {
               try {
-                processChunks(ownerId, knowledgeBaseId, documentId, true);
+                indexer.process(ownerId, knowledgeBaseId, documentId, true);
               } catch (RuntimeException e) {
                 log.error(
                     "backgroundChunking documentId={} exceptionType={} safeStack={}",
@@ -364,21 +359,6 @@ final class DocumentImportService {
       throw new ApiException(ErrorCode.IMPORT_BUSY, "分块队列已停止，请稍后重试");
     }
     return result;
-  }
-
-  private int claimVersion(DocumentVersion version) {
-    LambdaUpdateWrapper<DocumentVersion> update =
-        new LambdaUpdateWrapper<DocumentVersion>()
-            .eq(DocumentVersion::getId, version.getId())
-            .in(
-                DocumentVersion::getStatus,
-                List.of(
-                    DocumentVersionStatus.UPLOADED,
-                    DocumentVersionStatus.FAILED,
-                    DocumentVersionStatus.READY))
-            .set(DocumentVersion::getStatus, DocumentVersionStatus.PROCESSING)
-            .set(DocumentVersion::getErrorCode, null);
-    return documentVersionMapper.update(update);
   }
 
   /** 未完成任务不在重启后续跑；恢复旧索引或标记首次分块失败。 */
@@ -412,130 +392,6 @@ final class DocumentImportService {
 
   public void stopTaskExecutor() {
     taskExecutor.shutdownNow();
-  }
-
-  /**
-   * 在所有权校验后执行分块、向量化和原子版本切换。
-   *
-   * @param ownerId 所属用户标识；异步链路不得从请求线程隐式读取
-   * @param knowledgeBaseId 知识库标识
-   * @param documentId 文档标识
-   * @return 处理结果
-   */
-  private DocumentImportResponse processChunks(
-      UUID ownerId, UUID knowledgeBaseId, UUID documentId, boolean alreadyClaimed) {
-    Document document = access.requireDocument(ownerId, knowledgeBaseId, documentId);
-    DocumentVersion version = access.latestVersion(documentId);
-    boolean rebuilding = Objects.equals(document.getActiveVersionId(), version.getId());
-    if (!alreadyClaimed && version.getStatus() == DocumentVersionStatus.PROCESSING) {
-      throw new ApiException(ErrorCode.DOCUMENT_PROCESSING, "文档正在分块，请稍后刷新");
-    }
-    if (alreadyClaimed) {
-      if (version.getStatus() != DocumentVersionStatus.PROCESSING) {
-        throw new ApiException(ErrorCode.DOCUMENT_PROCESSING, "文档状态已变化，请稍后刷新");
-      }
-    } else {
-      int claimed = claimVersion(version);
-      if (claimed != 1) {
-        throw new ApiException(ErrorCode.DOCUMENT_PROCESSING, "文档正在分块，请稍后刷新");
-      }
-    }
-    version.setStatus(DocumentVersionStatus.PROCESSING);
-    version.setErrorCode(null);
-    try {
-      // 迁移前的版本没有格式字段，按原有 Markdown 格式处理。
-      DocumentFormat format =
-          DocumentFormat.valueOf(version.getFormat() == null ? "MARKDOWN" : version.getFormat());
-      byte[] original = storage.get(version.getStorageKey());
-      // 解析器只负责结构和来源；所有格式共用同一分块预算与策略。
-      List<StructuredChunkPacker.Chunk> pieces =
-          chunker.pack(parsers.parser(format).parse(original));
-      if (pieces.isEmpty()) {
-        throw ApiException.bad(ErrorCode.EMPTY_DOCUMENT, "文档没有可用文本");
-      }
-      if (pieces.size() > 1000) {
-        throw ApiException.bad(ErrorCode.TOO_MANY_CHUNKS, "单份文档最多处理 1000 个片段，请拆分文档");
-      }
-      embedding.requireConfigured(
-          version.getEmbeddingModelId(),
-          version.getEmbeddingProvider(),
-          version.getEmbeddingModel(),
-          version.getEmbeddingDimensions());
-      List<float[]> vectors =
-          embedding.embed(
-              version.getEmbeddingModelId(),
-              version.getEmbeddingProvider(),
-              version.getEmbeddingModel(),
-              version.getEmbeddingDimensions(),
-              pieces.stream().map(StructuredChunkPacker.Chunk::embeddingText).toList());
-      tx.executeWithoutResult(
-          status -> {
-            // 新分块和激活版本在同一事务内切换，查询端不会观察到半成品版本。
-            knowledgeBaseService.lockAndBind(
-                ownerId,
-                knowledgeBaseId,
-                version.getEmbeddingModelId(),
-                version.getEmbeddingProvider(),
-                version.getEmbeddingModel(),
-                version.getEmbeddingDimensions());
-            documentChunkMapper.delete(
-                new LambdaQueryWrapper<DocumentChunk>()
-                    .eq(DocumentChunk::getDocumentId, document.getId()));
-            for (int i = 0; i < pieces.size(); i++) {
-              var piece = pieces.get(i);
-              DocumentChunk chunk = new DocumentChunk();
-              chunk.setId(UUID.randomUUID());
-              chunk.setDocumentId(document.getId());
-              chunk.setVersionId(version.getId());
-              chunk.setChunkIndex(i);
-              chunk.setContent(piece.content());
-              chunk.setEmbeddingText(piece.embeddingText());
-              chunk.setHeading(piece.heading());
-              chunk.setSourceUnit(piece.source().unit().name());
-              chunk.setSourceStart(piece.source().start());
-              chunk.setSourceEnd(piece.source().end());
-              if (piece.source().unit()
-                  == com.hnu.backend.document.parser.StructuredBlock.SourceSpan.Unit.LINE) {
-                chunk.setLineStart(piece.source().start());
-                chunk.setLineEnd(piece.source().end());
-              }
-              chunk.setEmbeddingDimensions(version.getEmbeddingDimensions());
-              chunk.setVector(EmbeddingClient.literal(vectors.get(i)));
-              documentChunkMapper.insertVector(chunk);
-            }
-            version.setStatus(DocumentVersionStatus.READY);
-            version.setChunkerVersion("structured-block-v6");
-            documentVersionMapper.updateById(version);
-            document.setActiveVersionId(version.getId());
-            documentMapper.updateById(document);
-          });
-      log.info("chunk documentId={} chunks={} status=READY", document.getId(), pieces.size());
-      return new DocumentImportResponse(
-          document.getId(), DocumentVersionStatus.READY.name(), pieces.size());
-    } catch (RuntimeException e) {
-      String code = e instanceof ApiException api ? api.code() : ErrorCode.IMPORT_FAILED.code();
-      try {
-        tx.executeWithoutResult(
-            status -> {
-              // 重建失败时保留原 READY 状态和旧分块；首次处理失败则标记为 FAILED。
-              version.setStatus(
-                  rebuilding ? DocumentVersionStatus.READY : DocumentVersionStatus.FAILED);
-              version.setErrorCode(code);
-              documentVersionMapper.updateById(version);
-            });
-      } catch (RuntimeException markingFailure) {
-        log.error(
-            "markFailedChunking documentId={} code={} exceptionType={} safeStack={}",
-            document.getId(),
-            code,
-            markingFailure.getClass().getSimpleName(),
-            SafeExceptionLog.render(markingFailure));
-      }
-      if (e instanceof ApiException api) {
-        throw api;
-      }
-      throw ApiException.upstream(ErrorCode.IMPORT_FAILED, "文档分块失败，请检查服务状态后重试", e);
-    }
   }
 
   private void removeStoredFile(String key) {
