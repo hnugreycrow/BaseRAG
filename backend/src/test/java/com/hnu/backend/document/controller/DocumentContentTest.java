@@ -5,9 +5,9 @@ import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.hnu.backend.common.web.ApiResponseAdvice;
 import com.hnu.backend.document.service.DocumentService;
 import com.hnu.backend.knowledgebase.api.KnowledgeBaseAccess;
-import com.hnu.backend.shared.web.ApiResponseAdvice;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;

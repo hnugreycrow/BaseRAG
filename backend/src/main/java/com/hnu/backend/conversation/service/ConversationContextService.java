@@ -5,10 +5,10 @@ import com.hnu.backend.observability.RagStageName;
 import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.rag.memory.MemoryStage;
 import com.hnu.backend.rag.memory.RagMemory;
-import com.hnu.backend.rag.planning.QueryPlan;
-import com.hnu.backend.rag.planning.QueryPlanningStage;
-import com.hnu.backend.rag.routing.IntentTreeRoutingStage;
-import com.hnu.backend.rag.routing.RoutingPlan;
+import com.hnu.backend.rag.pipeline.IntentTreeRoutingStage;
+import com.hnu.backend.rag.pipeline.QueryPlan;
+import com.hnu.backend.rag.pipeline.QueryPlanningStage;
+import com.hnu.backend.rag.pipeline.RoutingPlan;
 import org.springframework.stereotype.Service;
 
 /** 依次加载会话记忆、生成问题规划并完成意图路由。 */

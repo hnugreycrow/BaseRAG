@@ -1,13 +1,13 @@
 package com.hnu.backend.document.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.hnu.backend.common.exception.ApiException;
+import com.hnu.backend.common.exception.ErrorCode;
 import com.hnu.backend.document.entity.Document;
 import com.hnu.backend.document.entity.DocumentVersion;
 import com.hnu.backend.document.mapper.DocumentMapper;
 import com.hnu.backend.document.mapper.DocumentVersionMapper;
 import com.hnu.backend.knowledgebase.api.KnowledgeBaseAccess;
-import com.hnu.backend.shared.error.ApiException;
-import com.hnu.backend.shared.error.ErrorCode;
 import java.util.UUID;
 
 /** 统一文档归属校验与最新版本查找。 */

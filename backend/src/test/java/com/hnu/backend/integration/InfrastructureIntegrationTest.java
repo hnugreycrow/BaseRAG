@@ -7,6 +7,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.hnu.backend.auth.entity.User;
 import com.hnu.backend.auth.mapper.UserMapper;
+import com.hnu.backend.common.exception.ApiException;
+import com.hnu.backend.common.exception.ErrorCode;
 import com.hnu.backend.conversation.entity.GenerationAttempt;
 import com.hnu.backend.conversation.entity.GenerationAttemptStatus;
 import com.hnu.backend.conversation.entity.Message;
@@ -34,11 +36,9 @@ import com.hnu.backend.observability.entity.RagRun;
 import com.hnu.backend.observability.entity.RagStageRun;
 import com.hnu.backend.observability.mapper.RagRunMapper;
 import com.hnu.backend.observability.mapper.RagStageRunMapper;
-import com.hnu.backend.rag.answer.ContextBuilder;
+import com.hnu.backend.rag.generation.ContextBuilder;
 import com.hnu.backend.rag.retrieval.EmbeddingBinding;
 import com.hnu.backend.rag.retrieval.RetrievalMapper;
-import com.hnu.backend.shared.error.ApiException;
-import com.hnu.backend.shared.error.ErrorCode;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.URI;
@@ -151,7 +151,7 @@ class InfrastructureIntegrationTest {
   @Autowired com.hnu.backend.observability.service.RagRunQueryService traceQuery;
   @Autowired org.springframework.transaction.support.TransactionTemplate transaction;
   @Autowired DocumentService documentService;
-  @Autowired com.hnu.backend.rag.configuration.RagProperties config;
+  @Autowired com.hnu.backend.rag.config.RagProperties config;
   @MockitoBean EmbeddingClient embedding;
   @MockitoBean ChatClient chat;
 
@@ -376,7 +376,7 @@ class InfrastructureIntegrationTest {
             null,
             null,
             "结构化测试",
-            new com.hnu.backend.shared.web.RequestTiming(
+            new com.hnu.backend.common.web.RequestTiming(
                 "structured-test", OffsetDateTime.now(), System.nanoTime()));
     UUID attemptId = UUID.randomUUID();
     var parent = trace.context().start(RagStageName.ANSWER, null, 1);

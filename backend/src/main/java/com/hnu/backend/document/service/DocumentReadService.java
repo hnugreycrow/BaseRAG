@@ -1,6 +1,9 @@
 package com.hnu.backend.document.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.hnu.backend.common.exception.ApiException;
+import com.hnu.backend.common.exception.ErrorCode;
+import com.hnu.backend.common.web.PageResponse;
 import com.hnu.backend.document.entity.Document;
 import com.hnu.backend.document.entity.DocumentChunk;
 import com.hnu.backend.document.entity.DocumentVersion;
@@ -17,9 +20,6 @@ import com.hnu.backend.document.vo.DocumentChunkResponse;
 import com.hnu.backend.document.vo.DocumentPreviewResponse;
 import com.hnu.backend.document.vo.DocumentResponse;
 import com.hnu.backend.knowledgebase.api.KnowledgeBaseAccess;
-import com.hnu.backend.shared.error.ApiException;
-import com.hnu.backend.shared.error.ErrorCode;
-import com.hnu.backend.shared.web.PageResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Objects;

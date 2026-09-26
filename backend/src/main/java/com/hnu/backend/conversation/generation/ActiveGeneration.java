@@ -1,11 +1,11 @@
 package com.hnu.backend.conversation.generation;
 
+import com.hnu.backend.common.exception.ApiException;
 import com.hnu.backend.conversation.entity.Conversation;
 import com.hnu.backend.conversation.entity.Message;
 import com.hnu.backend.observability.trace.AnswerTraceObserver;
 import com.hnu.backend.observability.trace.RagRunTrace;
-import com.hnu.backend.rag.answer.AnswerGenerator;
-import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.rag.generation.AnswerGenerator;
 import java.util.UUID;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;

@@ -1,10 +1,9 @@
 package com.hnu.backend.model.client;
 
-import com.hnu.backend.model.configuration.AiProperties;
-import com.hnu.backend.model.configuration.EmbeddingProtocol;
-import com.hnu.backend.model.http.ModelHttpClient;
-import com.hnu.backend.shared.error.ApiException;
-import com.hnu.backend.shared.error.ErrorCode;
+import com.hnu.backend.common.exception.ApiException;
+import com.hnu.backend.common.exception.ErrorCode;
+import com.hnu.backend.model.config.AiProperties;
+import com.hnu.backend.model.config.EmbeddingProtocol;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;

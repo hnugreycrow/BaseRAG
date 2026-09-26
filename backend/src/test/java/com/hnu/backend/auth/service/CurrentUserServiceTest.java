@@ -10,7 +10,7 @@ import static org.mockito.Mockito.when;
 import cn.dev33.satoken.stp.StpUtil;
 import com.hnu.backend.auth.entity.User;
 import com.hnu.backend.auth.mapper.UserMapper;
-import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.common.exception.ApiException;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;

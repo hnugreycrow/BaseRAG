@@ -3,8 +3,7 @@ package com.hnu.backend.model.client;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.hnu.backend.model.configuration.AiProperties;
-import com.hnu.backend.model.http.ModelHttpClient;
+import com.hnu.backend.model.config.AiProperties;
 import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;

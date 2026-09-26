@@ -2,7 +2,7 @@ package com.hnu.backend.rag.controller;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import com.hnu.backend.rag.configuration.RagProperties;
+import com.hnu.backend.rag.config.RagProperties;
 import org.junit.jupiter.api.Test;
 
 class RagEvaluationControllerTest {

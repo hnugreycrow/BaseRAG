@@ -10,6 +10,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.hnu.backend.common.exception.ApiException;
 import com.hnu.backend.intent.dto.IntentNodeRequest;
 import com.hnu.backend.intent.entity.IntentNodeEntity;
 import com.hnu.backend.intent.event.IntentTreeChangedEvent;
@@ -18,7 +19,6 @@ import com.hnu.backend.intent.mapper.IntentNodeMapper;
 import com.hnu.backend.intent.model.IntentNode;
 import com.hnu.backend.knowledgebase.mapper.KnowledgeBaseMapper;
 import com.hnu.backend.rag.mcp.McpToolRegistry;
-import com.hnu.backend.shared.error.ApiException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;

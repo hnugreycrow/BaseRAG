@@ -2,7 +2,7 @@ package com.hnu.backend.observability;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import com.hnu.backend.shared.error.ErrorCode;
+import com.hnu.backend.common.exception.ErrorCode;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashSet;

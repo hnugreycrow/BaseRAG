@@ -2,13 +2,13 @@ package com.hnu.backend.observability.trace;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.hnu.backend.common.exception.ApiException;
+import com.hnu.backend.common.exception.ErrorCode;
 import com.hnu.backend.observability.RagRunStatus;
 import com.hnu.backend.observability.RagStageName;
 import com.hnu.backend.observability.RagStageStatus;
-import com.hnu.backend.rag.answer.AnswerGenerator;
-import com.hnu.backend.rag.answer.AnswerStage;
-import com.hnu.backend.shared.error.ApiException;
-import com.hnu.backend.shared.error.ErrorCode;
+import com.hnu.backend.rag.generation.AnswerGenerator;
+import com.hnu.backend.rag.generation.AnswerStage;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;

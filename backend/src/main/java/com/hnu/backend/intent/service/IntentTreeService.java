@@ -1,6 +1,9 @@
 package com.hnu.backend.intent.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.hnu.backend.common.exception.ApiException;
+import com.hnu.backend.common.exception.ErrorCode;
+import com.hnu.backend.common.json.JsonCodecs;
 import com.hnu.backend.intent.dto.IntentNodeRequest;
 import com.hnu.backend.intent.entity.IntentBindingEntity;
 import com.hnu.backend.intent.entity.IntentNodeEntity;
@@ -11,9 +14,6 @@ import com.hnu.backend.intent.model.IntentNode;
 import com.hnu.backend.intent.snapshot.IntentTreeSnapshot;
 import com.hnu.backend.knowledgebase.mapper.KnowledgeBaseMapper;
 import com.hnu.backend.rag.mcp.McpToolRegistry;
-import com.hnu.backend.shared.error.ApiException;
-import com.hnu.backend.shared.error.ErrorCode;
-import com.hnu.backend.shared.json.JsonCodecs;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;

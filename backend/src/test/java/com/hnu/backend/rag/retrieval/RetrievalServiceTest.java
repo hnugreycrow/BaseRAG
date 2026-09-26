@@ -5,12 +5,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.*;
 
+import com.hnu.backend.common.exception.ApiException;
+import com.hnu.backend.common.exception.ErrorCode;
 import com.hnu.backend.model.client.EmbeddingClient;
-import com.hnu.backend.rag.configuration.RagProperties;
-import com.hnu.backend.rag.execution.CancellationToken;
-import com.hnu.backend.rag.execution.RagBudgetSnapshot;
-import com.hnu.backend.shared.error.ApiException;
-import com.hnu.backend.shared.error.ErrorCode;
+import com.hnu.backend.rag.config.RagProperties;
+import com.hnu.backend.rag.pipeline.CancellationToken;
+import com.hnu.backend.rag.pipeline.RagBudgetSnapshot;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;

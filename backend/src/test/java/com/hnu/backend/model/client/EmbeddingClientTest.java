@@ -3,9 +3,9 @@ package com.hnu.backend.model.client;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-import com.hnu.backend.model.configuration.AiProperties;
-import com.hnu.backend.model.configuration.EmbeddingProtocol;
-import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.common.exception.ApiException;
+import com.hnu.backend.model.config.AiProperties;
+import com.hnu.backend.model.config.EmbeddingProtocol;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
 

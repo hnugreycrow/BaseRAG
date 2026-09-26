@@ -152,61 +152,43 @@ baserag/
 
 ## 6. 后端模块划分
 
-后端采用“按业务能力分包”的单体模块化结构。一般业务模块使用 Controller / Service / Mapper 等直白职责目录；RAG 内部按流水线阶段聚合相关模型、端口和实现。
+后端采用按业务能力分包的模块化单体结构。普通模块使用 Controller / Service / Mapper 分层，复杂模块增加少量能力目录。完整目录与依赖规范见 [后端目录结构规范](backend-structure.md)。
 
-​```text
+```text
 com.hnu.backend
+├── BackendApplication.java
+├── config
+├── common
+│   ├── web
+│   ├── exception
+│   ├── persistence
+│   └── json
+├── application
 ├── auth
-│   ├── configuration
-│   ├── controller
-│   ├── service
-│   ├── entity
-│   └── mapper
 ├── knowledgebase
-│   ├── controller
-│   ├── dto
-│   ├── vo
-│   ├── service
-│   ├── entity
-│   └── mapper
 ├── document
-│   ├── controller
-│   ├── dto
-│   ├── vo
-│   ├── service
-│   ├── entity
-│   ├── mapper
-│   ├── parser
-│   └── storage
-├── rag
-│   ├── controller
-│   ├── dto
-│   ├── vo
-│   ├── memory
-│   ├── planning
-│   ├── routing
-│   ├── execution
-│   ├── mcp
-│   ├── retrieval
-│   ├── deduplication
-│   ├── rerank
-│   ├── prompt
-│   ├── answer
-│   └── support
 ├── conversation
+├── intent
+├── model
+│   ├── config
 │   ├── controller
+│   ├── service
+│   ├── vo
+│   └── client
+├── rag
+│   ├── config
+│   ├── controller
+│   ├── service
 │   ├── dto
 │   ├── vo
-│   ├── service
-│   ├── entity
-│   └── mapper
-├── model
-│   ├── client
-│   ├── config
-│   └── http
-├── configuration
-└── shared
-​```
+│   ├── pipeline
+│   ├── retrieval
+│   ├── generation
+│   ├── memory
+│   ├── mcp
+│   └── JsonValues.java
+└── observability
+```
 
 模块职责：
 
@@ -217,9 +199,9 @@ com.hnu.backend
 | rag | 记忆、问题规划、路由、分预算执行、检索融合、去重、重排、提示词、回答和引用校验 |
 | conversation | 会话、消息、回答版本、SSE 和生成状态 |
 | model | Chat、Embedding、Rerank、模型选择、重试和熔断 |
-| shared | 统一响应、全局异常、请求 ID、公共持久化能力 |
+| common | 统一响应、全局异常、请求 ID、公共持久化能力 |
 
-Controller 只负责 HTTP 参数和响应；一般业务编排位于 service，RAG 编排按流水线阶段组织；数据库访问位于 mapper 或所属 RAG 阶段包，模型与对象存储访问分别位于 client/http 和 storage。DTO、VO 与 Entity 分目录，跨模块通过公开 Service 或 RAG 端口协作。
+Controller 只负责 HTTP 参数和响应；一般业务编排位于 service，RAG 编排按流水线阶段组织；数据库访问位于 mapper 或所属 RAG 阶段包，模型与对象存储访问分别位于 client 和 storage。DTO、VO 与 Entity 分目录，跨模块通过公开 Service 或 RAG 端口协作。
 
 ---
 

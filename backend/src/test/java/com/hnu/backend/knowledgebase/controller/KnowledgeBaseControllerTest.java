@@ -4,7 +4,7 @@ import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.hnu.backend.application.service.KnowledgeBaseDeletionService;
+import com.hnu.backend.application.KnowledgeBaseDeletionService;
 import com.hnu.backend.auth.service.CurrentUserService;
 import com.hnu.backend.knowledgebase.service.KnowledgeBaseService;
 import java.util.UUID;

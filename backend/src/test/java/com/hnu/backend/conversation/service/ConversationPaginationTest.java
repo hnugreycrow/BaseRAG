@@ -3,13 +3,13 @@ package com.hnu.backend.conversation.service;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+import com.hnu.backend.common.exception.ApiException;
 import com.hnu.backend.conversation.entity.Conversation;
 import com.hnu.backend.conversation.entity.Message;
 import com.hnu.backend.conversation.entity.MessageRole;
 import com.hnu.backend.conversation.generation.ConversationGenerationService;
 import com.hnu.backend.conversation.mapper.ConversationMapper;
 import com.hnu.backend.conversation.mapper.MessageMapper;
-import com.hnu.backend.shared.error.ApiException;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;

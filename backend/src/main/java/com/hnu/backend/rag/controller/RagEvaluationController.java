@@ -1,7 +1,7 @@
 package com.hnu.backend.rag.controller;
 
 import cn.dev33.satoken.annotation.SaCheckRole;
-import com.hnu.backend.rag.configuration.RagProperties;
+import com.hnu.backend.rag.config.RagProperties;
 import com.hnu.backend.rag.vo.RagEvaluationConfigResponse;
 import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.GetMapping;

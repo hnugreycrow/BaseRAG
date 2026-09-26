@@ -3,8 +3,7 @@ package com.hnu.backend.model.client;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-import com.hnu.backend.model.configuration.AiProperties;
-import com.hnu.backend.model.http.ModelHttpClient;
+import com.hnu.backend.model.config.AiProperties;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -89,7 +88,7 @@ class ChatThinkingTest {
               public void failed(
                   AiProperties.ModelTarget target,
                   String partialContent,
-                  com.hnu.backend.shared.error.ApiException error) {}
+                  com.hnu.backend.common.exception.ApiException error) {}
             },
             new ModelHttpClient.StreamControl());
     assertEquals("答案", result.content());

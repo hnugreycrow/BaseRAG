@@ -1,6 +1,6 @@
 package com.hnu.backend.observability.service;
 
-import com.hnu.backend.observability.configuration.ObservabilityProperties;
+import com.hnu.backend.observability.config.ObservabilityProperties;
 import com.hnu.backend.observability.mapper.RagRunMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

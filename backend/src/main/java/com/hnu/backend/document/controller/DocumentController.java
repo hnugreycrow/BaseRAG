@@ -1,6 +1,7 @@
 package com.hnu.backend.document.controller;
 
 import cn.dev33.satoken.annotation.SaCheckRole;
+import com.hnu.backend.common.web.PageResponse;
 import com.hnu.backend.document.dto.DocumentChunkBatchRequest;
 import com.hnu.backend.document.dto.DocumentRequest;
 import com.hnu.backend.document.service.DocumentService;
@@ -12,7 +13,6 @@ import com.hnu.backend.document.vo.DocumentImportResponse;
 import com.hnu.backend.document.vo.DocumentPreviewResponse;
 import com.hnu.backend.document.vo.DocumentResponse;
 import com.hnu.backend.knowledgebase.api.KnowledgeBaseAccess;
-import com.hnu.backend.shared.web.PageResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;

@@ -13,7 +13,7 @@ import static org.mockito.Mockito.when;
 import com.hnu.backend.auth.entity.User;
 import com.hnu.backend.auth.entity.UserRole;
 import com.hnu.backend.auth.mapper.UserMapper;
-import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.common.exception.ApiException;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;

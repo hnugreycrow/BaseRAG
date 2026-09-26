@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import com.hnu.backend.common.exception.ApiException;
+import com.hnu.backend.common.persistence.UuidTypeHandler;
 import com.hnu.backend.document.entity.Document;
 import com.hnu.backend.document.entity.DocumentVersion;
 import com.hnu.backend.document.entity.DocumentVersionStatus;
@@ -14,9 +16,7 @@ import com.hnu.backend.document.parser.MarkdownChunker;
 import com.hnu.backend.document.storage.FileStorage;
 import com.hnu.backend.knowledgebase.api.KnowledgeBaseAccess;
 import com.hnu.backend.model.client.EmbeddingClient;
-import com.hnu.backend.rag.configuration.RagProperties;
-import com.hnu.backend.shared.error.ApiException;
-import com.hnu.backend.shared.persistence.UuidTypeHandler;
+import com.hnu.backend.rag.config.RagProperties;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -47,7 +47,7 @@ class DocumentServicePreviewTest {
           mock(EmbeddingClient.class),
           storage,
           mock(TransactionTemplate.class),
-          new com.hnu.backend.document.configuration.DocumentProcessingProperties());
+          new com.hnu.backend.document.config.DocumentProcessingProperties());
 
   @BeforeAll
   static void initializeTableMetadata() {

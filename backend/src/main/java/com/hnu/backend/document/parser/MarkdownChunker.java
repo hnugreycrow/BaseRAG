@@ -1,6 +1,6 @@
 package com.hnu.backend.document.parser;
 
-import com.hnu.backend.rag.configuration.RagProperties;
+import com.hnu.backend.rag.config.RagProperties;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;

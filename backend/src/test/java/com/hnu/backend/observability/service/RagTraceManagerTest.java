@@ -5,10 +5,10 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
+import com.hnu.backend.common.web.RequestTiming;
 import com.hnu.backend.observability.entity.RagRun;
 import com.hnu.backend.observability.mapper.RagRunMapper;
 import com.hnu.backend.observability.mapper.RagStageRunMapper;
-import com.hnu.backend.shared.web.RequestTiming;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;

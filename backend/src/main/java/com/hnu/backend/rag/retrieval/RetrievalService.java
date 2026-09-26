@@ -1,5 +1,7 @@
 package com.hnu.backend.rag.retrieval;
 
+import com.hnu.backend.common.exception.ApiException;
+import com.hnu.backend.common.exception.ErrorCode;
 import com.hnu.backend.knowledgebase.entity.KnowledgeBase;
 import com.hnu.backend.knowledgebase.mapper.KnowledgeBaseMapper;
 import com.hnu.backend.model.client.EmbeddingClient;
@@ -7,12 +9,10 @@ import com.hnu.backend.observability.RagStageName;
 import com.hnu.backend.observability.TraceReasonCatalog;
 import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.observability.trace.TraceContext;
-import com.hnu.backend.rag.configuration.RagProperties;
-import com.hnu.backend.rag.execution.CancellationToken;
-import com.hnu.backend.rag.execution.RagBudgetSnapshot;
-import com.hnu.backend.rag.execution.StageBudget;
-import com.hnu.backend.shared.error.ApiException;
-import com.hnu.backend.shared.error.ErrorCode;
+import com.hnu.backend.rag.config.RagProperties;
+import com.hnu.backend.rag.pipeline.CancellationToken;
+import com.hnu.backend.rag.pipeline.RagBudgetSnapshot;
+import com.hnu.backend.rag.pipeline.StageBudget;
 import jakarta.annotation.PreDestroy;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -493,7 +493,9 @@ public class RetrievalService {
 
   /** 将异常转换为不包含消息正文的稳定错误码。 */
   private String errorCode(RuntimeException error, String fallback) {
-    return error instanceof com.hnu.backend.shared.error.ApiException api ? api.code() : fallback;
+    return error instanceof com.hnu.backend.common.exception.ApiException api
+        ? api.code()
+        : fallback;
   }
 
   private EvidenceCandidate toCandidate(

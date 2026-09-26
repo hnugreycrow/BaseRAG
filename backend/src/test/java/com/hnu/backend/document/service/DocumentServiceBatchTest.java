@@ -3,7 +3,8 @@ package com.hnu.backend.document.service;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-import com.hnu.backend.document.configuration.DocumentProcessingProperties;
+import com.hnu.backend.common.exception.ApiException;
+import com.hnu.backend.document.config.DocumentProcessingProperties;
 import com.hnu.backend.document.entity.Document;
 import com.hnu.backend.document.entity.DocumentVersion;
 import com.hnu.backend.document.entity.DocumentVersionStatus;
@@ -14,7 +15,6 @@ import com.hnu.backend.document.parser.MarkdownChunker;
 import com.hnu.backend.document.storage.FileStorage;
 import com.hnu.backend.knowledgebase.api.KnowledgeBaseAccess;
 import com.hnu.backend.model.client.EmbeddingClient;
-import com.hnu.backend.shared.error.ApiException;
 import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.List;

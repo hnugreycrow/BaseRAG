@@ -4,7 +4,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.hnu.backend.shared.persistence.PostgresTextTypeHandler;
+import com.hnu.backend.common.persistence.PostgresTextTypeHandler;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 import lombok.Data;

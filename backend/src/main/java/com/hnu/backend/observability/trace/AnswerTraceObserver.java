@@ -1,9 +1,9 @@
 package com.hnu.backend.observability.trace;
 
+import com.hnu.backend.common.exception.ApiException;
 import com.hnu.backend.observability.RagStageName;
-import com.hnu.backend.rag.answer.AnswerGenerator;
-import com.hnu.backend.rag.answer.AnswerStage;
-import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.rag.generation.AnswerGenerator;
+import com.hnu.backend.rag.generation.AnswerStage;
 import java.util.UUID;
 import java.util.function.BooleanSupplier;
 import java.util.function.IntSupplier;

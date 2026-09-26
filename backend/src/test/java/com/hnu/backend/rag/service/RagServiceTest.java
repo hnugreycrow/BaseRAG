@@ -3,15 +3,15 @@ package com.hnu.backend.rag.service;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+import com.hnu.backend.common.exception.ApiException;
 import com.hnu.backend.model.client.ChatClient;
-import com.hnu.backend.rag.answer.AnswerStage;
-import com.hnu.backend.rag.answer.ChatAnswerGenerator;
-import com.hnu.backend.rag.answer.ContextAndCitationsTest;
-import com.hnu.backend.rag.answer.ContextBuilder;
-import com.hnu.backend.rag.configuration.RagProperties;
-import com.hnu.backend.rag.prompt.PromptAssemblyStage;
+import com.hnu.backend.rag.config.RagProperties;
+import com.hnu.backend.rag.generation.AnswerStage;
+import com.hnu.backend.rag.generation.ChatAnswerGenerator;
+import com.hnu.backend.rag.generation.ContextAndCitationsTest;
+import com.hnu.backend.rag.generation.ContextBuilder;
+import com.hnu.backend.rag.generation.PromptAssemblyStage;
 import com.hnu.backend.rag.retrieval.RetrievalService;
-import com.hnu.backend.shared.error.ApiException;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 

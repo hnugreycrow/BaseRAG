@@ -1,13 +1,13 @@
 package com.hnu.backend.knowledgebase.controller;
 
 import cn.dev33.satoken.annotation.SaCheckRole;
-import com.hnu.backend.application.service.KnowledgeBaseDeletionService;
+import com.hnu.backend.application.KnowledgeBaseDeletionService;
 import com.hnu.backend.auth.service.CurrentUserService;
+import com.hnu.backend.common.web.PageResponse;
 import com.hnu.backend.knowledgebase.dto.KnowledgeBaseRequest;
 import com.hnu.backend.knowledgebase.service.KnowledgeBaseService;
 import com.hnu.backend.knowledgebase.vo.EmbeddingModelResponse;
 import com.hnu.backend.knowledgebase.vo.KnowledgeBaseResponse;
-import com.hnu.backend.shared.web.PageResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;

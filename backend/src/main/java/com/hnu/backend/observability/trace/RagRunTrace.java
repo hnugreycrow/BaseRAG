@@ -1,12 +1,12 @@
 package com.hnu.backend.observability.trace;
 
+import com.hnu.backend.common.exception.ApiException;
+import com.hnu.backend.common.exception.ErrorCode;
 import com.hnu.backend.observability.RagExecutionMode;
 import com.hnu.backend.observability.RagRunStatus;
 import com.hnu.backend.observability.RagStageName;
 import com.hnu.backend.observability.RagStageStatus;
 import com.hnu.backend.observability.TraceReasonCatalog;
-import com.hnu.backend.shared.error.ApiException;
-import com.hnu.backend.shared.error.ErrorCode;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;

@@ -1,12 +1,12 @@
 package com.hnu.backend.document.service;
 
+import com.hnu.backend.common.exception.ApiException;
+import com.hnu.backend.common.exception.ErrorCode;
 import com.hnu.backend.conversation.entity.MessageStatus;
 import com.hnu.backend.conversation.service.ConversationService;
 import com.hnu.backend.conversation.vo.ConversationResponses;
 import com.hnu.backend.knowledgebase.api.KnowledgeBaseAccess;
 import com.hnu.backend.rag.vo.SourceResponse;
-import com.hnu.backend.shared.error.ApiException;
-import com.hnu.backend.shared.error.ErrorCode;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 

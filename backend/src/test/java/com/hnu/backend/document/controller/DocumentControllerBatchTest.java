@@ -6,12 +6,12 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.hnu.backend.common.exception.GlobalExceptionHandler;
+import com.hnu.backend.common.web.ApiResponseAdvice;
 import com.hnu.backend.document.service.DocumentService;
 import com.hnu.backend.document.vo.DocumentBatchUploadResponse;
 import com.hnu.backend.document.vo.DocumentChunkBatchResponse;
 import com.hnu.backend.knowledgebase.api.KnowledgeBaseAccess;
-import com.hnu.backend.shared.error.GlobalExceptionHandler;
-import com.hnu.backend.shared.web.ApiResponseAdvice;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;

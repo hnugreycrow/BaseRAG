@@ -1,7 +1,7 @@
 package com.hnu.backend.conversation.generation;
 
+import com.hnu.backend.common.exception.ApiException;
 import com.hnu.backend.conversation.vo.ConversationStreamEvents.Kind;
-import com.hnu.backend.shared.error.ApiException;
 import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;

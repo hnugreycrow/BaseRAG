@@ -1,17 +1,17 @@
 package com.hnu.backend.rag.service;
 
-import com.hnu.backend.rag.answer.AnswerGenerator;
-import com.hnu.backend.rag.answer.AnswerResult;
-import com.hnu.backend.rag.answer.AnswerStage;
-import com.hnu.backend.rag.answer.ContextBuilder;
-import com.hnu.backend.rag.configuration.RagProperties;
-import com.hnu.backend.rag.prompt.AssembledPrompt;
-import com.hnu.backend.rag.prompt.PromptAssemblyStage;
+import com.hnu.backend.common.exception.ApiException;
+import com.hnu.backend.common.exception.ErrorCode;
+import com.hnu.backend.rag.config.RagProperties;
+import com.hnu.backend.rag.generation.AnswerGenerator;
+import com.hnu.backend.rag.generation.AnswerResult;
+import com.hnu.backend.rag.generation.AnswerStage;
+import com.hnu.backend.rag.generation.AssembledPrompt;
+import com.hnu.backend.rag.generation.ContextBuilder;
+import com.hnu.backend.rag.generation.PromptAssemblyStage;
 import com.hnu.backend.rag.retrieval.RetrievalService;
 import com.hnu.backend.rag.vo.AnswerResponse;
 import com.hnu.backend.rag.vo.ModelInfoResponse;
-import com.hnu.backend.shared.error.ApiException;
-import com.hnu.backend.shared.error.ErrorCode;
 import java.util.List;
 import java.util.UUID;
 import org.slf4j.Logger;

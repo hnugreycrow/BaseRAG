@@ -3,6 +3,8 @@ package com.hnu.backend.conversation.generation;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+import com.hnu.backend.common.exception.ApiException;
+import com.hnu.backend.common.web.RequestTiming;
 import com.hnu.backend.conversation.entity.Conversation;
 import com.hnu.backend.conversation.entity.Message;
 import com.hnu.backend.conversation.entity.MessageRole;
@@ -11,8 +13,6 @@ import com.hnu.backend.conversation.mapper.ConversationMapper;
 import com.hnu.backend.conversation.mapper.MessageMapper;
 import com.hnu.backend.observability.service.RagTraceManager;
 import com.hnu.backend.observability.trace.RagRunTrace;
-import com.hnu.backend.shared.error.ApiException;
-import com.hnu.backend.shared.web.RequestTiming;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;

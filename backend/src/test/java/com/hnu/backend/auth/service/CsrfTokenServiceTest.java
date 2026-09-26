@@ -11,7 +11,7 @@ import static org.mockito.Mockito.when;
 
 import cn.dev33.satoken.session.SaSession;
 import cn.dev33.satoken.stp.StpUtil;
-import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.common.exception.ApiException;
 import org.junit.jupiter.api.Test;
 
 class CsrfTokenServiceTest {

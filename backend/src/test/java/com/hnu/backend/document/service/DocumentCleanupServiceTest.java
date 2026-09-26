@@ -3,11 +3,11 @@ package com.hnu.backend.document.service;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+import com.hnu.backend.common.exception.ApiException;
 import com.hnu.backend.document.mapper.DocumentChunkMapper;
 import com.hnu.backend.document.mapper.DocumentMapper;
 import com.hnu.backend.document.mapper.DocumentVersionMapper;
 import com.hnu.backend.document.storage.FileStorage;
-import com.hnu.backend.shared.error.ApiException;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;

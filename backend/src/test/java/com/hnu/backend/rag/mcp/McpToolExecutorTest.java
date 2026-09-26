@@ -9,7 +9,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.hnu.backend.rag.configuration.RagProperties;
+import com.hnu.backend.rag.config.RagProperties;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;

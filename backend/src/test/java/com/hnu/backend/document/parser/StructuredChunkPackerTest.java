@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import com.hnu.backend.document.parser.StructuredBlock.Kind;
 import com.hnu.backend.document.parser.StructuredBlock.SourceSpan;
 import com.hnu.backend.document.parser.StructuredBlock.SourceSpan.Unit;
-import com.hnu.backend.rag.configuration.RagProperties;
+import com.hnu.backend.rag.config.RagProperties;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 

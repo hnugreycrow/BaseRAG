@@ -9,7 +9,7 @@ public interface KnowledgeBaseAccess {
    *
    * @param id 非空知识库标识
    * @return 创建者标识，用于对象存储路径与后台任务
-   * @throws com.hnu.backend.shared.error.ApiException 知识库不存在或不可见时抛出
+   * @throws com.hnu.backend.common.exception.ApiException 知识库不存在或不可见时抛出
    */
   UUID requireManagedOwner(UUID id);
 
@@ -18,7 +18,7 @@ public interface KnowledgeBaseAccess {
    *
    * @param ownerId 非空创建者标识
    * @param id 非空知识库标识
-   * @throws com.hnu.backend.shared.error.ApiException 知识库不存在或不属于创建者时抛出
+   * @throws com.hnu.backend.common.exception.ApiException 知识库不存在或不属于创建者时抛出
    */
   void requireOwned(UUID ownerId, UUID id);
 
@@ -28,7 +28,7 @@ public interface KnowledgeBaseAccess {
    * @param ownerId 非空创建者标识
    * @param id 非空知识库标识
    * @return 不含凭据的不可变模型绑定
-   * @throws com.hnu.backend.shared.error.ApiException 知识库不可见或模型配置不兼容时抛出
+   * @throws com.hnu.backend.common.exception.ApiException 知识库不可见或模型配置不兼容时抛出
    */
   EmbeddingBinding ensureEmbedding(UUID ownerId, UUID id);
 
@@ -41,7 +41,7 @@ public interface KnowledgeBaseAccess {
    * @param provider 供应商标识
    * @param model 模型名称
    * @param dimensions 向量维度，必须与配置一致
-   * @throws com.hnu.backend.shared.error.ApiException 知识库不可见或模型配置不兼容时抛出
+   * @throws com.hnu.backend.common.exception.ApiException 知识库不可见或模型配置不兼容时抛出
    */
   void lockAndBind(
       UUID ownerId, UUID id, String modelId, String provider, String model, int dimensions);

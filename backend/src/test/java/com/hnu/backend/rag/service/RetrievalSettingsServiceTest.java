@@ -2,8 +2,8 @@ package com.hnu.backend.rag.service;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import com.hnu.backend.conversation.configuration.ConversationProperties;
-import com.hnu.backend.rag.configuration.RagProperties;
+import com.hnu.backend.conversation.config.ConversationProperties;
+import com.hnu.backend.rag.config.RagProperties;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
 

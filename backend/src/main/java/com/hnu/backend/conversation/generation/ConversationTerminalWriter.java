@@ -1,5 +1,6 @@
 package com.hnu.backend.conversation.generation;
 
+import com.hnu.backend.common.exception.ErrorCode;
 import com.hnu.backend.conversation.entity.GenerationAttemptStatus;
 import com.hnu.backend.conversation.entity.MessageStatus;
 import com.hnu.backend.conversation.mapper.ConversationMapper;
@@ -9,7 +10,6 @@ import com.hnu.backend.observability.RagRunStatus;
 import com.hnu.backend.observability.RagStageName;
 import com.hnu.backend.observability.service.RagTraceManager;
 import com.hnu.backend.observability.trace.RagRunTrace;
-import com.hnu.backend.shared.error.ErrorCode;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;

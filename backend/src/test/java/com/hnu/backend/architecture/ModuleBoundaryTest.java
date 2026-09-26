@@ -125,9 +125,26 @@ class ModuleBoundaryTest {
   void jsonBuildersAreCentralized() {
     noClasses()
         .that()
-        .resideOutsideOfPackage(ROOT + "shared.json..")
+        .resideOutsideOfPackage(ROOT + "common.json..")
         .should()
         .callMethod(tools.jackson.databind.json.JsonMapper.class, "builder")
+        .check(CLASSES);
+  }
+
+  @Test
+  void commonDoesNotDependOnBusinessModules() {
+    noClasses()
+        .that()
+        .resideInAPackage(ROOT + "common..")
+        .should()
+        .dependOnClassesThat(
+            new DescribedPredicate<>("公共包之外的项目实现") {
+              @Override
+              public boolean test(JavaClass type) {
+                return type.getPackageName().startsWith(ROOT)
+                    && !type.getPackageName().startsWith(ROOT + "common.");
+              }
+            })
         .check(CLASSES);
   }
 

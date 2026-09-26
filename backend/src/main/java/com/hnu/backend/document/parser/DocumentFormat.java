@@ -1,7 +1,7 @@
 package com.hnu.backend.document.parser;
 
-import com.hnu.backend.shared.error.ApiException;
-import com.hnu.backend.shared.error.ErrorCode;
+import com.hnu.backend.common.exception.ApiException;
+import com.hnu.backend.common.exception.ErrorCode;
 import java.util.Locale;
 
 /** 受支持的原文件格式及其存储和解析元数据。 */

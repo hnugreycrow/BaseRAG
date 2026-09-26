@@ -2,10 +2,10 @@ package com.hnu.backend.conversation.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.hnu.backend.common.exception.ErrorCode;
 import com.hnu.backend.conversation.entity.Message;
 import com.hnu.backend.conversation.entity.MessageRole;
 import com.hnu.backend.conversation.entity.MessageStatus;
-import com.hnu.backend.shared.error.ErrorCode;
 import java.util.List;
 import java.util.UUID;
 import org.apache.ibatis.annotations.Mapper;

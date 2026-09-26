@@ -2,7 +2,7 @@
 
 ## 1. 设计结论
 
-后端保持单个 Spring Boot / Maven 模块，采用“按业务能力分包，包内使用直白职责目录”的模块化单体结构。RAG 内部按流水线阶段聚合相关模型、端口和实现，其他模块继续使用 Controller / Service / Mapper 等职责目录。不为每个模块套用 `api/application/domain/infrastructure` 四层模板；存在实际跨模块依赖时，通过模块内 `api/` 定义窄接口，由顶层 `application/service/` 编排跨模块事务。
+后端保持单个 Spring Boot / Maven 模块，采用“按业务能力分包，包内使用直白职责目录”的模块化单体结构。RAG 内部按流水线编排、检索、生成等能力聚合相关模型、端口和实现，其他模块继续使用 Controller / Service / Mapper 等职责目录。不为每个模块套用 `api/application/domain/infrastructure` 四层模板；存在实际跨模块依赖时，通过模块内 `api/` 定义窄接口，由顶层 `application/` 编排跨模块事务。
 
 顶层模块围绕 RAG 主链路划分：知识库、文档与索引、RAG 检索生成、会话交付、模型接入。Controller / Service / Mapper 分层仍是强制规则，DTO、VO、Entity 必须分离。
 
@@ -11,13 +11,12 @@
 ```text
 com.hnu.backend
 ├─ BackendApplication.java
-├─ shared/
+├─ common/
 │  ├─ web/                    # 统一响应、ResponseBodyAdvice、请求 ID
-│  ├─ error/                  # 业务异常与全局异常处理
+│  ├─ exception/              # 业务异常与全局异常处理
 │  ├─ json/                   # 协议、历史快照与模型交互的 JSON 配置
 │  └─ persistence/            # 通用 MyBatis 类型处理
-├─ application/
-│  └─ service/                # 知识库与文档的跨模块删除编排
+├─ application/              # 知识库与文档的跨模块删除编排
 ├─ knowledgebase/
 │  ├─ api/                    # 访问校验、不可变模型绑定与记录删除
 │  ├─ controller/
@@ -27,7 +26,7 @@ com.hnu.backend
 │  ├─ entity/
 │  └─ mapper/
 ├─ document/
-│  ├─ configuration/          # 文档处理并发和队列配置
+│  ├─ config/                 # 文档处理并发和队列配置
 │  ├─ api/                    # 对外提供关联文档清理能力
 │  ├─ controller/
 │  ├─ dto/
@@ -38,38 +37,29 @@ com.hnu.backend
 │  ├─ parser/
 │  └─ storage/
 ├─ rag/
-│  ├─ configuration/          # RAG 流水线预算与策略参数
+│  ├─ config/                 # RAG 流水线预算与策略参数
 │  ├─ controller/             # /api/questions 兼容入口
 │  ├─ dto/
 │  ├─ vo/
 │  ├─ memory/                 # 会话记忆读取
 │  ├─ service/                # 单轮问答兼容编排与检索设置
-│  ├─ snapshot/               # 历史来源快照读取与兼容
-│  ├─ planning/               # 问题重写与子问题拆分
-│  ├─ routing/                # 意图识别与安全路由
-│  ├─ execution/              # 冻结预算与分子问题并发执行
+│  ├─ pipeline/               # 问题规划、路由、执行预算与子问题调度
 │  ├─ mcp/                    # MCP 注册、校验与执行
-│  ├─ retrieval/              # 向量检索、RRF 融合及 MyBatis Mapper
-│  ├─ deduplication/          # 精确、正文与相邻重叠去重
-│  ├─ rerank/                 # 模型重排、证据截取与失败降级
-│  ├─ prompt/                 # 结构化提示词与资源加载
-│  ├─ answer/                 # 回答模型端口、流式生成与引用校验
-│  └─ support/                # 跨阶段通用值处理
+│  ├─ retrieval/              # 检索、融合、去重、重排及 MyBatis Mapper
+│  ├─ generation/             # 提示词、回答、引用与历史来源快照
+│  └─ JsonValues.java         # 路由与 MCP 共用的不可变 JSON 值
 ├─ conversation/
-│  ├─ configuration/          # 会话记忆和流式检查点参数
+│  ├─ config/                 # 会话记忆和流式检查点参数
 │  ├─ controller/
 │  ├─ dto/
 │  ├─ vo/
-│  ├─ service/                # 会话管理与上下文查询
+│  ├─ service/                # 会话管理、上下文查询、响应装配与记忆适配
 │  ├─ generation/             # 生成协调、状态、准备、执行、终态写入与 SSE 通道
-│  ├─ presentation/           # 查询与生成共用的回答响应映射
-│  ├─ adapter/                # 对接 RAG 的会话记忆实现
 │  ├─ entity/
 │  └─ mapper/
 ├─ model/
-│  ├─ client/                 # Chat、Embedding 与 Rerank 能力
-│  ├─ http/                   # OpenAI Compatible HTTP 实现
-│  ├─ configuration/          # 模型提供方参数与 Embedding 协议
+│  ├─ client/                 # 模型客户端、协议适配、HTTP 与熔断
+│  ├─ config/                 # 模型提供方参数与 Embedding 协议
 │  ├─ controller/
 │  ├─ service/
 │  └─ vo/
@@ -84,14 +74,14 @@ com.hnu.backend
 │  └─ event/                  # 意图树变更事件
 ├─ auth/                      # 认证、账户管理及所属配置
 ├─ observability/
-│  ├─ configuration/          # Trace 保留与清理参数
+│  ├─ config/                 # Trace 保留与清理参数
 │  ├─ controller/
 │  ├─ entity/
 │  ├─ mapper/
 │  ├─ service/
 │  ├─ trace/
 │  └─ vo/
-└─ configuration/             # 全局 JSON 配置和本地启动限制
+└─ config/                    # 全局 JSON 配置和本地启动限制
 ```
 
 资源目录按消费模块归档：
@@ -105,16 +95,15 @@ src/main/resources
    ├─ knowledgebase/
    ├─ observability/
    └─ rag/
-      └─ retrieval/
 ```
 
 测试目录镜像主代码包；真实 PostgreSQL、pgvector 与 RustFS 测试集中在 `integration/`。
 
-会话生成内部协作类集中在 `conversation/generation/`，包级可见的状态和通道不对外开放。`service/` 通过生成服务入口发起任务和执行会话删除前的活动检查；共用的消息映射放在 `presentation/`，避免生成内部类依赖会话查询实现。生成服务仍负责执行器关闭，跨包只暴露必要操作。
+会话生成内部协作类集中在 `conversation/generation/`，包级可见的状态和通道不对外开放。`service/` 通过生成服务入口发起任务和执行会话删除前的活动检查；共用的消息映射与记忆适配放在 `service/`，仍保留独立类和原有接口契约。生成服务仍负责执行器关闭，跨包只暴露必要操作。
 
-业务参数统一放在所属模块的 `configuration/`；根 `configuration/` 只放全局装配。包移动不改变 `@ConfigurationProperties` 前缀，仍由启动类从 `com.hnu.backend` 根包扫描。意图节点模型和数据库实体分开，快照缓存通过 `event/` 中的事件失效；此次分层不改变跨模块调用关系。
+业务参数统一放在所属模块的 `config/`；根 `config/` 只放全局装配。包移动不改变 `@ConfigurationProperties` 前缀，仍由启动类从 `com.hnu.backend` 根包扫描。意图节点模型和数据库实体分开，快照缓存通过 `event/` 中的事件失效；此次分层不改变跨模块调用关系。
 
-`rag/service/RagService` 编排旧单轮问答兼容流程，`rag/answer/` 保留最终生成与引用处理。历史来源快照的解析逻辑位于 `rag/snapshot/SourceSnapshotDecoder`，`rag/vo/` 保留对外响应类型；目录调整不改变 HTTP 接口和快照格式。
+`rag/service/RagService` 编排旧单轮问答兼容流程，`rag/generation/` 保留最终生成与引用处理。历史来源快照的解析逻辑位于 `rag/generation/SourceSnapshotDecoder`，`rag/vo/` 保留对外响应类型；目录调整不改变 HTTP 接口和快照格式。
 
 ## 3. 模块职责
 
@@ -125,7 +114,7 @@ src/main/resources
 | `rag` | 会话记忆、问题规划、路由、执行预算、检索融合、去重、重排、提示词、回答和引用校验 |
 | `conversation` | 会话、消息、回答版本、SSE 和生成状态 |
 | `model` | Chat/Embedding/Rerank 模型配置、调用、重试和熔断 |
-| `shared` | 与具体业务无关的 Web、异常和持久化基础能力 |
+| `common` | 与具体业务无关的 Web、异常和持久化基础能力 |
 
 ## 4. 依赖规则
 
@@ -137,14 +126,14 @@ Mapper → Entity
 ```
 
 - Controller 只处理 HTTP、DTO 校验和 VO 输出，不编排业务流程。
-- Service 负责业务规则、事务和跨模块协作，不得依赖 Controller 或 DTO。
+- Service 负责业务规则、事务和跨模块协作，不得依赖 Controller。
 - Mapper 只负责数据库访问，不包含业务判断。
-- RAG 阶段包拥有该阶段的模型、端口和实现；跨阶段依赖按 memory → planning → routing → execution → deduplication → rerank → prompt → answer 的流水线方向流动。
+- RAG 的 pipeline 聚合规划、路由与执行调度，retrieval 聚合检索、去重与重排，generation 聚合提示词、生成与引用处理；保留独立阶段类及其协作契约。
 - Entity 只描述持久化数据，不直接作为 API 响应。
-- 非持久化内部数据使用模块内 `model`，不能随意放入 `shared`。
-- 跨模块调用对方 Service；禁止直接访问其他模块 Mapper。
+- 非持久化内部数据随所属能力放置；已有独立业务模型可保留模块内 model，不为少量值对象统一增建目录。
+- 跨模块优先通过明确的业务接口协作；已有依赖本次只迁移包名，不扩展其他模块 Mapper 的访问。
 - 模型 HTTP、对象存储等外部边界可以定义接口；单实现业务 Service 不创建空转的 `Impl`。
-- MyBatis XML 的目录、`namespace` 和 Java Mapper 包名必须保持一致。
+- MyBatis XML 按业务模块归档，namespace 必须与 Java Mapper 全限定名一致；XML 文件路径不要求镜像 Java 能力子包。
 
 ## 5. 命名规范
 
@@ -153,7 +142,11 @@ Mapper → Entity
 - 持久化实体：`KnowledgeBase`、`DocumentVersion`、`Message`。
 - 业务服务：`RagService`、`RetrievalService`、`DocumentService`。
 - 外部能力：`ChatClient`、`EmbeddingClient`、`FileStorage`。
-- 不使用全局 `dto`、`vo`、`entity`、`utils` 或 `common` 目录。
+- 不使用全局 dto、vo、entity 或 utils 目录；common 仅包含无业务归属的基础能力，不能依赖业务模块。
+- 包名使用全小写英文，基础职责统一为 controller/service/mapper/entity/dto/vo，按需创建。
+- 配置包统一命名为 config；状态枚举随实体或能力放置，不单建全局枚举目录。
+- 新能力目录应承载明确职责和一组协作类；跨模块 api、事件等稳定边界可以保留小目录。
+- 不为单实现服务增加 service/impl，不增加 modules/business 等中间层。
 
 ## 6. 后续结构收口
 
@@ -174,7 +167,7 @@ MCP 超时从任务提交开始计时，包含排队；知识检索的通道预�
 ## 知识库与文档的协作边界
 
 - 文档模块只依赖 `knowledgebase.api.KnowledgeBaseAccess`。访问校验返回创建者标识或不返回值，模型绑定返回不可变的 `EmbeddingBinding`；不传递知识库持久化实体。
-- `KnowledgeBaseController` 将删除请求交给 `application.service.KnowledgeBaseDeletionService`，其他知识库操作仍由知识库服务处理。
+- `KnowledgeBaseController` 将删除请求交给 `application.KnowledgeBaseDeletionService`，其他知识库操作仍由知识库服务处理。
 - 删除编排只调用 `KnowledgeBaseAccess`、`KnowledgeBaseRemoval` 和 `document.api.DocumentCleanup`。知识库核心不反向依赖文档或应用编排。
 - 文档记录与知识库记录在同一事务内删除。正在处理的文档会阻止删除；任何数据库异常都会触发回滚。
 - 意图树失效事件在事务内发布，由现有 `AFTER_COMMIT` 监听器处理；对象存储清理注册提交回调。加入外层事务时，两者等待实际提交，回滚不清理文件。文件删除失败只记录日志，并继续处理其他文件。
@@ -192,7 +185,7 @@ cd backend
 
 ## JSON 配置策略
 
-`shared.json.JsonCodecs` 集中提供三个独立、可复用的 Jackson 配置，不新增依赖：
+`common.json.JsonCodecs` 集中提供三个独立、可复用的 Jackson 配置，不新增依赖：
 
 | 入口 | 使用范围 | 规则 |
 | --- | --- | --- |

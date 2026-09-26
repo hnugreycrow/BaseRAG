@@ -3,8 +3,8 @@ package com.hnu.backend.auth.service;
 import cn.dev33.satoken.stp.StpUtil;
 import com.hnu.backend.auth.entity.User;
 import com.hnu.backend.auth.mapper.UserMapper;
-import com.hnu.backend.shared.error.ApiException;
-import com.hnu.backend.shared.error.ErrorCode;
+import com.hnu.backend.common.exception.ApiException;
+import com.hnu.backend.common.exception.ErrorCode;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 

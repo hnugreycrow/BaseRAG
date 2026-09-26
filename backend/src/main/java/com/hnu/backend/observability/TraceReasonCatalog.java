@@ -1,6 +1,6 @@
 package com.hnu.backend.observability;
 
-import com.hnu.backend.shared.error.ErrorCode;
+import com.hnu.backend.common.exception.ErrorCode;
 import java.util.Arrays;
 
 /** 追踪原因的唯一展示目录；稳定代码不随文案调整而改变，通用错误复用错误码目录。 */

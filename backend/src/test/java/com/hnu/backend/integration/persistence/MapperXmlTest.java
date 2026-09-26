@@ -3,6 +3,7 @@ package com.hnu.backend.integration.persistence;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.hnu.backend.common.persistence.UuidTypeHandler;
 import com.hnu.backend.conversation.mapper.ConversationMapper;
 import com.hnu.backend.conversation.mapper.GenerationAttemptMapper;
 import com.hnu.backend.conversation.mapper.MessageMapper;
@@ -13,7 +14,6 @@ import com.hnu.backend.knowledgebase.mapper.KnowledgeBaseMapper;
 import com.hnu.backend.observability.mapper.RagRunMapper;
 import com.hnu.backend.observability.mapper.RagStageRunMapper;
 import com.hnu.backend.rag.retrieval.RetrievalMapper;
-import com.hnu.backend.shared.persistence.UuidTypeHandler;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Map;
@@ -34,7 +34,7 @@ class MapperXmlTest {
                 new String[] {
                   "lock", "findAdminOwned", "selectWithDocumentCount", "countWithDocumentCount"
                 }),
-            "mapper/rag/retrieval/RetrievalMapper.xml",
+            "mapper/rag/RetrievalMapper.xml",
             new ExpectedMapper(
                 RetrievalMapper.class,
                 new String[] {

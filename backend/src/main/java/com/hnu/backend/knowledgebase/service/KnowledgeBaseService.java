@@ -1,16 +1,16 @@
 package com.hnu.backend.knowledgebase.service;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.hnu.backend.common.exception.ApiException;
+import com.hnu.backend.common.exception.ErrorCode;
+import com.hnu.backend.common.web.PageResponse;
 import com.hnu.backend.knowledgebase.api.KnowledgeBaseAccess;
 import com.hnu.backend.knowledgebase.api.KnowledgeBaseRemoval;
 import com.hnu.backend.knowledgebase.entity.KnowledgeBase;
 import com.hnu.backend.knowledgebase.mapper.KnowledgeBaseMapper;
 import com.hnu.backend.knowledgebase.vo.EmbeddingModelResponse;
 import com.hnu.backend.knowledgebase.vo.KnowledgeBaseResponse;
-import com.hnu.backend.model.configuration.AiProperties;
-import com.hnu.backend.shared.error.ApiException;
-import com.hnu.backend.shared.error.ErrorCode;
-import com.hnu.backend.shared.web.PageResponse;
+import com.hnu.backend.model.config.AiProperties;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;

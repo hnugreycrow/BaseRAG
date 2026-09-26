@@ -5,6 +5,8 @@ import static org.mockito.Mockito.*;
 
 import com.hnu.backend.auth.entity.User;
 import com.hnu.backend.auth.entity.UserRole;
+import com.hnu.backend.common.exception.ApiException;
+import com.hnu.backend.common.exception.ErrorCode;
 import com.hnu.backend.observability.RagExecutionMode;
 import com.hnu.backend.observability.RagRunStatus;
 import com.hnu.backend.observability.RagStageName;
@@ -14,8 +16,6 @@ import com.hnu.backend.observability.mapper.RagRunMapper;
 import com.hnu.backend.observability.mapper.RagRunSummaryRow;
 import com.hnu.backend.observability.mapper.RagRunViewRow;
 import com.hnu.backend.observability.mapper.RagStageRunMapper;
-import com.hnu.backend.shared.error.ApiException;
-import com.hnu.backend.shared.error.ErrorCode;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -23,8 +23,8 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 class RagRunQueryServiceTest {
-  private final com.hnu.backend.observability.configuration.ObservabilityProperties observability =
-      new com.hnu.backend.observability.configuration.ObservabilityProperties();
+  private final com.hnu.backend.observability.config.ObservabilityProperties observability =
+      new com.hnu.backend.observability.config.ObservabilityProperties();
 
   @Test
   void trendFillsMissingDaysAndUsesBeijingBoundsAndPreviousPeriod() {

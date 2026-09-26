@@ -1,8 +1,8 @@
 package com.hnu.backend.rag.mcp;
 
-import com.hnu.backend.rag.configuration.RagProperties;
-import com.hnu.backend.shared.error.ErrorCode;
-import com.hnu.backend.shared.json.JsonCodecs;
+import com.hnu.backend.common.exception.ErrorCode;
+import com.hnu.backend.common.json.JsonCodecs;
+import com.hnu.backend.rag.config.RagProperties;
 import jakarta.annotation.PreDestroy;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;

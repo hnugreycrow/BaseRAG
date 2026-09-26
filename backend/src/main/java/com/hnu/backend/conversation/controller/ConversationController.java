@@ -1,6 +1,8 @@
 package com.hnu.backend.conversation.controller;
 
 import com.hnu.backend.auth.service.CurrentUserService;
+import com.hnu.backend.common.web.RequestIdFilter;
+import com.hnu.backend.common.web.RequestTiming;
 import com.hnu.backend.conversation.dto.ActionRequest;
 import com.hnu.backend.conversation.dto.CreateConversationRequest;
 import com.hnu.backend.conversation.dto.MessageRequest;
@@ -8,8 +10,6 @@ import com.hnu.backend.conversation.dto.ThinkingRequest;
 import com.hnu.backend.conversation.dto.TitleRequest;
 import com.hnu.backend.conversation.service.ConversationService;
 import com.hnu.backend.conversation.vo.ConversationResponses;
-import com.hnu.backend.shared.web.RequestIdFilter;
-import com.hnu.backend.shared.web.RequestTiming;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.List;

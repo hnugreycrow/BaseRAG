@@ -2,7 +2,7 @@ package com.hnu.backend.document.parser;
 
 import com.hnu.backend.document.parser.StructuredBlock.Kind;
 import com.hnu.backend.document.parser.StructuredBlock.SourceSpan;
-import com.hnu.backend.rag.configuration.RagProperties;
+import com.hnu.backend.rag.config.RagProperties;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;

@@ -8,7 +8,7 @@ import com.hnu.backend.auth.entity.User;
 import com.hnu.backend.auth.service.AdminUserService;
 import com.hnu.backend.auth.service.CurrentUserService;
 import com.hnu.backend.auth.vo.UserResponse;
-import com.hnu.backend.shared.web.PageResponse;
+import com.hnu.backend.common.web.PageResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;

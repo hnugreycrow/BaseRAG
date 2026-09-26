@@ -17,7 +17,7 @@ public interface DocumentCleanup {
    * 在调用方事务中按外键顺序删除文档记录。
    *
    * @param knowledgeBaseId 非空且已授权的知识库标识
-   * @throws com.hnu.backend.shared.error.ApiException 存在正在处理的文档时拒绝删除
+   * @throws com.hnu.backend.common.exception.ApiException 存在正在处理的文档时拒绝删除
    */
   void deleteRecords(UUID knowledgeBaseId);
 

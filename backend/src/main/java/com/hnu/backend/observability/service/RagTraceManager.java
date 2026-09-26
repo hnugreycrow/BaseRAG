@@ -1,5 +1,6 @@
 package com.hnu.backend.observability.service;
 
+import com.hnu.backend.common.web.RequestTiming;
 import com.hnu.backend.observability.RagExecutionMode;
 import com.hnu.backend.observability.RagRunStatus;
 import com.hnu.backend.observability.entity.RagRun;
@@ -7,7 +8,6 @@ import com.hnu.backend.observability.entity.RagStageRun;
 import com.hnu.backend.observability.mapper.RagRunMapper;
 import com.hnu.backend.observability.mapper.RagStageRunMapper;
 import com.hnu.backend.observability.trace.RagRunTrace;
-import com.hnu.backend.shared.web.RequestTiming;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;

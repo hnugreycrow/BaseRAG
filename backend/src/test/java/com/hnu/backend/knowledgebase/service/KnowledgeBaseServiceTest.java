@@ -5,10 +5,10 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.hnu.backend.common.exception.ApiException;
 import com.hnu.backend.knowledgebase.entity.KnowledgeBase;
 import com.hnu.backend.knowledgebase.mapper.KnowledgeBaseMapper;
-import com.hnu.backend.model.configuration.AiProperties;
-import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.model.config.AiProperties;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.transaction.support.TransactionTemplate;

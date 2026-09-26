@@ -1,16 +1,15 @@
 package com.hnu.backend.conversation.service;
 
+import com.hnu.backend.common.exception.ApiException;
+import com.hnu.backend.common.exception.ErrorCode;
+import com.hnu.backend.common.web.RequestTiming;
 import com.hnu.backend.conversation.entity.Conversation;
 import com.hnu.backend.conversation.entity.Message;
 import com.hnu.backend.conversation.entity.MessageRole;
 import com.hnu.backend.conversation.generation.ConversationGenerationService;
 import com.hnu.backend.conversation.mapper.ConversationMapper;
 import com.hnu.backend.conversation.mapper.MessageMapper;
-import com.hnu.backend.conversation.presentation.ConversationMessagePresenter;
 import com.hnu.backend.conversation.vo.ConversationResponses;
-import com.hnu.backend.shared.error.ApiException;
-import com.hnu.backend.shared.error.ErrorCode;
-import com.hnu.backend.shared.web.RequestTiming;
 import java.util.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;

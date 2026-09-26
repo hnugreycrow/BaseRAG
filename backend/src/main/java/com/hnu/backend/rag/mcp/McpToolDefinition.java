@@ -1,6 +1,6 @@
 package com.hnu.backend.rag.mcp;
 
-import com.hnu.backend.rag.support.JsonValues;
+import com.hnu.backend.rag.JsonValues;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
