@@ -18,6 +18,7 @@ import com.hnu.backend.rag.vo.ModelInfoResponse;
 import com.hnu.backend.shared.error.ApiException;
 import com.hnu.backend.shared.error.ErrorCode;
 import com.hnu.backend.shared.error.SafeExceptionLog;
+import com.hnu.backend.shared.json.JsonCodecs;
 import com.hnu.backend.shared.web.RequestTiming;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -70,7 +71,7 @@ public class ConversationGenerationService {
           errorTerminal(active, code, message);
         }
       };
-  private final JsonMapper json = JsonMapper.builder().build();
+  private final JsonMapper json = JsonCodecs.snapshots();
   private final ConversationMessagePresenter presenter = new ConversationMessagePresenter();
   private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
   private final ConcurrentMap<UUID, ActiveGeneration> activeByConversation =

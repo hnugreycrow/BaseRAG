@@ -146,3 +146,17 @@ cd backend
 ```
 
 删除编排测试使用真实 Spring JDBC 事务管理器和模拟 JDBC 连接，验证提交、回滚与外层事务回调顺序；它不替代真实 PostgreSQL 集成测试。
+
+## JSON 配置策略
+
+`shared.json.JsonCodecs` 集中提供三个独立、可复用的 Jackson 配置，不新增依赖：
+
+| 入口 | 使用范围 | 规则 |
+| --- | --- | --- |
+| `protocol()` | HTTP/SSE 协议 | 时间输出为 ISO 字符串，读取时允许额外字段；Spring 通过 `JsonConfiguration` 复用同一配置规则 |
+| `snapshots()` | 数据库 JSON 快照 | 允许额外字段，历史缺省值由对应读取器解释 |
+| `models()` | 模型和工具交互 | 拒绝尾随的额外 JSON 值，业务字段仍由各阶段校验 |
+
+业务代码禁止自行调用 `JsonMapper.builder()`，由 `ModuleBoundaryTest` 约束。不要跨用途借用 mapper，以免后续修改快照兼容策略时影响模型响应校验。
+
+来源快照保留旧版编号与顺序，不在读取时改写数据库。null、空白和 JSON null 表示未保存来源；旧版缺失 heading 允许为空。未知显式版本、错误结构和损坏 JSON 仍报错，不静默变成空来源。模型信息和引用编号快照也覆盖历史空值情况。

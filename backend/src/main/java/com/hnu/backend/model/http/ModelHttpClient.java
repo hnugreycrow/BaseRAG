@@ -3,6 +3,7 @@ package com.hnu.backend.model.http;
 import com.hnu.backend.model.config.AiProperties;
 import com.hnu.backend.shared.error.ApiException;
 import com.hnu.backend.shared.error.ErrorCode;
+import com.hnu.backend.shared.json.JsonCodecs;
 import jakarta.annotation.PreDestroy;
 import java.io.BufferedReader;
 import java.io.Closeable;
@@ -36,7 +37,7 @@ public class ModelHttpClient {
           2, Thread.ofPlatform().daemon().name("model-stream-timeout-", 0).factory());
   private final AiProperties config;
   private final HttpClient client;
-  private final JsonMapper json = JsonMapper.builder().build();
+  private final JsonMapper json = JsonCodecs.models();
   private final Map<String, ModelCircuitBreaker> circuits = new ConcurrentHashMap<>();
 
   /** 根据模型配置创建共享 HTTP 客户端与流式超时调度器。 */

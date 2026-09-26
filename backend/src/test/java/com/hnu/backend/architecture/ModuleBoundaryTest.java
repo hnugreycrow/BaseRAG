@@ -121,6 +121,16 @@ class ModuleBoundaryTest {
         .check(CLASSES);
   }
 
+  @Test
+  void jsonBuildersAreCentralized() {
+    noClasses()
+        .that()
+        .resideOutsideOfPackage(ROOT + "shared.json..")
+        .should()
+        .callMethod(tools.jackson.databind.json.JsonMapper.class, "builder")
+        .check(CLASSES);
+  }
+
   private static DescribedPredicate<JavaClass> internalsOf(String module) {
     return new DescribedPredicate<>(module + " 模块的非公开实现") {
       @Override

@@ -5,6 +5,7 @@ import com.hnu.backend.model.client.ChatClient;
 import com.hnu.backend.rag.memory.MemoryTurn;
 import com.hnu.backend.rag.memory.RagMemory;
 import com.hnu.backend.rag.prompt.QueryPlanningPrompts;
+import com.hnu.backend.shared.json.JsonCodecs;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,7 +20,7 @@ public class ChatQueryPlanner implements QueryPlanner {
   private static final Logger log = LoggerFactory.getLogger(ChatQueryPlanner.class);
   private final ChatClient chat;
   private final RagProperties config;
-  private final JsonMapper json = JsonMapper.builder().build();
+  private final JsonMapper json = JsonCodecs.models();
 
   /**
    * 创建基于通用 Chat 模型的问题规划器。

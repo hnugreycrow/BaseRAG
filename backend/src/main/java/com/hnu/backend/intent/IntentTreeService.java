@@ -5,6 +5,7 @@ import com.hnu.backend.knowledgebase.mapper.KnowledgeBaseMapper;
 import com.hnu.backend.rag.mcp.McpToolRegistry;
 import com.hnu.backend.shared.error.ApiException;
 import com.hnu.backend.shared.error.ErrorCode;
+import com.hnu.backend.shared.json.JsonCodecs;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -29,7 +30,7 @@ public class IntentTreeService {
   private final KnowledgeBaseMapper knowledgeBaseMapper;
   private final McpToolRegistry tools;
   private final ApplicationEventPublisher events;
-  private final JsonMapper json = JsonMapper.builder().build();
+  private final JsonMapper json = JsonCodecs.snapshots();
 
   public IntentTreeService(
       IntentNodeMapper intentNodeMapper,

@@ -17,6 +17,7 @@ import com.hnu.backend.rag.memory.MemoryTurn;
 import com.hnu.backend.rag.memory.RagMemory;
 import com.hnu.backend.rag.prompt.MemorySummaryPrompts;
 import com.hnu.backend.shared.error.ApiException;
+import com.hnu.backend.shared.json.JsonCodecs;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -36,7 +37,7 @@ public class ConversationMemoryProvider implements MemoryProvider {
   private final MessageMapper messageMapper;
   private final ConversationProperties config;
   private final ChatClient chat;
-  private final JsonMapper json = JsonMapper.builder().build();
+  private final JsonMapper json = JsonCodecs.models();
 
   /**
    * 创建会话记忆适配器。

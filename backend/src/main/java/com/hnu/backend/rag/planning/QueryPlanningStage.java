@@ -10,6 +10,7 @@ import com.hnu.backend.observability.trace.TraceContext;
 import com.hnu.backend.rag.memory.RagMemory;
 import com.hnu.backend.shared.error.ApiException;
 import com.hnu.backend.shared.error.ErrorCode;
+import com.hnu.backend.shared.json.JsonCodecs;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -29,7 +30,7 @@ public class QueryPlanningStage {
   private final QueryPlanner planner;
   private final RagProperties config;
   private final ObservabilityProperties observability;
-  private final JsonMapper json = JsonMapper.builder().build();
+  private final JsonMapper json = JsonCodecs.models();
 
   /**
    * 创建查询规划阶段。

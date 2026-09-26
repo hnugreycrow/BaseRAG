@@ -12,6 +12,7 @@ import com.hnu.backend.rag.routing.IntentType;
 import com.hnu.backend.rag.routing.RoutingPlan;
 import com.hnu.backend.rag.routing.RoutingReasonCode;
 import com.hnu.backend.rag.vo.SourceResponse;
+import com.hnu.backend.shared.json.JsonCodecs;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -26,7 +27,7 @@ import tools.jackson.databind.json.JsonMapper;
 @Component
 public class PromptAssemblyStage {
   private final ContextBuilder contexts;
-  private final JsonMapper json = JsonMapper.builder().build();
+  private final JsonMapper json = JsonCodecs.models();
 
   /**
    * 创建提示词组装阶段。

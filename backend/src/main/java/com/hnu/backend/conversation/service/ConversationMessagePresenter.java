@@ -5,12 +5,13 @@ import com.hnu.backend.conversation.vo.ConversationResponses;
 import com.hnu.backend.rag.vo.ModelInfoResponse;
 import com.hnu.backend.rag.vo.SourceResponse;
 import com.hnu.backend.rag.vo.SourceSnapshotDecoder;
+import com.hnu.backend.shared.json.JsonCodecs;
 import java.util.List;
 import tools.jackson.databind.json.JsonMapper;
 
 /** 将持久化回答快照映射为对外响应。 */
 final class ConversationMessagePresenter {
-  private final JsonMapper json = JsonMapper.builder().build();
+  private final JsonMapper json = JsonCodecs.snapshots();
 
   /**
    * 将消息实体中的 JSON 快照转换为前端回答结构。
@@ -22,7 +23,7 @@ final class ConversationMessagePresenter {
     List<SourceResponse> sources = new SourceSnapshotDecoder().decode(message.getSourcesJson());
     List<String> citations = readArray(message.getCitationsJson(), String[].class);
     ModelInfoResponse modelInfo =
-        message.getModelInfoJson() == null
+        message.getModelInfoJson() == null || message.getModelInfoJson().isBlank()
             ? null
             : json.readValue(message.getModelInfoJson(), ModelInfoResponse.class);
     return new ConversationResponses.AssistantMessage(
@@ -58,6 +59,7 @@ final class ConversationMessagePresenter {
     if (encoded == null || encoded.isBlank()) {
       return List.of();
     }
-    return List.of(json.readValue(encoded, type));
+    T[] values = json.readValue(encoded, type);
+    return values == null ? List.of() : List.of(values);
   }
 }

@@ -2,6 +2,7 @@ package com.hnu.backend.rag.mcp;
 
 import com.hnu.backend.configuration.RagProperties;
 import com.hnu.backend.shared.error.ErrorCode;
+import com.hnu.backend.shared.json.JsonCodecs;
 import jakarta.annotation.PreDestroy;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -30,7 +31,7 @@ public class McpToolExecutor {
 
   private final McpToolRegistry registry;
   private final RagProperties config;
-  private final JsonMapper json = JsonMapper.builder().build();
+  private final JsonMapper json = JsonCodecs.models();
   private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
   public McpToolExecutor(McpToolRegistry registry, RagProperties config) {

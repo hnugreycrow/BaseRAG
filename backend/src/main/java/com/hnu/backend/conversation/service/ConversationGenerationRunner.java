@@ -24,6 +24,7 @@ import com.hnu.backend.rag.vo.ModelInfoResponse;
 import com.hnu.backend.shared.error.ApiException;
 import com.hnu.backend.shared.error.ErrorCode;
 import com.hnu.backend.shared.error.SafeExceptionLog;
+import com.hnu.backend.shared.json.JsonCodecs;
 import java.util.List;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -44,7 +45,7 @@ public class ConversationGenerationRunner {
   private final MessageMapper messageMapper;
   private final GenerationAttemptMapper generationAttemptMapper;
   private final ConversationProperties config;
-  private final JsonMapper json = JsonMapper.builder().build();
+  private final JsonMapper json = JsonCodecs.snapshots();
 
   /**
    * 创建回答流水线执行器。

@@ -15,6 +15,7 @@ import com.hnu.backend.rag.planning.QueryPlan;
 import com.hnu.backend.rag.prompt.IntentTreeRoutingPrompts;
 import com.hnu.backend.shared.error.ApiException;
 import com.hnu.backend.shared.error.ErrorCode;
+import com.hnu.backend.shared.json.JsonCodecs;
 import jakarta.annotation.PreDestroy;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -45,7 +46,7 @@ public class IntentTreeRoutingStage {
   private final ChatClient chat;
   private final McpToolRegistry tools;
   private final RagProperties config;
-  private final JsonMapper json = JsonMapper.builder().build();
+  private final JsonMapper json = JsonCodecs.models();
   private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
   public IntentTreeRoutingStage(
