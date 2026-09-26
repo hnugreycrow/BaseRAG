@@ -24,7 +24,9 @@ import com.hnu.backend.shared.error.ApiException;
 import com.hnu.backend.shared.error.ErrorCode;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CompletionException;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -162,10 +164,21 @@ class RerankStageTest {
     RagProperties rag = new RagProperties();
     EvidenceCandidate candidate = candidate(1, "Q1", .10);
     AtomicBoolean cancelled = new AtomicBoolean();
+    CountDownLatch entered = new CountDownLatch(1);
+    CountDownLatch release = new CountDownLatch(1);
+    CountDownLatch interrupted = new CountDownLatch(1);
     when(reranker.rerank("组合问题", List.of(candidate)))
         .thenAnswer(
             ignored -> {
-              Thread.sleep(5_000);
+              entered.countDown();
+              try {
+                if (!release.await(5, TimeUnit.SECONDS)) {
+                  throw new AssertionError("测试未释放模型任务");
+                }
+              } catch (InterruptedException expected) {
+                interrupted.countDown();
+                throw expected;
+              }
               return output(List.of(score(candidate, .5)));
             });
     RerankStage stage = stage(reranker);
@@ -178,12 +191,20 @@ class RerankStageTest {
                     execution(rag, List.of(candidate)),
                     List.of(candidate),
                     cancelled::get));
-    Thread.sleep(30);
-    cancelled.set(true);
+    try {
+      assertTrue(entered.await(5, TimeUnit.SECONDS), "取消前必须已进入工作任务");
+      cancelled.set(true);
 
-    CompletionException error = assertThrows(CompletionException.class, future::join);
-    assertEquals(ApiException.class, error.getCause().getClass());
-    assertEquals("GENERATION_CANCELLED", ((ApiException) error.getCause()).code());
+      ExecutionException error =
+          assertThrows(ExecutionException.class, () -> future.get(5, TimeUnit.SECONDS));
+      assertEquals(ApiException.class, error.getCause().getClass());
+      assertEquals("GENERATION_CANCELLED", ((ApiException) error.getCause()).code());
+      assertTrue(interrupted.await(5, TimeUnit.SECONDS), "取消必须中断正在运行的任务");
+    } finally {
+      cancelled.set(true);
+      release.countDown();
+      future.cancel(true);
+    }
   }
 
   private RerankStage stage(CandidateReranker reranker) {

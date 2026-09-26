@@ -29,7 +29,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.CompletionException;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -261,24 +263,43 @@ class ExecutionStageTest {
     QueryPlan plan = new QueryPlan("问题", List.of(new SubQuestion("Q1", "运行中")));
     RoutingPlan routing = new RoutingPlan(List.of(knowledge("Q1")));
     AtomicBoolean cancelled = new AtomicBoolean();
+    CountDownLatch entered = new CountDownLatch(1);
+    CountDownLatch release = new CountDownLatch(1);
+    CountDownLatch interrupted = new CountDownLatch(1);
     when(retrievalService.retrieveCandidates(
             eq(ownerId), eq("Q1"), anyString(), isNull(), any(), any()))
         .thenAnswer(
             ignored -> {
-              Thread.sleep(1000);
+              entered.countDown();
+              try {
+                if (!release.await(5, TimeUnit.SECONDS)) {
+                  throw new AssertionError("测试未释放模型任务");
+                }
+              } catch (InterruptedException expected) {
+                interrupted.countDown();
+                throw expected;
+              }
               return List.of();
             });
 
     var future =
         java.util.concurrent.CompletableFuture.supplyAsync(
             () -> stage.execute(ownerId, plan, routing, null, cancelled::get));
-    Thread.sleep(30);
-    cancelled.set(true);
+    try {
+      assertTrue(entered.await(5, TimeUnit.SECONDS), "取消前必须已进入工作任务");
+      cancelled.set(true);
 
-    CompletionException error = assertThrows(CompletionException.class, future::join);
-    assertEquals(ApiException.class, error.getCause().getClass());
-    verify(retrievalService, timeout(1000))
-        .retrieveCandidates(eq(ownerId), eq("Q1"), anyString(), isNull(), any(), any());
+      ExecutionException error =
+          assertThrows(ExecutionException.class, () -> future.get(5, TimeUnit.SECONDS));
+      assertEquals(ApiException.class, error.getCause().getClass());
+      verify(retrievalService, timeout(1000))
+          .retrieveCandidates(eq(ownerId), eq("Q1"), anyString(), isNull(), any(), any());
+      assertTrue(interrupted.await(5, TimeUnit.SECONDS), "取消必须中断正在运行的任务");
+    } finally {
+      cancelled.set(true);
+      release.countDown();
+      future.cancel(true);
+    }
   }
 
   @Test

@@ -11,7 +11,6 @@ import com.hnu.backend.conversation.mapper.MessageMapper;
 import com.hnu.backend.conversation.vo.ConversationStreamEvents;
 import com.hnu.backend.conversation.vo.ConversationStreamEvents.Kind;
 import com.hnu.backend.observability.service.RagTraceManager;
-import com.hnu.backend.observability.trace.AnswerTraceObserver;
 import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.rag.answer.AnswerGenerator;
 import com.hnu.backend.rag.answer.AnswerStage;
@@ -30,9 +29,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -374,7 +370,7 @@ public class ConversationGenerationService {
     require(ownerId, conversationId);
     ActiveGeneration active = activeByGeneration.get(generationId);
     if (active != null
-        && active.ownerId.equals(ownerId)
+        && active.ownerId().equals(ownerId)
         && active.conversation().getId().equals(conversationId)) {
       active.cancel();
       cancelTerminal(active);
@@ -403,7 +399,7 @@ public class ConversationGenerationService {
    */
   public void cancelByOwner(UUID ownerId) {
     activeByGeneration.values().stream()
-        .filter(active -> active.ownerId.equals(ownerId))
+        .filter(active -> active.ownerId().equals(ownerId))
         .toList()
         .forEach(
             active -> {
@@ -490,14 +486,14 @@ public class ConversationGenerationService {
     channel.emitter().onCompletion(() -> disconnect(active));
     channel.emitter().onTimeout(() -> disconnect(active));
     channel.emitter().onError(ignored -> disconnect(active));
-    channel.startHeartbeat(executor, active.terminal::get, () -> disconnect(active));
-    active.future = executor.submit(() -> runner.generate(active, terminalCallbacks));
+    channel.startHeartbeat(executor, active::terminal, () -> disconnect(active));
+    active.attachTask(executor.submit(() -> runner.generate(active, terminalCallbacks)));
     return channel.emitter();
   }
 
   /** 客户端断连时取消尚未结束的回答。 */
   private void disconnect(ActiveGeneration active) {
-    if (active.terminal.get()) {
+    if (active.terminal()) {
       return;
     }
     active.cancel();
@@ -517,19 +513,20 @@ public class ConversationGenerationService {
       String content,
       List<String> citations,
       AnswerGenerator.Generation generation) {
-    if (active.control.cancelled()) {
-      cancelTerminal(active);
-      return;
-    }
-    if (!active.terminal.compareAndSet(false, true)) {
+    if (!active.tryComplete()) {
+      if (active.cancelled()) {
+        cancelTerminal(active);
+      }
       return;
     }
     if (generation != null) {
-      active.trace.finalAnswer(
-          active.answerTrace == null ? null : active.answerTrace.finalModelSpan(),
-          generation.modelId(),
-          generation.provider(),
-          generation.model());
+      active
+          .trace()
+          .finalAnswer(
+              active.answerTrace() == null ? null : active.answerTrace().finalModelSpan(),
+              generation.modelId(),
+              generation.provider(),
+              generation.model());
     }
     try {
       String modelInfo =
@@ -546,7 +543,7 @@ public class ConversationGenerationService {
       finish(
           active,
           Kind.ERROR,
-          terminalEvent(ErrorCode.INTERNAL_ERROR.code(), "回答保存失败，请重试", active.requestId));
+          terminalEvent(ErrorCode.INTERNAL_ERROR.code(), "回答保存失败，请重试", active.requestId()));
     }
   }
 
@@ -556,19 +553,19 @@ public class ConversationGenerationService {
    * @param active 活动生成状态
    */
   private void cancelTerminal(ActiveGeneration active) {
-    if (!active.terminal.compareAndSet(false, true)) {
+    if (!active.tryFinish()) {
       return;
     }
-    active.trace.terminateStages(true, ErrorCode.GENERATION_CANCELLED.code());
+    active.trace().terminateStages(true, ErrorCode.GENERATION_CANCELLED.code());
     try {
-      terminalWriter.cancel(terminalContext(active, active.buffer.toString()));
+      terminalWriter.cancel(terminalContext(active, active.snapshot().content()));
       finishPersisted(active, Kind.CANCELLED, ErrorCode.GENERATION_CANCELLED.code(), "生成已停止");
     } catch (RuntimeException e) {
       terminalPersistenceFailed(active, Kind.CANCELLED, e);
       finish(
           active,
           Kind.CANCELLED,
-          terminalEvent(ErrorCode.GENERATION_CANCELLED.code(), "生成已停止", active.requestId));
+          terminalEvent(ErrorCode.GENERATION_CANCELLED.code(), "生成已停止", active.requestId()));
     }
   }
 
@@ -580,30 +577,31 @@ public class ConversationGenerationService {
    * @param message 用户可读错误信息
    */
   private void errorTerminal(ActiveGeneration active, String code, String message) {
-    if (!active.terminal.compareAndSet(false, true)) {
+    if (!active.tryFinish()) {
       return;
     }
-    active.trace.terminateStages(false, code);
+    active.trace().terminateStages(false, code);
     try {
-      terminalWriter.fail(terminalContext(active, active.buffer.toString()), code, message);
+      terminalWriter.fail(terminalContext(active, active.snapshot().content()), code, message);
       finishPersisted(active, Kind.ERROR, code, message);
     } catch (RuntimeException e) {
       terminalPersistenceFailed(active, Kind.ERROR, e);
-      finish(active, Kind.ERROR, terminalEvent(code, message, active.requestId));
+      finish(active, Kind.ERROR, terminalEvent(code, message, active.requestId()));
     }
   }
 
   /** 在终态竞争胜出后冻结回答与思考内容。 */
   private ConversationTerminalWriter.Context terminalContext(
       ActiveGeneration active, String content) {
+    ActiveGeneration.Snapshot snapshot = active.snapshot();
     return new ConversationTerminalWriter.Context(
-        active.ownerId,
-        active.generationId,
-        active.conversation.getId(),
+        active.ownerId(),
+        active.generationId(),
+        active.conversation().getId(),
         content,
-        active.reasoningBuffer.toString(),
-        active.currentAttemptId,
-        active.trace);
+        snapshot.reasoning(),
+        snapshot.attemptId(),
+        active.trace());
   }
 
   /**
@@ -614,9 +612,9 @@ public class ConversationGenerationService {
    * @param payload 终态事件数据
    */
   private void finish(ActiveGeneration active, Kind event, Object payload) {
-    activeByConversation.remove(active.conversation.getId(), active);
-    activeByGeneration.remove(active.generationId, active);
-    active.channel.finish(event, payload);
+    activeByConversation.remove(active.conversation().getId(), active);
+    activeByGeneration.remove(active.generationId(), active);
+    active.channel().finish(event, payload);
   }
 
   /**
@@ -629,19 +627,19 @@ public class ConversationGenerationService {
    */
   private void finishPersisted(
       ActiveGeneration active, Kind fallbackEvent, String fallbackCode, String fallbackMessage) {
-    Message stored = messageMapper.find(active.ownerId, active.generationId);
+    Message stored = messageMapper.find(active.ownerId(), active.generationId());
     if (stored == null) {
-      finish(active, fallbackEvent, terminalEvent(fallbackCode, fallbackMessage, active.requestId));
+      finish(
+          active, fallbackEvent, terminalEvent(fallbackCode, fallbackMessage, active.requestId()));
       return;
     }
-    active.assistant = stored;
     Kind event =
         switch (stored.getStatus()) {
           case COMPLETED -> Kind.COMPLETE;
           case CANCELLED -> Kind.CANCELLED;
           default -> Kind.ERROR;
         };
-    finish(active, event, terminalPayload(stored, active.requestId));
+    finish(active, event, terminalPayload(stored, active.requestId()));
   }
 
   /**
@@ -655,8 +653,8 @@ public class ConversationGenerationService {
       ActiveGeneration active, Kind terminalEvent, RuntimeException error) {
     log.error(
         "conversation={} generation={} terminalEvent={} code={} exceptionType={} safeStack={}",
-        active.conversation.getId(),
-        active.generationId,
+        active.conversation().getId(),
+        active.generationId(),
         terminalEvent.wireName(),
         ErrorCode.TRACE_OR_RESULT_PERSISTENCE_FAILED.code(),
         error.getClass().getSimpleName(),
@@ -827,76 +825,4 @@ public class ConversationGenerationService {
    * @param trace 新回答版本的内存 Trace
    */
   private record PreparedAnswer(Message assistant, RagRunTrace trace) {}
-
-  /** 跨异步回调维护一次流式生成的取消、缓冲、尝试和终态竞争状态。 */
-  static final class ActiveGeneration {
-    final UUID ownerId;
-    final Conversation conversation;
-    final Message user;
-    final UUID generationId;
-    Message assistant;
-    final String requestId;
-    final ConversationSseChannel channel;
-    final AnswerGenerator.Control control;
-    final RagRunTrace trace;
-    final AtomicBoolean terminal = new AtomicBoolean();
-    final AtomicBoolean running = new AtomicBoolean();
-    final AtomicInteger attemptCounter = new AtomicInteger();
-    final StringBuilder buffer = new StringBuilder();
-    final StringBuilder reasoningBuffer = new StringBuilder();
-    volatile UUID currentAttemptId;
-    volatile AnswerTraceObserver answerTrace;
-    volatile Future<?> future;
-    int lastCheckpointLength;
-    long lastCheckpointAt = System.currentTimeMillis();
-
-    /**
-     * 创建活动生成状态。
-     *
-     * @param conversation 会话
-     * @param user 用户消息
-     * @param assistant 待生成回答
-     * @param requestId HTTP 请求追踪 ID
-     * @param channel SSE 通道
-     * @param control 回答模型流控制器
-     * @param trace 当前回答版本的显式 Trace
-     */
-    ActiveGeneration(
-        Conversation conversation,
-        Message user,
-        Message assistant,
-        String requestId,
-        ConversationSseChannel channel,
-        AnswerGenerator.Control control,
-        RagRunTrace trace) {
-      this.conversation = conversation;
-      // 异步线程不读取请求上下文；所有权在通过 Controller 校验后随任务显式捕获。
-      this.ownerId = conversation.getOwnerId();
-      this.user = user;
-      this.generationId = assistant.getId();
-      this.assistant = assistant;
-      this.requestId = requestId;
-      this.channel = channel;
-      this.control = control;
-      this.trace = trace;
-    }
-
-    /**
-     * 返回当前生成所属会话。
-     *
-     * @return 会话实体
-     */
-    Conversation conversation() {
-      return conversation;
-    }
-
-    /** 关闭模型流并在任务已经运行时中断异步线程。 */
-    void cancel() {
-      control.close();
-      Future<?> running = future;
-      if (this.running.get() && running != null) {
-        running.cancel(true);
-      }
-    }
-  }
 }
