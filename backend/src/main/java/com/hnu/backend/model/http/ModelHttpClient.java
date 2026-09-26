@@ -1,6 +1,6 @@
 package com.hnu.backend.model.http;
 
-import com.hnu.backend.model.config.AiProperties;
+import com.hnu.backend.model.configuration.AiProperties;
 import com.hnu.backend.shared.error.ApiException;
 import com.hnu.backend.shared.error.ErrorCode;
 import com.hnu.backend.shared.json.JsonCodecs;

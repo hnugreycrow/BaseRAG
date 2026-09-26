@@ -1,7 +1,7 @@
 package com.hnu.backend.model.client;
 
-import com.hnu.backend.model.config.AiProperties;
-import com.hnu.backend.model.config.EmbeddingProtocol;
+import com.hnu.backend.model.configuration.AiProperties;
+import com.hnu.backend.model.configuration.EmbeddingProtocol;
 import java.util.List;
 
 /** 一个 Embedding 协议的请求、响应和配置校验边界。 */

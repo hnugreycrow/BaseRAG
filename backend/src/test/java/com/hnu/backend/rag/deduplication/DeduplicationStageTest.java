@@ -2,7 +2,7 @@ package com.hnu.backend.rag.deduplication;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import com.hnu.backend.configuration.RagProperties;
+import com.hnu.backend.rag.configuration.RagProperties;
 import com.hnu.backend.rag.execution.RagBudgetSnapshot;
 import com.hnu.backend.rag.retrieval.EvidenceCandidate;
 import com.hnu.backend.rag.retrieval.EvidenceSource;

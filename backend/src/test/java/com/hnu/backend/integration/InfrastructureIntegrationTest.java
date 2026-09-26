@@ -151,7 +151,7 @@ class InfrastructureIntegrationTest {
   @Autowired com.hnu.backend.observability.service.RagRunQueryService traceQuery;
   @Autowired org.springframework.transaction.support.TransactionTemplate transaction;
   @Autowired DocumentService documentService;
-  @Autowired com.hnu.backend.configuration.RagProperties config;
+  @Autowired com.hnu.backend.rag.configuration.RagProperties config;
   @MockitoBean EmbeddingClient embedding;
   @MockitoBean ChatClient chat;
 

@@ -1,7 +1,7 @@
 package com.hnu.backend.rag.planning;
 
-import com.hnu.backend.configuration.RagProperties;
 import com.hnu.backend.model.client.ChatClient;
+import com.hnu.backend.rag.configuration.RagProperties;
 import com.hnu.backend.rag.memory.MemoryTurn;
 import com.hnu.backend.rag.memory.RagMemory;
 import com.hnu.backend.rag.prompt.QueryPlanningPrompts;

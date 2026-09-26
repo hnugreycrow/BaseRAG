@@ -6,8 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.hnu.backend.configuration.RagProperties;
 import com.hnu.backend.rag.answer.ContextBuilder;
+import com.hnu.backend.rag.configuration.RagProperties;
 import com.hnu.backend.rag.execution.ExecutionResult;
 import com.hnu.backend.rag.execution.RagBudgetSnapshot;
 import com.hnu.backend.rag.execution.SubQuestionExecution;

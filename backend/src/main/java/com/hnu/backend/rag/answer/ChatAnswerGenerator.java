@@ -2,7 +2,7 @@ package com.hnu.backend.rag.answer;
 
 import com.hnu.backend.model.client.ChatClient;
 import com.hnu.backend.model.client.ChatGenerationRequest;
-import com.hnu.backend.model.config.AiProperties;
+import com.hnu.backend.model.configuration.AiProperties;
 import com.hnu.backend.model.http.ModelHttpClient;
 import com.hnu.backend.observability.TraceReasonCatalog;
 import com.hnu.backend.shared.error.ApiException;

@@ -1,7 +1,7 @@
 package com.hnu.backend.rag.service;
 
-import com.hnu.backend.configuration.ConversationProperties;
-import com.hnu.backend.configuration.RagProperties;
+import com.hnu.backend.conversation.configuration.ConversationProperties;
+import com.hnu.backend.rag.configuration.RagProperties;
 import com.hnu.backend.rag.execution.RagBudgetSnapshot;
 import com.hnu.backend.rag.vo.RetrievalSettingsResponse;
 import org.springframework.stereotype.Service;

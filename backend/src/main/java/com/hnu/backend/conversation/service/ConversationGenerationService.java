@@ -1,6 +1,5 @@
 package com.hnu.backend.conversation.service;
 
-import com.hnu.backend.configuration.RagProperties;
 import com.hnu.backend.conversation.entity.Conversation;
 import com.hnu.backend.conversation.entity.Message;
 import com.hnu.backend.conversation.entity.MessageRole;
@@ -14,6 +13,7 @@ import com.hnu.backend.observability.service.RagTraceManager;
 import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.rag.answer.AnswerGenerator;
 import com.hnu.backend.rag.answer.AnswerStage;
+import com.hnu.backend.rag.configuration.RagProperties;
 import com.hnu.backend.rag.vo.ModelInfoResponse;
 import com.hnu.backend.shared.error.ApiException;
 import com.hnu.backend.shared.error.ErrorCode;

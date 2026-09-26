@@ -1,6 +1,6 @@
 package com.hnu.backend.rag.execution;
 
-import com.hnu.backend.configuration.RagProperties;
+import com.hnu.backend.rag.configuration.RagProperties;
 
 /**
  * 单次执行使用的不可变检索预算，避免运行期间配置对象变化导致同一请求前后行为不一致。

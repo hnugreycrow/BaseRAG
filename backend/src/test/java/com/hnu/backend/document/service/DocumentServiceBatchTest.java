@@ -3,7 +3,7 @@ package com.hnu.backend.document.service;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-import com.hnu.backend.configuration.DocumentProcessingProperties;
+import com.hnu.backend.document.configuration.DocumentProcessingProperties;
 import com.hnu.backend.document.entity.Document;
 import com.hnu.backend.document.entity.DocumentVersion;
 import com.hnu.backend.document.entity.DocumentVersionStatus;

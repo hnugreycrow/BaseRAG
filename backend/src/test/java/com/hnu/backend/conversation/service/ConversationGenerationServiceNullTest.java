@@ -8,7 +8,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.hnu.backend.configuration.RagProperties;
 import com.hnu.backend.conversation.entity.Conversation;
 import com.hnu.backend.conversation.entity.Message;
 import com.hnu.backend.conversation.entity.MessageRole;
@@ -18,6 +17,7 @@ import com.hnu.backend.conversation.mapper.GenerationAttemptMapper;
 import com.hnu.backend.conversation.mapper.MessageMapper;
 import com.hnu.backend.observability.service.RagTraceManager;
 import com.hnu.backend.rag.answer.AnswerStage;
+import com.hnu.backend.rag.configuration.RagProperties;
 import com.hnu.backend.shared.error.ApiException;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;

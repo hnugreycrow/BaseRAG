@@ -3,8 +3,8 @@ package com.hnu.backend.rag.answer;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-import com.hnu.backend.configuration.RagProperties;
 import com.hnu.backend.model.client.ChatClient;
+import com.hnu.backend.rag.configuration.RagProperties;
 import com.hnu.backend.rag.prompt.PromptAssemblyStage;
 import com.hnu.backend.rag.retrieval.RetrievalService;
 import com.hnu.backend.shared.error.ApiException;

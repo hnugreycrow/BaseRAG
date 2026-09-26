@@ -2,7 +2,7 @@ package com.hnu.backend.model.http;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import com.hnu.backend.model.config.AiProperties;
+import com.hnu.backend.model.configuration.AiProperties;
 import com.hnu.backend.shared.error.ApiException;
 import com.hnu.backend.shared.error.ErrorCode;
 import com.sun.net.httpserver.HttpServer;

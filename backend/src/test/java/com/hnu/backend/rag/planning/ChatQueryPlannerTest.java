@@ -8,8 +8,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.hnu.backend.configuration.RagProperties;
 import com.hnu.backend.model.client.ChatClient;
+import com.hnu.backend.rag.configuration.RagProperties;
 import com.hnu.backend.rag.memory.MemoryTurn;
 import com.hnu.backend.rag.memory.RagMemory;
 import com.hnu.backend.rag.prompt.QueryPlanningPrompts;

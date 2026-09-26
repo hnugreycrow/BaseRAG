@@ -5,11 +5,11 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.hnu.backend.configuration.RagProperties;
 import com.hnu.backend.knowledgebase.entity.KnowledgeBase;
 import com.hnu.backend.knowledgebase.mapper.KnowledgeBaseMapper;
 import com.hnu.backend.model.client.EmbeddingClient;
 import com.hnu.backend.observability.trace.RagRunTrace;
+import com.hnu.backend.rag.configuration.RagProperties;
 import com.hnu.backend.rag.execution.CancellationToken;
 import com.hnu.backend.rag.execution.StageBudget;
 import java.util.List;

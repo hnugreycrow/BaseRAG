@@ -2,7 +2,7 @@ package com.hnu.backend.document.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
-import com.hnu.backend.configuration.DocumentProcessingProperties;
+import com.hnu.backend.document.configuration.DocumentProcessingProperties;
 import com.hnu.backend.document.entity.Document;
 import com.hnu.backend.document.entity.DocumentChunk;
 import com.hnu.backend.document.entity.DocumentVersion;

@@ -1,12 +1,12 @@
 package com.hnu.backend.rag.planning;
 
-import com.hnu.backend.configuration.ObservabilityProperties;
-import com.hnu.backend.configuration.RagProperties;
 import com.hnu.backend.observability.RagDecisionLog;
 import com.hnu.backend.observability.RagStageName;
 import com.hnu.backend.observability.TraceReasonCatalog;
+import com.hnu.backend.observability.configuration.ObservabilityProperties;
 import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.observability.trace.TraceContext;
+import com.hnu.backend.rag.configuration.RagProperties;
 import com.hnu.backend.rag.memory.RagMemory;
 import com.hnu.backend.shared.error.ApiException;
 import com.hnu.backend.shared.error.ErrorCode;

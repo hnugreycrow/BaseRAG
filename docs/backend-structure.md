@@ -14,6 +14,7 @@ com.hnu.backend
 ├─ shared/
 │  ├─ web/                    # 统一响应、ResponseBodyAdvice、请求 ID
 │  ├─ error/                  # 业务异常与全局异常处理
+│  ├─ json/                   # 协议、历史快照与模型交互的 JSON 配置
 │  └─ persistence/            # 通用 MyBatis 类型处理
 ├─ application/
 │  └─ service/                # 知识库与文档的跨模块删除编排
@@ -26,6 +27,7 @@ com.hnu.backend
 │  ├─ entity/
 │  └─ mapper/
 ├─ document/
+│  ├─ configuration/          # 文档处理并发和队列配置
 │  ├─ api/                    # 对外提供关联文档清理能力
 │  ├─ controller/
 │  ├─ dto/
@@ -36,6 +38,7 @@ com.hnu.backend
 │  ├─ parser/
 │  └─ storage/
 ├─ rag/
+│  ├─ configuration/          # RAG 流水线预算与策略参数
 │  ├─ controller/             # /api/questions 兼容入口
 │  ├─ dto/
 │  ├─ vo/
@@ -51,6 +54,7 @@ com.hnu.backend
 │  ├─ answer/                 # 回答模型端口、流式生成与引用校验
 │  └─ support/                # 跨阶段通用值处理
 ├─ conversation/
+│  ├─ configuration/          # 会话记忆和流式检查点参数
 │  ├─ controller/
 │  ├─ dto/
 │  ├─ vo/
@@ -60,8 +64,29 @@ com.hnu.backend
 ├─ model/
 │  ├─ client/                 # Chat、Embedding 与 Rerank 能力
 │  ├─ http/                   # OpenAI Compatible HTTP 实现
-│  └─ config/
-└─ configuration/             # 跨模块运行参数和本地启动限制
+│  ├─ configuration/          # 模型提供方参数与 Embedding 协议
+│  ├─ controller/
+│  ├─ service/
+│  └─ vo/
+├─ intent/
+│  ├─ controller/             # 意图树管理 HTTP 入口
+│  ├─ dto/                    # 节点编辑请求
+│  ├─ entity/                 # 数据库节点与绑定记录
+│  ├─ mapper/
+│  ├─ service/                # 意图树管理与业务校验
+│  ├─ model/                  # 非持久化节点模型
+│  ├─ snapshot/               # 路由快照构建与缓存
+│  └─ event/                  # 意图树变更事件
+├─ auth/                      # 认证、账户管理及所属配置
+├─ observability/
+│  ├─ configuration/          # Trace 保留与清理参数
+│  ├─ controller/
+│  ├─ entity/
+│  ├─ mapper/
+│  ├─ service/
+│  ├─ trace/
+│  └─ vo/
+└─ configuration/             # 全局 JSON 配置和本地启动限制
 ```
 
 资源目录按消费模块归档：
@@ -73,12 +98,14 @@ src/main/resources
 ├─ prompts/                   # 各模型阶段的 UTF-8 Markdown 提示词
 └─ mapper/
    ├─ knowledgebase/
-   ├─ document/
+   ├─ observability/
    └─ rag/
       └─ retrieval/
 ```
 
 测试目录镜像主代码包；真实 PostgreSQL、pgvector 与 RustFS 测试集中在 `integration/`。
+
+业务参数统一放在所属模块的 `configuration/`；根 `configuration/` 只放全局装配。包移动不改变 `@ConfigurationProperties` 前缀，仍由启动类从 `com.hnu.backend` 根包扫描。意图节点模型和数据库实体分开，快照缓存通过 `event/` 中的事件失效；此次分层不改变跨模块调用关系。
 
 ## 3. 模块职责
 

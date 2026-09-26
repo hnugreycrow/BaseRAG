@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.hnu.backend.model.client.ChatClient;
 import com.hnu.backend.model.client.ChatGenerationRequest;
-import com.hnu.backend.model.config.AiProperties;
+import com.hnu.backend.model.configuration.AiProperties;
 import com.hnu.backend.shared.error.ApiException;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;

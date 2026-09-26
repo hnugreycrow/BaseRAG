@@ -3,7 +3,6 @@ package com.hnu.backend.conversation.service;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-import com.hnu.backend.configuration.RagProperties;
 import com.hnu.backend.conversation.entity.Conversation;
 import com.hnu.backend.conversation.mapper.ConversationMapper;
 import com.hnu.backend.conversation.mapper.GenerationAttemptMapper;
@@ -12,6 +11,7 @@ import com.hnu.backend.observability.service.RagTraceManager;
 import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.rag.answer.AnswerGenerator;
 import com.hnu.backend.rag.answer.AnswerStage;
+import com.hnu.backend.rag.configuration.RagProperties;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.LinkedBlockingQueue;

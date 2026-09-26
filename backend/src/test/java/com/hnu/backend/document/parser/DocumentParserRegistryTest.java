@@ -2,7 +2,7 @@ package com.hnu.backend.document.parser;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import com.hnu.backend.configuration.RagProperties;
+import com.hnu.backend.rag.configuration.RagProperties;
 import com.hnu.backend.shared.error.ApiException;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;

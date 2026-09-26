@@ -14,14 +14,14 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.hnu.backend.configuration.RagProperties;
-import com.hnu.backend.intent.IntentNode;
-import com.hnu.backend.intent.IntentTreeSnapshot;
-import com.hnu.backend.intent.IntentTreeSnapshotProvider;
+import com.hnu.backend.intent.model.IntentNode;
+import com.hnu.backend.intent.snapshot.IntentTreeSnapshot;
+import com.hnu.backend.intent.snapshot.IntentTreeSnapshotProvider;
 import com.hnu.backend.model.client.ChatClient;
 import com.hnu.backend.observability.RagRunStatus;
 import com.hnu.backend.observability.RagStageStatus;
 import com.hnu.backend.observability.trace.RagRunTrace;
+import com.hnu.backend.rag.configuration.RagProperties;
 import com.hnu.backend.rag.mcp.McpToolDefinition;
 import com.hnu.backend.rag.mcp.McpToolRegistry;
 import com.hnu.backend.rag.planning.QueryPlan;

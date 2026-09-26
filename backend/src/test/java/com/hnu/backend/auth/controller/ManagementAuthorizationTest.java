@@ -20,7 +20,7 @@ import cn.dev33.satoken.stp.StpUtil;
 import com.hnu.backend.auth.service.AdminUserService;
 import com.hnu.backend.auth.service.CurrentUserService;
 import com.hnu.backend.document.controller.DocumentController;
-import com.hnu.backend.intent.IntentTreeController;
+import com.hnu.backend.intent.controller.IntentTreeController;
 import com.hnu.backend.knowledgebase.controller.KnowledgeBaseController;
 import com.hnu.backend.model.controller.ModelSettingsController;
 import com.hnu.backend.model.service.ModelSettingsService;

@@ -1,7 +1,7 @@
 package com.hnu.backend.application.service;
 
 import com.hnu.backend.document.api.DocumentCleanup;
-import com.hnu.backend.intent.IntentTreeChangedEvent;
+import com.hnu.backend.intent.event.IntentTreeChangedEvent;
 import com.hnu.backend.knowledgebase.api.KnowledgeBaseAccess;
 import com.hnu.backend.knowledgebase.api.KnowledgeBaseRemoval;
 import java.util.List;

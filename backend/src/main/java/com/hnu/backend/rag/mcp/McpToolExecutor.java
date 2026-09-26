@@ -1,6 +1,6 @@
 package com.hnu.backend.rag.mcp;
 
-import com.hnu.backend.configuration.RagProperties;
+import com.hnu.backend.rag.configuration.RagProperties;
 import com.hnu.backend.shared.error.ErrorCode;
 import com.hnu.backend.shared.json.JsonCodecs;
 import jakarta.annotation.PreDestroy;

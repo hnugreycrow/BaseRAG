@@ -5,8 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.*;
 
-import com.hnu.backend.configuration.RagProperties;
 import com.hnu.backend.model.client.EmbeddingClient;
+import com.hnu.backend.rag.configuration.RagProperties;
 import com.hnu.backend.rag.execution.CancellationToken;
 import com.hnu.backend.rag.execution.RagBudgetSnapshot;
 import com.hnu.backend.shared.error.ApiException;

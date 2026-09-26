@@ -23,8 +23,8 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 class RagRunQueryServiceTest {
-  private final com.hnu.backend.configuration.ObservabilityProperties observability =
-      new com.hnu.backend.configuration.ObservabilityProperties();
+  private final com.hnu.backend.observability.configuration.ObservabilityProperties observability =
+      new com.hnu.backend.observability.configuration.ObservabilityProperties();
 
   @Test
   void trendFillsMissingDaysAndUsesBeijingBoundsAndPreviousPeriod() {

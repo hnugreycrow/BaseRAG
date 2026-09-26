@@ -2,7 +2,7 @@ package com.hnu.backend.rag.answer;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import com.hnu.backend.configuration.RagProperties;
+import com.hnu.backend.rag.configuration.RagProperties;
 import com.hnu.backend.rag.retrieval.SearchHit;
 import java.util.*;
 import org.junit.jupiter.api.Test;

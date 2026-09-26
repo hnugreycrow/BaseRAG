@@ -1,15 +1,15 @@
 package com.hnu.backend.rag.routing;
 
-import com.hnu.backend.configuration.RagProperties;
-import com.hnu.backend.intent.IntentNode;
-import com.hnu.backend.intent.IntentTreeSnapshot;
-import com.hnu.backend.intent.IntentTreeSnapshotProvider;
+import com.hnu.backend.intent.model.IntentNode;
+import com.hnu.backend.intent.snapshot.IntentTreeSnapshot;
+import com.hnu.backend.intent.snapshot.IntentTreeSnapshotProvider;
 import com.hnu.backend.model.client.ChatClient;
 import com.hnu.backend.observability.RagDecisionLog;
 import com.hnu.backend.observability.RagStageName;
 import com.hnu.backend.observability.TraceReasonCatalog;
 import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.observability.trace.TraceContext;
+import com.hnu.backend.rag.configuration.RagProperties;
 import com.hnu.backend.rag.mcp.McpToolRegistry;
 import com.hnu.backend.rag.planning.QueryPlan;
 import com.hnu.backend.rag.prompt.IntentTreeRoutingPrompts;

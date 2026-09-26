@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
-import com.hnu.backend.configuration.RagProperties;
 import com.hnu.backend.document.entity.Document;
 import com.hnu.backend.document.entity.DocumentChunk;
 import com.hnu.backend.document.entity.DocumentVersion;
@@ -15,6 +14,7 @@ import com.hnu.backend.document.parser.MarkdownChunker;
 import com.hnu.backend.document.storage.FileStorage;
 import com.hnu.backend.knowledgebase.api.KnowledgeBaseAccess;
 import com.hnu.backend.model.client.EmbeddingClient;
+import com.hnu.backend.rag.configuration.RagProperties;
 import com.hnu.backend.shared.error.ApiException;
 import com.hnu.backend.shared.persistence.UuidTypeHandler;
 import java.io.ByteArrayOutputStream;
@@ -98,7 +98,7 @@ class DocumentServiceParsingTest {
             embedding,
             storage,
             tx,
-            new com.hnu.backend.configuration.DocumentProcessingProperties());
+            new com.hnu.backend.document.configuration.DocumentProcessingProperties());
     var invalid =
         new MockMultipartFile(
             "file", "fake.pdf", "application/pdf", "not a pdf".getBytes(StandardCharsets.UTF_8));
@@ -142,7 +142,7 @@ class DocumentServiceParsingTest {
             embedding,
             storage,
             tx,
-            new com.hnu.backend.configuration.DocumentProcessingProperties());
+            new com.hnu.backend.document.configuration.DocumentProcessingProperties());
 
     var uploaded =
         service.upload(

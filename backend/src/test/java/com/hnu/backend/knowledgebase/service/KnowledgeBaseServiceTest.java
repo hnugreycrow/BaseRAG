@@ -7,7 +7,7 @@ import static org.mockito.Mockito.when;
 
 import com.hnu.backend.knowledgebase.entity.KnowledgeBase;
 import com.hnu.backend.knowledgebase.mapper.KnowledgeBaseMapper;
-import com.hnu.backend.model.config.AiProperties;
+import com.hnu.backend.model.configuration.AiProperties;
 import com.hnu.backend.shared.error.ApiException;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;

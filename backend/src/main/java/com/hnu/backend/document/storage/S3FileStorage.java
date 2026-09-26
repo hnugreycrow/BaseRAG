@@ -1,6 +1,6 @@
 package com.hnu.backend.document.storage;
 
-import com.hnu.backend.configuration.RagProperties;
+import com.hnu.backend.rag.configuration.RagProperties;
 import com.hnu.backend.shared.error.ApiException;
 import com.hnu.backend.shared.error.ErrorCode;
 import jakarta.annotation.PreDestroy;

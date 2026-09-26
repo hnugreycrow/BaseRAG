@@ -4,9 +4,9 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import com.hnu.backend.document.api.DocumentCleanup;
-import com.hnu.backend.intent.IntentTreeChangedEvent;
-import com.hnu.backend.intent.IntentTreeService;
-import com.hnu.backend.intent.IntentTreeSnapshotProvider;
+import com.hnu.backend.intent.event.IntentTreeChangedEvent;
+import com.hnu.backend.intent.service.IntentTreeService;
+import com.hnu.backend.intent.snapshot.IntentTreeSnapshotProvider;
 import com.hnu.backend.knowledgebase.api.KnowledgeBaseAccess;
 import com.hnu.backend.knowledgebase.api.KnowledgeBaseRemoval;
 import com.hnu.backend.rag.mcp.McpToolRegistry;

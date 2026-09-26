@@ -1,6 +1,6 @@
 package com.hnu.backend.model.service;
 
-import com.hnu.backend.model.config.AiProperties;
+import com.hnu.backend.model.configuration.AiProperties;
 import com.hnu.backend.model.vo.ModelSettingsResponse;
 import java.util.List;
 import org.springframework.stereotype.Service;

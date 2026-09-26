@@ -5,11 +5,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.*;
 
-import com.hnu.backend.configuration.RagProperties;
 import com.hnu.backend.observability.RagRunStatus;
 import com.hnu.backend.observability.RagStageName;
 import com.hnu.backend.observability.RagStageStatus;
 import com.hnu.backend.observability.trace.RagRunTrace;
+import com.hnu.backend.rag.configuration.RagProperties;
 import com.hnu.backend.rag.mcp.McpToolExecutor;
 import com.hnu.backend.rag.mcp.ToolObservation;
 import com.hnu.backend.rag.planning.QueryPlan;

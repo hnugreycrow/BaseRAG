@@ -3,9 +3,9 @@ package com.hnu.backend.integration;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.hnu.backend.intent.IntentNode;
-import com.hnu.backend.intent.IntentNodeRequest;
-import com.hnu.backend.intent.IntentTreeService;
+import com.hnu.backend.intent.dto.IntentNodeRequest;
+import com.hnu.backend.intent.model.IntentNode;
+import com.hnu.backend.intent.service.IntentTreeService;
 import com.hnu.backend.model.client.ChatClient;
 import com.hnu.backend.model.client.EmbeddingClient;
 import java.util.List;

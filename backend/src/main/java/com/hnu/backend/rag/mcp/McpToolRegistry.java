@@ -1,6 +1,6 @@
 package com.hnu.backend.rag.mcp;
 
-import com.hnu.backend.configuration.RagProperties;
+import com.hnu.backend.rag.configuration.RagProperties;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;

@@ -1,6 +1,6 @@
 package com.hnu.backend.rag.answer;
 
-import com.hnu.backend.configuration.RagProperties;
+import com.hnu.backend.rag.configuration.RagProperties;
 import com.hnu.backend.rag.prompt.AssembledPrompt;
 import com.hnu.backend.rag.prompt.PromptAssemblyStage;
 import com.hnu.backend.rag.retrieval.RetrievalService;

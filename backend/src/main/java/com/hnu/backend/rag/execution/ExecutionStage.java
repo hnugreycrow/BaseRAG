@@ -1,10 +1,10 @@
 package com.hnu.backend.rag.execution;
 
-import com.hnu.backend.configuration.RagProperties;
 import com.hnu.backend.observability.RagStageName;
 import com.hnu.backend.observability.TraceReasonCatalog;
 import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.observability.trace.TraceContext;
+import com.hnu.backend.rag.configuration.RagProperties;
 import com.hnu.backend.rag.mcp.McpToolCall;
 import com.hnu.backend.rag.mcp.McpToolExecutor;
 import com.hnu.backend.rag.mcp.ToolObservation;

@@ -16,7 +16,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.hnu.backend.configuration.RagProperties;
+import com.hnu.backend.rag.configuration.RagProperties;
 import com.hnu.backend.rag.prompt.AssembledPrompt;
 import com.hnu.backend.rag.prompt.PromptAssemblyStage;
 import com.hnu.backend.rag.vo.SourceResponse;

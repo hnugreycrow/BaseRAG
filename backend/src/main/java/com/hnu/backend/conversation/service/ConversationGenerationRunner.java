@@ -1,6 +1,6 @@
 package com.hnu.backend.conversation.service;
 
-import com.hnu.backend.configuration.ConversationProperties;
+import com.hnu.backend.conversation.configuration.ConversationProperties;
 import com.hnu.backend.conversation.entity.GenerationAttempt;
 import com.hnu.backend.conversation.entity.GenerationAttemptStatus;
 import com.hnu.backend.conversation.mapper.GenerationAttemptMapper;

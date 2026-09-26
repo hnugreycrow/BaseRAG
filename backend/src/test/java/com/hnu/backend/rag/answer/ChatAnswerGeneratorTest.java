@@ -11,7 +11,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.hnu.backend.model.client.ChatClient;
-import com.hnu.backend.model.config.AiProperties;
+import com.hnu.backend.model.configuration.AiProperties;
 import com.hnu.backend.model.http.ModelHttpClient;
 import com.hnu.backend.shared.error.ErrorCode;
 import org.junit.jupiter.api.Test;

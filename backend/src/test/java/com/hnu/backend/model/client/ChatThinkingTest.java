@@ -3,7 +3,7 @@ package com.hnu.backend.model.client;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-import com.hnu.backend.model.config.AiProperties;
+import com.hnu.backend.model.configuration.AiProperties;
 import com.hnu.backend.model.http.ModelHttpClient;
 import java.util.ArrayList;
 import java.util.List;
