@@ -1,5 +1,6 @@
-package com.hnu.backend.rag.vo;
+package com.hnu.backend.rag.snapshot;
 
+import com.hnu.backend.rag.vo.SourceResponse;
 import com.hnu.backend.shared.json.JsonCodecs;
 import java.util.ArrayList;
 import java.util.List;

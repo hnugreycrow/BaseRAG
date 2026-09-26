@@ -43,6 +43,8 @@ com.hnu.backend
 │  ├─ dto/
 │  ├─ vo/
 │  ├─ memory/                 # 会话记忆读取
+│  ├─ service/                # 单轮问答兼容编排与检索设置
+│  ├─ snapshot/               # 历史来源快照读取与兼容
 │  ├─ planning/               # 问题重写与子问题拆分
 │  ├─ routing/                # 意图识别与安全路由
 │  ├─ execution/              # 冻结预算与分子问题并发执行
@@ -111,6 +113,8 @@ src/main/resources
 会话生成内部协作类集中在 `conversation/generation/`，包级可见的状态和通道不对外开放。`service/` 通过生成服务入口发起任务和执行会话删除前的活动检查；共用的消息映射放在 `presentation/`，避免生成内部类依赖会话查询实现。生成服务仍负责执行器关闭，跨包只暴露必要操作。
 
 业务参数统一放在所属模块的 `configuration/`；根 `configuration/` 只放全局装配。包移动不改变 `@ConfigurationProperties` 前缀，仍由启动类从 `com.hnu.backend` 根包扫描。意图节点模型和数据库实体分开，快照缓存通过 `event/` 中的事件失效；此次分层不改变跨模块调用关系。
+
+`rag/service/RagService` 编排旧单轮问答兼容流程，`rag/answer/` 保留最终生成与引用处理。历史来源快照的解析逻辑位于 `rag/snapshot/SourceSnapshotDecoder`，`rag/vo/` 保留对外响应类型；目录调整不改变 HTTP 接口和快照格式。
 
 ## 3. 模块职责
 

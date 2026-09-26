@@ -2,9 +2,9 @@ package com.hnu.backend.conversation.presentation;
 
 import com.hnu.backend.conversation.entity.Message;
 import com.hnu.backend.conversation.vo.ConversationResponses;
+import com.hnu.backend.rag.snapshot.SourceSnapshotDecoder;
 import com.hnu.backend.rag.vo.ModelInfoResponse;
 import com.hnu.backend.rag.vo.SourceResponse;
-import com.hnu.backend.rag.vo.SourceSnapshotDecoder;
 import com.hnu.backend.shared.json.JsonCodecs;
 import java.util.List;
 import tools.jackson.databind.json.JsonMapper;

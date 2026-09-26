@@ -1,5 +1,9 @@
-package com.hnu.backend.rag.answer;
+package com.hnu.backend.rag.service;
 
+import com.hnu.backend.rag.answer.AnswerGenerator;
+import com.hnu.backend.rag.answer.AnswerResult;
+import com.hnu.backend.rag.answer.AnswerStage;
+import com.hnu.backend.rag.answer.ContextBuilder;
 import com.hnu.backend.rag.configuration.RagProperties;
 import com.hnu.backend.rag.prompt.AssembledPrompt;
 import com.hnu.backend.rag.prompt.PromptAssemblyStage;

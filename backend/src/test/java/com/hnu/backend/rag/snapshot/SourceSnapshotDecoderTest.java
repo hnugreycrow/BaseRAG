@@ -1,7 +1,8 @@
-package com.hnu.backend.rag.vo;
+package com.hnu.backend.rag.snapshot;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.hnu.backend.rag.vo.SourceResponse;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;

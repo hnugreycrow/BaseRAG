@@ -1,9 +1,13 @@
-package com.hnu.backend.rag.answer;
+package com.hnu.backend.rag.service;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import com.hnu.backend.model.client.ChatClient;
+import com.hnu.backend.rag.answer.AnswerStage;
+import com.hnu.backend.rag.answer.ChatAnswerGenerator;
+import com.hnu.backend.rag.answer.ContextAndCitationsTest;
+import com.hnu.backend.rag.answer.ContextBuilder;
 import com.hnu.backend.rag.configuration.RagProperties;
 import com.hnu.backend.rag.prompt.PromptAssemblyStage;
 import com.hnu.backend.rag.retrieval.RetrievalService;

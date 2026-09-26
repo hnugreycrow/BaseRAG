@@ -1,8 +1,8 @@
 package com.hnu.backend.rag.controller;
 
 import com.hnu.backend.auth.service.CurrentUserService;
-import com.hnu.backend.rag.answer.RagService;
 import com.hnu.backend.rag.dto.QuestionRequest;
+import com.hnu.backend.rag.service.RagService;
 import com.hnu.backend.rag.vo.AnswerResponse;
 import jakarta.validation.Valid;
 import org.springframework.context.annotation.Profile;
