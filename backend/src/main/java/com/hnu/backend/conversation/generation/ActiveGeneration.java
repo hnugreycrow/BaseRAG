@@ -3,9 +3,9 @@ package com.hnu.backend.conversation.generation;
 import com.hnu.backend.common.exception.ApiException;
 import com.hnu.backend.conversation.entity.Conversation;
 import com.hnu.backend.conversation.entity.Message;
-import com.hnu.backend.observability.trace.AnswerTraceObserver;
+import com.hnu.backend.observability.trace.AnswerTrace;
 import com.hnu.backend.observability.trace.RagRunTrace;
-import com.hnu.backend.rag.generation.AnswerGenerator;
+import com.hnu.backend.rag.api.RagExecutionControl;
 import java.util.UUID;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -26,7 +26,7 @@ final class ActiveGeneration {
   private final boolean thinkingEnabled;
   private final String requestId;
   private final ConversationSseChannel channel;
-  private final AnswerGenerator.Control control;
+  private final RagExecutionControl control;
   private final RagRunTrace trace;
   private final LongSupplier ticker;
   private final StringBuilder content = new StringBuilder();
@@ -37,7 +37,7 @@ final class ActiveGeneration {
   private Future<?> future;
   private UUID currentAttemptId;
   private int attemptIndex;
-  private AnswerTraceObserver answerTrace;
+  private AnswerTrace answerTrace;
   private int checkpointLength;
   private long checkpointAt;
 
@@ -48,7 +48,7 @@ final class ActiveGeneration {
       Message assistant,
       String requestId,
       ConversationSseChannel channel,
-      AnswerGenerator.Control control,
+      RagExecutionControl control,
       RagRunTrace trace) {
     this(conversation, user, assistant, requestId, channel, control, trace, System::nanoTime);
   }
@@ -60,7 +60,7 @@ final class ActiveGeneration {
       Message assistant,
       String requestId,
       ConversationSseChannel channel,
-      AnswerGenerator.Control control,
+      RagExecutionControl control,
       RagRunTrace trace,
       LongSupplier ticker) {
     this.ownerId = conversation.getOwnerId();
@@ -109,7 +109,7 @@ final class ActiveGeneration {
     return channel;
   }
 
-  AnswerGenerator.Control control() {
+  RagExecutionControl control() {
     return control;
   }
 
@@ -198,12 +198,12 @@ final class ActiveGeneration {
     return attemptIndex;
   }
 
-  synchronized AnswerTraceObserver answerTrace() {
+  synchronized AnswerTrace answerTrace() {
     return answerTrace;
   }
 
   /** 注册当前回答的 Trace 观察器。 */
-  synchronized void observeAnswer(AnswerTraceObserver observer) {
+  synchronized void observeAnswer(AnswerTrace observer) {
     ensureWritable();
     answerTrace = observer;
   }

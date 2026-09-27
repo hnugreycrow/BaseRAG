@@ -17,8 +17,8 @@ import com.hnu.backend.conversation.mapper.ConversationMapper;
 import com.hnu.backend.conversation.mapper.GenerationAttemptMapper;
 import com.hnu.backend.conversation.mapper.MessageMapper;
 import com.hnu.backend.observability.service.RagTraceManager;
+import com.hnu.backend.rag.api.RagEngine;
 import com.hnu.backend.rag.config.RagProperties;
-import com.hnu.backend.rag.generation.AnswerStage;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -33,7 +33,7 @@ class ConversationGenerationServiceNullTest {
           conversations,
           messages,
           mock(GenerationAttemptMapper.class),
-          mock(AnswerStage.class),
+          mock(RagEngine.class),
           new RagProperties(),
           tx,
           mock(RagTraceManager.class),

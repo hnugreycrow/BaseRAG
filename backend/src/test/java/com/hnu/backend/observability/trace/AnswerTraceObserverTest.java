@@ -7,7 +7,7 @@ import com.hnu.backend.common.exception.ErrorCode;
 import com.hnu.backend.observability.RagRunStatus;
 import com.hnu.backend.observability.RagStageName;
 import com.hnu.backend.observability.RagStageStatus;
-import com.hnu.backend.rag.generation.AnswerGenerator;
+import com.hnu.backend.rag.api.AnswerGenerator;
 import com.hnu.backend.rag.generation.AnswerStage;
 import java.time.OffsetDateTime;
 import java.util.UUID;

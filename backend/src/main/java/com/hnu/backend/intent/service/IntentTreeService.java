@@ -12,7 +12,7 @@ import com.hnu.backend.intent.mapper.IntentBindingMapper;
 import com.hnu.backend.intent.mapper.IntentNodeMapper;
 import com.hnu.backend.intent.model.IntentNode;
 import com.hnu.backend.intent.snapshot.IntentTreeSnapshot;
-import com.hnu.backend.knowledgebase.mapper.KnowledgeBaseMapper;
+import com.hnu.backend.knowledgebase.api.KnowledgeBaseCatalog;
 import com.hnu.backend.rag.mcp.McpToolRegistry;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -35,7 +35,7 @@ public class IntentTreeService {
   private static final int MAX_ACTIVE_LEAVES = 32;
   private final IntentNodeMapper intentNodeMapper;
   private final IntentBindingMapper intentBindingMapper;
-  private final KnowledgeBaseMapper knowledgeBaseMapper;
+  private final KnowledgeBaseCatalog knowledgeBaseMapper;
   private final McpToolRegistry tools;
   private final ApplicationEventPublisher events;
   private final JsonMapper json = JsonCodecs.snapshots();
@@ -43,7 +43,7 @@ public class IntentTreeService {
   public IntentTreeService(
       IntentNodeMapper intentNodeMapper,
       IntentBindingMapper intentBindingMapper,
-      KnowledgeBaseMapper knowledgeBaseMapper,
+      KnowledgeBaseCatalog knowledgeBaseMapper,
       McpToolRegistry tools,
       ApplicationEventPublisher events) {
     this.intentNodeMapper = intentNodeMapper;
@@ -197,7 +197,7 @@ public class IntentTreeService {
         throw ApiException.bad(ErrorCode.INVALID_INTENT_BINDING, "知识库叶子必须绑定公共知识库");
       }
       for (UUID kbId : node.knowledgeBaseIds()) {
-        if (knowledgeBaseMapper.findAdminOwned(kbId) == null) {
+        if (!knowledgeBaseMapper.contains(kbId)) {
           throw ApiException.bad(ErrorCode.INVALID_INTENT_BINDING, "绑定的公共知识库不存在");
         }
       }

@@ -1,4 +1,4 @@
-package com.hnu.backend.conversation.service;
+package com.hnu.backend.rag.pipeline;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.mock;
@@ -7,26 +7,52 @@ import static org.mockito.Mockito.when;
 
 import com.hnu.backend.conversation.entity.Conversation;
 import com.hnu.backend.observability.trace.RagRunTrace;
+import com.hnu.backend.rag.api.RagRequest;
 import com.hnu.backend.rag.memory.MemoryProvider;
 import com.hnu.backend.rag.memory.MemoryStage;
 import com.hnu.backend.rag.memory.MemoryTurn;
 import com.hnu.backend.rag.memory.RagMemory;
-import com.hnu.backend.rag.pipeline.IntentRoute;
-import com.hnu.backend.rag.pipeline.IntentTreeRoutingStage;
-import com.hnu.backend.rag.pipeline.QueryPlan;
-import com.hnu.backend.rag.pipeline.QueryPlanningStage;
-import com.hnu.backend.rag.pipeline.RoutingPlan;
-import com.hnu.backend.rag.pipeline.RoutingReasonCode;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
-class ConversationContextServiceTest {
+class RagContextPreparationTest {
   private final MemoryProvider memories = mock(MemoryProvider.class);
   private final QueryPlanningStage planning = mock(QueryPlanningStage.class);
   private final IntentTreeRoutingStage routing = mock(IntentTreeRoutingStage.class);
-  private final ConversationContextService conversationContextService =
-      new ConversationContextService(new MemoryStage(memories), planning, routing);
+  private final RagContextPreparation conversationContextService =
+      new RagContextPreparation(new MemoryStage(memories), planning, routing);
+
+  @Test
+  void cancellationAfterMemoryPreventsPlanningAndRouting() {
+    var loader = mock(com.hnu.backend.rag.memory.MemoryLoader.class);
+    var cancelled = new java.util.concurrent.atomic.AtomicBoolean();
+    var request =
+        new RagRequest(
+            UUID.randomUUID(),
+            "问题",
+            UUID.randomUUID(),
+            1,
+            null,
+            false,
+            RagRequest.Mode.CONVERSATION);
+    when(loader.execute(
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.eq(1),
+            org.mockito.ArgumentMatchers.any(
+                com.hnu.backend.observability.trace.TraceContext.class)))
+        .thenAnswer(
+            invocation -> {
+              cancelled.set(true);
+              return new RagMemory("", 0, List.of(), List.of(), 0);
+            });
+    var preparation = new RagContextPreparation(loader, planning, routing);
+    org.junit.jupiter.api.Assertions.assertThrows(
+        com.hnu.backend.common.exception.ApiException.class,
+        () -> preparation.prepare(request, RagRunTrace.noop(), cancelled::get));
+    org.mockito.Mockito.verifyNoInteractions(planning, routing);
+  }
 
   @Test
   void returnsOriginalRagMemoryAndStructuredPlan() {
@@ -44,7 +70,16 @@ class ConversationContextServiceTest {
     when(planning.execute(memory, "它有什么要求？")).thenReturn(plan);
     when(routing.execute(plan, RagRunTrace.noop())).thenReturn(routes);
 
-    var prepared = conversationContextService.prepare(conversation, 6, "它有什么要求？");
+    var prepared =
+        conversationContextService.prepare(
+            new RagRequest(
+                conversation.getOwnerId(),
+                "它有什么要求？",
+                conversation.getId(),
+                6,
+                null,
+                false,
+                RagRequest.Mode.CONVERSATION));
 
     assertEquals(plan, prepared.queryPlan());
     assertEquals(routes, prepared.routingPlan());
@@ -64,7 +99,16 @@ class ConversationContextServiceTest {
     when(planning.execute(memory, "原问题")).thenReturn(plan);
     when(routing.execute(plan, RagRunTrace.noop())).thenReturn(routes);
 
-    var prepared = conversationContextService.prepare(conversation, 1, "原问题");
+    var prepared =
+        conversationContextService.prepare(
+            new RagRequest(
+                conversation.getOwnerId(),
+                "原问题",
+                conversation.getId(),
+                1,
+                null,
+                false,
+                RagRequest.Mode.CONVERSATION));
 
     assertEquals(plan, prepared.queryPlan());
     assertEquals(routes, prepared.routingPlan());

@@ -17,7 +17,7 @@ import com.hnu.backend.intent.event.IntentTreeChangedEvent;
 import com.hnu.backend.intent.mapper.IntentBindingMapper;
 import com.hnu.backend.intent.mapper.IntentNodeMapper;
 import com.hnu.backend.intent.model.IntentNode;
-import com.hnu.backend.knowledgebase.mapper.KnowledgeBaseMapper;
+import com.hnu.backend.knowledgebase.api.KnowledgeBaseCatalog;
 import com.hnu.backend.rag.mcp.McpToolRegistry;
 import java.util.ArrayList;
 import java.util.List;
@@ -28,7 +28,7 @@ import org.springframework.context.ApplicationEventPublisher;
 class IntentTreeServiceTest {
   private final IntentNodeMapper intentNodeMapper = mock(IntentNodeMapper.class);
   private final IntentBindingMapper intentBindingMapper = mock(IntentBindingMapper.class);
-  private final KnowledgeBaseMapper knowledgeBaseMapper = mock(KnowledgeBaseMapper.class);
+  private final KnowledgeBaseCatalog knowledgeBaseMapper = mock(KnowledgeBaseCatalog.class);
   private final McpToolRegistry tools = mock(McpToolRegistry.class);
   private final ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
   private final IntentTreeService intentTreeService =
@@ -72,7 +72,7 @@ class IntentTreeServiceTest {
     assertTrue(active.stream().noneMatch(node -> node.id().equals(invalidKb.getId())));
     verify(intentNodeMapper, times(1)).selectList(null);
     verify(intentBindingMapper, times(1)).selectList(null);
-    verify(knowledgeBaseMapper, never()).findAdminOwned(any());
+    verify(knowledgeBaseMapper, never()).contains(any());
   }
 
   @Test

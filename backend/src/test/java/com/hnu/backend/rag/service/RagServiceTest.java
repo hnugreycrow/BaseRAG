@@ -11,6 +11,7 @@ import com.hnu.backend.rag.generation.ChatAnswerGenerator;
 import com.hnu.backend.rag.generation.ContextAndCitationsTest;
 import com.hnu.backend.rag.generation.ContextBuilder;
 import com.hnu.backend.rag.generation.PromptAssemblyStage;
+import com.hnu.backend.rag.pipeline.DefaultRagEngine;
 import com.hnu.backend.rag.retrieval.RetrievalService;
 import java.util.*;
 import org.junit.jupiter.api.Test;
@@ -20,14 +21,19 @@ class RagServiceTest {
   private final RagProperties config = new RagProperties();
   private final RetrievalService retrievalService = mock(RetrievalService.class);
   private final ChatClient chat = mock(ChatClient.class);
-  private final ContextBuilder contexts = new ContextBuilder(config);
+  private final ContextBuilder contexts = new ContextBuilder();
   private final PromptAssemblyStage prompts = new PromptAssemblyStage(contexts);
   private final RagService ragService =
       new RagService(
-          retrievalService,
-          contexts,
-          prompts,
-          new AnswerStage(new ChatAnswerGenerator(chat), prompts),
+          new DefaultRagEngine(
+              null,
+              null,
+              null,
+              null,
+              prompts,
+              new AnswerStage(new ChatAnswerGenerator(chat), prompts),
+              retrievalService,
+              contexts),
           config);
 
   @Test

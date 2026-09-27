@@ -1,5 +1,6 @@
 package com.hnu.backend.rag.generation;
 
+import com.hnu.backend.rag.api.AnswerGenerator;
 import com.hnu.backend.rag.vo.SourceResponse;
 import java.util.List;
 

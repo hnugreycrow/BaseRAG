@@ -3,6 +3,7 @@ package com.hnu.backend.rag.mcp;
 import com.hnu.backend.common.exception.ErrorCode;
 import com.hnu.backend.common.json.JsonCodecs;
 import com.hnu.backend.rag.config.RagProperties;
+import com.hnu.backend.rag.config.RagStageSettings;
 import jakarta.annotation.PreDestroy;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -23,23 +24,25 @@ import tools.jackson.databind.json.JsonMapper;
 
 /** 对 MCP 只读工具执行授权复核、超时限制、敏感字段掩码和输出截断。 */
 @Component
-public class McpToolExecutor {
+public class McpToolExecutor implements ToolExecutor {
   private static final Logger log = LoggerFactory.getLogger(McpToolExecutor.class);
   private static final Set<String> DEFAULT_SENSITIVE_FIELDS =
       Set.of("authorization", "password", "secret", "token", "apikey", "api_key");
   private static final int MAX_ARGUMENT_SUMMARY_CHARS = 1000;
 
   private final McpToolRegistry registry;
-  private final RagProperties config;
+  private final RagStageSettings.Tools config;
   private final JsonMapper json = JsonCodecs.models();
   private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
-  public McpToolExecutor(McpToolRegistry registry, RagProperties config) {
+  @org.springframework.beans.factory.annotation.Autowired
+  public McpToolExecutor(McpToolRegistry registry, RagStageSettings.Tools config) {
     this.registry = registry;
     this.config = config;
   }
 
   /** 执行经过路由产生的调用；任何拒绝结果都保证不会触达外部网关。 */
+  @Override
   public ToolObservation execute(McpToolCall call) {
     long startedAt = System.nanoTime();
     McpToolRegistry.RoutingCheck check = registry.check(call.toolName(), call.arguments());
@@ -60,9 +63,9 @@ public class McpToolExecutor {
     String auditSource = registered.gateway().getClass().getName() + "#" + call.toolName();
     Future<Object> future = executor.submit(() -> registered.gateway().invoke(call));
     try {
-      Object raw = future.get(config.getPipeline().getMcp().getTimeoutMs(), TimeUnit.MILLISECONDS);
+      Object raw = future.get(config.timeoutMs(), TimeUnit.MILLISECONDS);
       String safeOutput = serializeRedacted(raw, registered.definition().sensitiveFields());
-      int limit = config.getPipeline().getMcp().getMaxOutputChars();
+      int limit = config.maxOutputChars();
       boolean truncated = safeOutput.length() > limit;
       String content = truncated ? safeSubstring(safeOutput, limit) : safeOutput;
       ToolObservation observation =
@@ -190,5 +193,10 @@ public class McpToolExecutor {
 
   private long elapsedMillis(long startedAt) {
     return (System.nanoTime() - startedAt) / 1_000_000;
+  }
+
+  /** 兼容独立测试的旧配置装配方式。 */
+  public McpToolExecutor(McpToolRegistry registry, RagProperties config) {
+    this(registry, RagStageSettings.tools(config));
   }
 }

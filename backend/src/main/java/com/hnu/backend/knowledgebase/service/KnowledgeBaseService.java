@@ -5,6 +5,7 @@ import com.hnu.backend.common.exception.ApiException;
 import com.hnu.backend.common.exception.ErrorCode;
 import com.hnu.backend.common.web.PageResponse;
 import com.hnu.backend.knowledgebase.api.KnowledgeBaseAccess;
+import com.hnu.backend.knowledgebase.api.KnowledgeBaseCatalog;
 import com.hnu.backend.knowledgebase.api.KnowledgeBaseRemoval;
 import com.hnu.backend.knowledgebase.entity.KnowledgeBase;
 import com.hnu.backend.knowledgebase.mapper.KnowledgeBaseMapper;
@@ -18,7 +19,22 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 /** 处理知识库生命周期及其向量模型绑定规则。 */
 @Service
-public class KnowledgeBaseService implements KnowledgeBaseAccess, KnowledgeBaseRemoval {
+public class KnowledgeBaseService
+    implements KnowledgeBaseAccess, KnowledgeBaseRemoval, KnowledgeBaseCatalog {
+  /** {@inheritDoc} */
+  @Override
+  public List<UUID> availableIds() {
+    return knowledgeBaseMapper.selectWithDocumentCount(null, Integer.MAX_VALUE, 0).stream()
+        .map(KnowledgeBase::getId)
+        .toList();
+  }
+
+  /** {@inheritDoc} */
+  @Override
+  public boolean contains(UUID id) {
+    return knowledgeBaseMapper.findAdminOwned(id) != null;
+  }
+
   private final KnowledgeBaseMapper knowledgeBaseMapper;
   private final TransactionTemplate tx;
   private final AiProperties ai;

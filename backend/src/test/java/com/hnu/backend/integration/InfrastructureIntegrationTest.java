@@ -658,7 +658,7 @@ class InfrastructureIntegrationTest {
         retrievalMapper.search(
             owner, kb, "[1,0]", "qwen-emb-8b", "siliconflow", "Qwen/Qwen3-Embedding-8B", 2, 10);
     assertEquals(2, hits.size());
-    var sources = new ContextBuilder(config).build(hits).sources();
+    var sources = new ContextBuilder().build(hits).sources();
     assertTrue(
         sources.stream()
             .anyMatch(

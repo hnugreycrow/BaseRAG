@@ -13,6 +13,7 @@ import com.hnu.backend.observability.TraceReasonCatalog;
 import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.observability.trace.TraceContext;
 import com.hnu.backend.rag.config.RagProperties;
+import com.hnu.backend.rag.config.RagStageSettings;
 import com.hnu.backend.rag.generation.IntentTreeRoutingPrompts;
 import com.hnu.backend.rag.mcp.McpToolRegistry;
 import jakarta.annotation.PreDestroy;
@@ -39,20 +40,21 @@ import tools.jackson.databind.json.JsonMapper;
 
 /** 一次模型调用对所有子问题和启用叶子分类，按子问题隔离可恢复的分类失败。 */
 @Component
-public class IntentTreeRoutingStage {
+public class IntentTreeRoutingStage implements IntentRouter {
   private static final Logger log = LoggerFactory.getLogger(IntentTreeRoutingStage.class);
   private final IntentTreeSnapshotProvider snapshots;
   private final ChatClient chat;
   private final McpToolRegistry tools;
-  private final RagProperties config;
+  private final RagStageSettings.Routing config;
   private final JsonMapper json = JsonCodecs.models();
   private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
+  @org.springframework.beans.factory.annotation.Autowired
   public IntentTreeRoutingStage(
       IntentTreeSnapshotProvider snapshots,
       ChatClient chat,
       McpToolRegistry tools,
-      RagProperties config) {
+      RagStageSettings.Routing config) {
     this.snapshots = snapshots;
     this.chat = chat;
     this.tools = tools;
@@ -60,6 +62,7 @@ public class IntentTreeRoutingStage {
   }
 
   /** 读取树快照并分类；单个子问题无效时只将该子问题降级到全公共库检索。 */
+  @Override
   public RoutingPlan execute(QueryPlan plan, TraceContext trace) {
     return trace.execute(
         RagStageName.INTENT_ROUTING,
@@ -97,9 +100,7 @@ public class IntentTreeRoutingStage {
                             IntentTreeRoutingPrompts.system(), json.writeValueAsString(input)));
             ChatClient.Generation generation;
             try {
-              generation =
-                  future.get(
-                      config.getPipeline().getRouting().getTimeoutMs(), TimeUnit.MILLISECONDS);
+              generation = future.get(config.timeoutMs(), TimeUnit.MILLISECONDS);
             } catch (InterruptedException error) {
               future.cancel(true);
               Thread.currentThread().interrupt();
@@ -299,7 +300,7 @@ public class IntentTreeRoutingStage {
       throw new IllegalArgumentException("Candidates are not ranked");
     }
     ScoredNode best = ranked.getFirst();
-    if (best.score() < config.getPipeline().getRouting().getConfidenceThreshold()) {
+    if (best.score() < config.confidenceThreshold()) {
       throw new LowConfidenceException();
     }
     IntentNode node = best.node();
@@ -408,7 +409,17 @@ public class IntentTreeRoutingStage {
   private record ScoredNode(IntentNode node, double score) {}
 
   /** 兼容根 Trace 入口；内部显式传递父节点上下文。 */
+  @Override
   public RoutingPlan execute(QueryPlan plan, RagRunTrace trace) {
     return execute(plan, trace.context());
+  }
+
+  /** 兼容独立测试的旧配置装配方式。 */
+  public IntentTreeRoutingStage(
+      IntentTreeSnapshotProvider snapshots,
+      ChatClient chat,
+      McpToolRegistry tools,
+      RagProperties config) {
+    this(snapshots, chat, tools, RagStageSettings.routing(config));
   }
 }

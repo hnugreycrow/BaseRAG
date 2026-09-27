@@ -7,7 +7,7 @@ import com.hnu.backend.common.exception.ApiException;
 import com.hnu.backend.conversation.entity.Conversation;
 import com.hnu.backend.conversation.entity.Message;
 import com.hnu.backend.observability.trace.RagRunTrace;
-import com.hnu.backend.rag.generation.AnswerGenerator;
+import com.hnu.backend.rag.api.RagExecutionControl;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -18,7 +18,7 @@ import org.junit.jupiter.api.Test;
 
 class ActiveGenerationTest {
   private final AtomicLong nanos = new AtomicLong();
-  private final AnswerGenerator.Control control = mock(AnswerGenerator.Control.class);
+  private final RagExecutionControl control = mock(RagExecutionControl.class);
   private final ActiveGeneration active = generation();
 
   @Test

@@ -5,8 +5,8 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.hnu.backend.knowledgebase.api.KnowledgeBaseCatalog;
 import com.hnu.backend.knowledgebase.entity.KnowledgeBase;
-import com.hnu.backend.knowledgebase.mapper.KnowledgeBaseMapper;
 import com.hnu.backend.model.client.EmbeddingClient;
 import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.rag.config.RagProperties;
@@ -24,13 +24,12 @@ class DirectedRetrievalTest {
     UUID other = UUID.randomUUID();
     EmbeddingClient embedding = mock(EmbeddingClient.class);
     RetrievalMapper retrievalMapper = mock(RetrievalMapper.class);
-    KnowledgeBaseMapper knowledgeBaseMapper = mock(KnowledgeBaseMapper.class);
+    KnowledgeBaseCatalog knowledgeBaseMapper = mock(KnowledgeBaseCatalog.class);
     KnowledgeBase selectedBase = new KnowledgeBase();
     selectedBase.setId(selected);
     KnowledgeBase otherBase = new KnowledgeBase();
     otherBase.setId(other);
-    when(knowledgeBaseMapper.selectWithDocumentCount(null, Integer.MAX_VALUE, 0))
-        .thenReturn(List.of(selectedBase, otherBase));
+    when(knowledgeBaseMapper.availableIds()).thenReturn(List.of(selected, other));
     EmbeddingBinding binding = new EmbeddingBinding("model-id", "provider", "model", 2);
     when(retrievalMapper.activeModelBindings(owner)).thenReturn(List.of(binding));
     when(embedding.embed("model-id", "provider", "model", 2, List.of("问题")))

@@ -21,13 +21,14 @@ import org.springframework.stereotype.Component;
 
 /** 按分块 ID、规范化正文和相邻正文重叠率依次归并重复证据。 */
 @Component
-public class DeduplicationStage {
+public class DeduplicationStage implements EvidenceDeduplicator {
   private static final Logger log = LoggerFactory.getLogger(DeduplicationStage.class);
   private static final Comparator<EvidenceCandidate> CANDIDATE_ORDER =
       Comparator.comparingDouble(EvidenceCandidate::fusionScore)
           .reversed()
           .thenComparing(candidate -> candidate.candidateId().toString());
 
+  @Override
   public DeduplicationResult execute(List<EvidenceCandidate> input, RagBudgetSnapshot budget) {
     long startedAt = System.nanoTime();
     List<Group> groups =

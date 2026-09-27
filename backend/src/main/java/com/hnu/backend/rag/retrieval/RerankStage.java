@@ -33,7 +33,7 @@ import org.springframework.stereotype.Component;
 
 /** 使用专用模型重排去重候选，并在任何非取消失败时确定性降级。 */
 @Component
-public class RerankStage {
+public class RerankStage implements EvidenceReranker {
   private static final Logger log = LoggerFactory.getLogger(RerankStage.class);
   private static final long CANCELLATION_POLL_MS = 50;
   private static final Comparator<EvidenceCandidate> FALLBACK_ORDER =
@@ -42,7 +42,7 @@ public class RerankStage {
           .thenComparing(candidate -> candidate.candidateId().toString());
 
   private final CandidateReranker reranker;
-  private final CandidateMerge candidateMerge;
+  private final CandidateFusion candidateMerge;
   private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
   /**
@@ -51,7 +51,7 @@ public class RerankStage {
    * @param reranker 候选重排模型端口
    * @param candidateMerge 候选截断和配额分配器
    */
-  public RerankStage(CandidateReranker reranker, CandidateMerge candidateMerge) {
+  public RerankStage(CandidateReranker reranker, CandidateFusion candidateMerge) {
     this.reranker = reranker;
     this.candidateMerge = candidateMerge;
   }
@@ -65,6 +65,7 @@ public class RerankStage {
    * @param cancellationToken 取消信号
    * @return 重排或确定性降级结果
    */
+  @Override
   public RerankResult execute(
       QueryPlan plan,
       ExecutionResult execution,
@@ -83,6 +84,7 @@ public class RerankStage {
    * @param trace 当前问答 Trace
    * @return 重排结果
    */
+  @Override
   public RerankResult execute(
       QueryPlan plan,
       ExecutionResult execution,
@@ -379,6 +381,7 @@ public class RerankStage {
   }
 
   /** 兼容根 Trace 入口；内部显式传递父节点上下文。 */
+  @Override
   public RerankResult execute(
       QueryPlan plan,
       ExecutionResult execution,

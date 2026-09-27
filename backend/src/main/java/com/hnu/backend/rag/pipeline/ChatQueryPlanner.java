@@ -3,6 +3,7 @@ package com.hnu.backend.rag.pipeline;
 import com.hnu.backend.common.json.JsonCodecs;
 import com.hnu.backend.model.client.ChatClient;
 import com.hnu.backend.rag.config.RagProperties;
+import com.hnu.backend.rag.config.RagStageSettings;
 import com.hnu.backend.rag.generation.QueryPlanningPrompts;
 import com.hnu.backend.rag.memory.MemoryTurn;
 import com.hnu.backend.rag.memory.RagMemory;
@@ -19,7 +20,7 @@ import tools.jackson.databind.json.JsonMapper;
 public class ChatQueryPlanner implements QueryPlanner {
   private static final Logger log = LoggerFactory.getLogger(ChatQueryPlanner.class);
   private final ChatClient chat;
-  private final RagProperties config;
+  private final RagStageSettings.Planning config;
   private final JsonMapper json = JsonCodecs.models();
 
   /**
@@ -28,7 +29,8 @@ public class ChatQueryPlanner implements QueryPlanner {
    * @param chat 模型客户端
    * @param config 规划阶段最近轮数配置
    */
-  public ChatQueryPlanner(ChatClient chat, RagProperties config) {
+  @org.springframework.beans.factory.annotation.Autowired
+  public ChatQueryPlanner(ChatClient chat, RagStageSettings.Planning config) {
     this.chat = chat;
     this.config = config;
   }
@@ -44,8 +46,7 @@ public class ChatQueryPlanner implements QueryPlanner {
   @Override
   public PlanningOutput plan(RagMemory memory, String currentQuestion, int maxSubQuestions) {
     List<MemoryTurn> availableTurns = memory.recentTurns();
-    int start =
-        Math.max(0, availableTurns.size() - config.getPipeline().getPlanning().getRecentTurns());
+    int start = Math.max(0, availableTurns.size() - config.recentTurns());
     List<MemoryTurn> recentTurns = availableTurns.subList(start, availableTurns.size());
     Map<String, Object> conversationMemory = new LinkedHashMap<>();
     conversationMemory.put("recentTurns", recentTurns);
@@ -60,5 +61,10 @@ public class ChatQueryPlanner implements QueryPlanner {
     ChatClient.Generation generation = chat.generate(QueryPlanningPrompts.system(), prompt);
     return new PlanningOutput(
         generation.content(), generation.id(), generation.provider(), generation.model());
+  }
+
+  /** 兼容独立测试的旧配置装配方式。 */
+  public ChatQueryPlanner(ChatClient chat, RagProperties config) {
+    this(chat, RagStageSettings.planning(config));
   }
 }

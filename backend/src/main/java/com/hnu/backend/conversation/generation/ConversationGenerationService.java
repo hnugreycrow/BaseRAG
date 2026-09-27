@@ -17,9 +17,9 @@ import com.hnu.backend.conversation.vo.ConversationStreamEvents;
 import com.hnu.backend.conversation.vo.ConversationStreamEvents.Kind;
 import com.hnu.backend.observability.service.RagTraceManager;
 import com.hnu.backend.observability.trace.RagRunTrace;
+import com.hnu.backend.rag.api.AnswerGenerator;
+import com.hnu.backend.rag.api.RagEngine;
 import com.hnu.backend.rag.config.RagProperties;
-import com.hnu.backend.rag.generation.AnswerGenerator;
-import com.hnu.backend.rag.generation.AnswerStage;
 import com.hnu.backend.rag.vo.ModelInfoResponse;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -45,7 +45,7 @@ public class ConversationGenerationService {
   private final ConversationMapper conversationMapper;
   private final MessageMapper messageMapper;
   private final GenerationAttemptMapper generationAttemptMapper;
-  private final AnswerStage answers;
+  private final RagEngine answers;
   private final RagProperties rag;
   private final ConversationGenerationPreparation preparation;
   private final RagTraceManager traces;
@@ -98,7 +98,7 @@ public class ConversationGenerationService {
       ConversationMapper conversationMapper,
       MessageMapper messageMapper,
       GenerationAttemptMapper generationAttemptMapper,
-      AnswerStage answers,
+      RagEngine answers,
       RagProperties rag,
       TransactionTemplate tx,
       RagTraceManager traces,

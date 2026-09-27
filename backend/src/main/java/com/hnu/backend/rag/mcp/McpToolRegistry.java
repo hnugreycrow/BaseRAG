@@ -1,6 +1,7 @@
 package com.hnu.backend.rag.mcp;
 
 import com.hnu.backend.rag.config.RagProperties;
+import com.hnu.backend.rag.config.RagStageSettings;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -15,12 +16,15 @@ import org.springframework.stereotype.Component;
 public class McpToolRegistry {
   private static final Pattern SAFE_NAME = Pattern.compile("[A-Za-z0-9._-]{1,128}");
 
-  private final RagProperties config;
+  private final RagStageSettings.Tools config;
   private final McpInputSchemaValidator schemas;
   private final Map<String, RegisteredTool> tools;
 
+  @org.springframework.beans.factory.annotation.Autowired
   public McpToolRegistry(
-      List<McpToolGateway> gateways, RagProperties config, McpInputSchemaValidator schemas) {
+      List<McpToolGateway> gateways,
+      RagStageSettings.Tools config,
+      McpInputSchemaValidator schemas) {
     this.config = config;
     this.schemas = schemas;
     Map<String, RegisteredTool> indexed = new LinkedHashMap<>();
@@ -38,10 +42,10 @@ public class McpToolRegistry {
 
   /** 返回当前特性开关和白名单共同允许暴露给分类模型的只读工具。 */
   public List<McpToolDefinition> availableReadOnlyTools() {
-    if (!config.getPipeline().getMcp().isEnabled()) {
+    if (!config.enabled()) {
       return List.of();
     }
-    Set<String> allowList = Set.copyOf(config.getPipeline().getMcp().getAllowList());
+    Set<String> allowList = Set.copyOf(config.allowList());
     List<McpToolDefinition> available = new ArrayList<>();
     tools.values().stream()
         .map(RegisteredTool::definition)
@@ -53,11 +57,11 @@ public class McpToolRegistry {
 
   /** 对模型建议的工具和参数执行服务端安全检查。 */
   public RoutingCheck check(String toolName, Map<String, Object> arguments) {
-    if (!config.getPipeline().getMcp().isEnabled()) {
+    if (!config.enabled()) {
       return RoutingCheck.MCP_DISABLED;
     }
     RegisteredTool registered = tools.get(toolName);
-    if (registered == null || !config.getPipeline().getMcp().getAllowList().contains(toolName)) {
+    if (registered == null || !config.allowList().contains(toolName)) {
       return RoutingCheck.TOOL_NOT_ALLOWED;
     }
     if (!registered.definition().readOnly()) {
@@ -95,4 +99,10 @@ public class McpToolRegistry {
   }
 
   public record RegisteredTool(McpToolDefinition definition, McpToolGateway gateway) {}
+
+  /** 兼容独立测试的旧配置装配方式。 */
+  public McpToolRegistry(
+      List<McpToolGateway> gateways, RagProperties config, McpInputSchemaValidator schemas) {
+    this(gateways, RagStageSettings.tools(config), schemas);
+  }
 }

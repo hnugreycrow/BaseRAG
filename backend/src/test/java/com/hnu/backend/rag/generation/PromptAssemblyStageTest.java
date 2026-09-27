@@ -32,7 +32,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 class PromptAssemblyStageTest {
   private final RagProperties config = new RagProperties();
-  private final PromptAssemblyStage stage = new PromptAssemblyStage(new ContextBuilder(config));
+  private final PromptAssemblyStage stage = new PromptAssemblyStage(new ContextBuilder());
   private final JsonMapper json = JsonMapper.builder().build();
 
   @Test
@@ -191,7 +191,7 @@ class PromptAssemblyStageTest {
   @Test
   void citationRepairKeepsExactlyTheSameUntrustedUserData() {
     EvidenceCandidate evidence = candidate(1, "Q1", "引用依据");
-    ContextBuilder.Context context = new ContextBuilder(config).buildEvidence(List.of(evidence));
+    ContextBuilder.Context context = new ContextBuilder().buildEvidence(List.of(evidence));
     AssembledPrompt original = stage.assembleLegacy("原问题", context);
 
     AssembledPrompt repair = stage.forCitationRepair(original);

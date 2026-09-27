@@ -17,7 +17,9 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.hnu.backend.common.exception.ApiException;
-import com.hnu.backend.rag.config.RagProperties;
+import com.hnu.backend.rag.api.AnswerGenerator;
+import com.hnu.backend.rag.api.RagExecutionControl;
+import com.hnu.backend.rag.api.RagObserver;
 import com.hnu.backend.rag.vo.SourceResponse;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,20 +28,16 @@ import org.mockito.ArgumentCaptor;
 
 class AnswerStageTest {
   private final AnswerGenerator generator = mock(AnswerGenerator.class);
-  private final AnswerStage.Observer observer = mock(AnswerStage.Observer.class);
+  private final RagObserver observer = mock(RagObserver.class);
   private final TestControl control = new TestControl();
-  private final PromptAssemblyStage prompts =
-      new PromptAssemblyStage(new ContextBuilder(new RagProperties()));
+  private final PromptAssemblyStage prompts = new PromptAssemblyStage(new ContextBuilder());
   private final AnswerStage stage = new AnswerStage(generator, prompts);
   private SourceResponse source;
 
   @BeforeEach
   void setUp() {
     source =
-        new ContextBuilder(new RagProperties())
-            .build(List.of(ContextAndCitationsTest.hit("依据")))
-            .sources()
-            .getFirst();
+        new ContextBuilder().build(List.of(ContextAndCitationsTest.hit("依据"))).sources().getFirst();
   }
 
   @Test
@@ -189,7 +187,7 @@ class AnswerStageTest {
     return new AnswerGenerator.Generation(content, "chat", "test", "model");
   }
 
-  private static final class TestControl implements AnswerGenerator.Control {
+  private static final class TestControl implements RagExecutionControl {
     private boolean cancelled;
 
     @Override

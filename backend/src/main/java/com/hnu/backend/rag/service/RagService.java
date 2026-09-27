@@ -2,14 +2,11 @@ package com.hnu.backend.rag.service;
 
 import com.hnu.backend.common.exception.ApiException;
 import com.hnu.backend.common.exception.ErrorCode;
+import com.hnu.backend.observability.trace.RagRunTrace;
+import com.hnu.backend.rag.api.RagEngine;
+import com.hnu.backend.rag.api.RagObserver;
+import com.hnu.backend.rag.api.RagRequest;
 import com.hnu.backend.rag.config.RagProperties;
-import com.hnu.backend.rag.generation.AnswerGenerator;
-import com.hnu.backend.rag.generation.AnswerResult;
-import com.hnu.backend.rag.generation.AnswerStage;
-import com.hnu.backend.rag.generation.AssembledPrompt;
-import com.hnu.backend.rag.generation.ContextBuilder;
-import com.hnu.backend.rag.generation.PromptAssemblyStage;
-import com.hnu.backend.rag.retrieval.RetrievalService;
 import com.hnu.backend.rag.vo.AnswerResponse;
 import com.hnu.backend.rag.vo.ModelInfoResponse;
 import java.util.List;
@@ -22,31 +19,12 @@ import org.springframework.stereotype.Service;
 @Service
 public class RagService {
   private static final Logger log = LoggerFactory.getLogger(RagService.class);
-  private final RetrievalService retrievalService;
-  private final ContextBuilder contexts;
-  private final PromptAssemblyStage prompts;
-  private final AnswerStage answers;
+  private final RagEngine engine;
   private final RagProperties config;
 
-  /**
-   * 创建旧单轮问答兼容服务。
-   *
-   * @param retrievalService 旧单问题知识检索服务
-   * @param contexts 来源响应构造器
-   * @param prompts 统一提示词组装阶段
-   * @param answers 统一最终回答阶段
-   * @param config RAG 输入校验配置
-   */
-  public RagService(
-      RetrievalService retrievalService,
-      ContextBuilder contexts,
-      PromptAssemblyStage prompts,
-      AnswerStage answers,
-      RagProperties config) {
-    this.retrievalService = retrievalService;
-    this.contexts = contexts;
-    this.prompts = prompts;
-    this.answers = answers;
+  /** 创建旧单轮问答入口；流程由统一引擎的兼容模式执行。 */
+  public RagService(RagEngine engine, RagProperties config) {
+    this.engine = engine;
     this.config = config;
   }
 
@@ -78,42 +56,29 @@ public class RagService {
       throw ApiException.bad(
           ErrorCode.INVALID_QUESTION, "请输入非空问题，长度不能超过 " + config.getMaxQuestionChars() + " 字符");
     }
-    long started = System.nanoTime();
-    String normalizedQuestion = question.strip();
-    var hits =
-        knowledgeBaseIds == null
-            ? retrievalService.retrieve(ownerId, normalizedQuestion)
-            : retrievalService.retrieve(ownerId, normalizedQuestion, knowledgeBaseIds);
-    var context = contexts.build(hits);
-    long retrieved = System.nanoTime();
-    AssembledPrompt prompt = prompts.assembleLegacy(normalizedQuestion, context);
-    AnswerResult result;
-    AnswerGenerator.Control control = answers.newControl();
-    try {
-      result = answers.execute(prompt, AnswerStage.noopObserver(), control);
-    } finally {
-      // 同步入口结束后主动释放潜在响应流；成功关闭不会改变已经返回的结果。
-      control.close();
+    try (var control = engine.newControl()) {
+      var result =
+          engine.execute(
+              new RagRequest(
+                  ownerId,
+                  question.strip(),
+                  null,
+                  0,
+                  knowledgeBaseIds,
+                  false,
+                  RagRequest.Mode.LEGACY),
+              RagObserver.noop(),
+              control,
+              RagRunTrace.noop());
+      var generation = result.generation();
+      return new AnswerResponse(
+          result.content(),
+          result.sources(),
+          result.citations(),
+          generation == null
+              ? null
+              : new ModelInfoResponse(
+                  generation.modelId(), generation.provider(), generation.model()));
     }
-    AnswerGenerator.Generation generation = result.generation();
-    log.info(
-        "qa scope={} candidates={} sources={} citations={} provider={} model={} retrievalMs={} generationMs={} totalMs={}",
-        knowledgeBaseIds == null ? "all" : knowledgeBaseIds.size(),
-        hits.size(),
-        result.sources().size(),
-        result.citations().size(),
-        generation == null ? null : generation.provider(),
-        generation == null ? null : generation.model(),
-        (retrieved - started) / 1_000_000,
-        (System.nanoTime() - retrieved) / 1_000_000,
-        (System.nanoTime() - started) / 1_000_000);
-    return new AnswerResponse(
-        result.content(),
-        result.sources(),
-        result.citations(),
-        generation == null
-            ? null
-            : new ModelInfoResponse(
-                generation.modelId(), generation.provider(), generation.model()));
   }
 }

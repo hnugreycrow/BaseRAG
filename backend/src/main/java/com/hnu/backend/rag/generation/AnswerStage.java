@@ -3,27 +3,40 @@ package com.hnu.backend.rag.generation;
 import com.hnu.backend.common.exception.ApiException;
 import com.hnu.backend.common.exception.ErrorCode;
 import com.hnu.backend.observability.TraceReasonCatalog;
+import com.hnu.backend.rag.api.AnswerGenerator;
+import com.hnu.backend.rag.api.RagExecutionControl;
+import com.hnu.backend.rag.api.RagObserver;
 import java.util.List;
 import org.springframework.stereotype.Component;
 
 /** 负责阶段七最终回答生成、引用白名单校验、单次修复和取消传播。 */
 @Component
-public class AnswerStage {
+public class AnswerStage implements AnswerGeneration {
   private static final String INSUFFICIENT_EVIDENCE = "现有资料不足以回答这个问题。请先导入包含相关内容的文档。";
   private static final ErrorCode INVALID_CITATIONS = ErrorCode.INVALID_CITATIONS;
 
   private final AnswerGenerator generator;
-  private final PromptAssemblyStage prompts;
+  private final CitationRepairPrompt prompts;
+  private final CitationPolicy citations;
 
   /**
    * 创建最终回答阶段。
    *
    * @param generator 中立流式回答模型端口
    * @param prompts 引用修复提示词构造器
+   * @param citations 引用校验与正文归一化策略
    */
-  public AnswerStage(AnswerGenerator generator, PromptAssemblyStage prompts) {
+  @org.springframework.beans.factory.annotation.Autowired
+  public AnswerStage(
+      AnswerGenerator generator, CitationRepairPrompt prompts, CitationPolicy citations) {
+    this.citations = citations;
     this.generator = generator;
     this.prompts = prompts;
+  }
+
+  /** 为独立单元测试装配默认引用策略。 */
+  public AnswerStage(AnswerGenerator generator, PromptAssembler prompts) {
+    this(generator, prompts, new DefaultCitationPolicy());
   }
 
   /**
@@ -31,7 +44,8 @@ public class AnswerStage {
    *
    * @return 回答模型流控制器
    */
-  public AnswerGenerator.Control newControl() {
+  @Override
+  public RagExecutionControl newControl() {
     return generator.newControl();
   }
 
@@ -44,16 +58,18 @@ public class AnswerStage {
    * @return 可直接持久化的回答结果
    * @throws ApiException 请求取消、模型失败或连续两次引用非法时抛出
    */
+  @Override
   public AnswerResult execute(
-      AssembledPrompt prompt, Observer observer, AnswerGenerator.Control control) {
+      AssembledPrompt prompt, RagObserver observer, RagExecutionControl control) {
     return execute(prompt, observer, control, false);
   }
 
   /** 根据本回答版本固定的思考选择执行回答生成。 */
+  @Override
   public AnswerResult execute(
       AssembledPrompt prompt,
-      Observer observer,
-      AnswerGenerator.Control control,
+      RagObserver observer,
+      RagExecutionControl control,
       boolean thinkingEnabled) {
     control.throwIfCancelled();
     if (!prompt.shouldGenerate()) {
@@ -89,7 +105,7 @@ public class AnswerStage {
       }
     }
     control.throwIfCancelled();
-    String normalized = Citations.normalize(generation.content());
+    String normalized = citations.normalize(generation.content());
     if (!normalized.equals(generation.content())) {
       observer.normalizedAnswer(normalized);
     }
@@ -107,7 +123,7 @@ public class AnswerStage {
    *
    * @return 无副作用观察器
    */
-  public static Observer noopObserver() {
+  public static RagObserver noopObserver() {
     return NoopObserver.INSTANCE;
   }
 
@@ -123,8 +139,8 @@ public class AnswerStage {
   private AnswerGenerator.Generation generate(
       AssembledPrompt prompt,
       AnswerGenerator.AttemptReason reason,
-      Observer observer,
-      AnswerGenerator.Control control,
+      RagObserver observer,
+      RagExecutionControl control,
       boolean thinkingEnabled) {
     control.throwIfCancelled();
     AnswerGenerator.Generation generation =
@@ -149,38 +165,11 @@ public class AnswerStage {
    */
   private Citations.Validation validate(
       AnswerGenerator.Generation generation, AssembledPrompt prompt) {
-    return Citations.validate(generation.content(), prompt.sources(), prompt.toolReferenceIds());
-  }
-
-  /** 在模型流事件之外接收引用校验失败通知。 */
-  public interface Observer extends AnswerGenerator.StreamObserver {
-    /** 回答引用位置改变时通知流式调用方重置并发送规范化后的完整正文。 */
-    default void normalizedAnswer(String content) {}
-
-    /** 通知调用方本轮没有证据且未调用最终回答模型。 */
-    default void generationSkipped(String reasonCode) {}
-
-    /** 通知调用方开始校验当前完整回答的引用。 */
-    default void validationStarted() {}
-
-    /**
-     * 通知调用方当前回答的引用校验成功。
-     *
-     * @param citationCount 合法知识引用数量
-     */
-    default void validationCompleted(int citationCount) {}
-
-    /**
-     * 通知调用方当前已完成尝试包含非法引用。
-     *
-     * @param reasonCode 稳定失败码
-     * @param repairScheduled 是否即将清空正文并进行引用修复
-     */
-    void invalidReferences(String reasonCode, boolean repairScheduled);
+    return citations.validate(generation.content(), prompt.sources(), prompt.toolReferenceIds());
   }
 
   /** 同步兼容入口使用的无副作用观察器。 */
-  private static final class NoopObserver implements Observer {
+  private static final class NoopObserver implements RagObserver {
     private static final NoopObserver INSTANCE = new NoopObserver();
 
     /** 创建单例无副作用观察器。 */

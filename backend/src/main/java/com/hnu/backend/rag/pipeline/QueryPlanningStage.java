@@ -10,6 +10,7 @@ import com.hnu.backend.observability.config.ObservabilityProperties;
 import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.observability.trace.TraceContext;
 import com.hnu.backend.rag.config.RagProperties;
+import com.hnu.backend.rag.config.RagStageSettings;
 import com.hnu.backend.rag.memory.RagMemory;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -24,11 +25,11 @@ import tools.jackson.databind.json.JsonMapper;
 
 /** 查询规划阶段：校验模型生成的严格计划，并在异常时安全降级。 */
 @Component
-public class QueryPlanningStage {
+public class QueryPlanningStage implements QueryPlanning {
   private static final Logger log = LoggerFactory.getLogger(QueryPlanningStage.class);
 
   private final QueryPlanner planner;
-  private final RagProperties config;
+  private final RagStageSettings.Planning config;
   private final ObservabilityProperties observability;
   private final JsonMapper json = JsonCodecs.models();
 
@@ -39,8 +40,11 @@ public class QueryPlanningStage {
    * @param config RAG 配置
    * @param observability 日志内容配置
    */
+  @org.springframework.beans.factory.annotation.Autowired
   public QueryPlanningStage(
-      QueryPlanner planner, RagProperties config, ObservabilityProperties observability) {
+      QueryPlanner planner,
+      RagStageSettings.Planning config,
+      ObservabilityProperties observability) {
     this.planner = planner;
     this.config = config;
     this.observability = observability;
@@ -53,6 +57,7 @@ public class QueryPlanningStage {
    * @param originalQuestion 原始用户问题
    * @return 可安全执行的查询计划
    */
+  @Override
   public QueryPlan execute(RagMemory memory, String originalQuestion) {
     return execute(memory, originalQuestion, RagRunTrace.noop());
   }
@@ -65,6 +70,7 @@ public class QueryPlanningStage {
    * @param trace 当前问答 Trace
    * @return 可安全执行的查询计划
    */
+  @Override
   public QueryPlan execute(RagMemory memory, String originalQuestion, TraceContext trace) {
     return trace.execute(
         RagStageName.QUERY_PLANNING,
@@ -76,7 +82,7 @@ public class QueryPlanningStage {
           String degradedReason;
           String exceptionType = null;
           try {
-            int maxSubQuestions = config.getPipeline().getMaxSubQuestions();
+            int maxSubQuestions = config.maxSubQuestions();
             output = planner.plan(memory, originalQuestion, maxSubQuestions);
             QueryPlan plan = parse(output.content(), maxSubQuestions);
             span.model(output.modelId(), output.provider(), output.model());
@@ -233,7 +239,7 @@ public class QueryPlanningStage {
   private String validQuestion(String value) {
     String question = value.strip();
     if (question.isEmpty()
-        || question.length() > config.getMaxQuestionChars()
+        || question.length() > config.maxQuestionChars()
         || question.codePoints().anyMatch(Character::isISOControl)) {
       throw invalid(TraceReasonCatalog.INVALID_QUESTION);
     }
@@ -324,7 +330,14 @@ public class QueryPlanningStage {
   }
 
   /** 兼容根 Trace 入口；内部显式传递父节点上下文。 */
+  @Override
   public QueryPlan execute(RagMemory memory, String originalQuestion, RagRunTrace trace) {
     return execute(memory, originalQuestion, trace.context());
+  }
+
+  /** 兼容独立测试的旧配置装配方式。 */
+  public QueryPlanningStage(
+      QueryPlanner planner, RagProperties config, ObservabilityProperties observability) {
+    this(planner, RagStageSettings.planning(config), observability);
   }
 }

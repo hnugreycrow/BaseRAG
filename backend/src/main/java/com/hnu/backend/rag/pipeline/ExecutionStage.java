@@ -7,12 +7,13 @@ import com.hnu.backend.observability.TraceReasonCatalog;
 import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.observability.trace.TraceContext;
 import com.hnu.backend.rag.config.RagProperties;
+import com.hnu.backend.rag.config.RagStageSettings;
 import com.hnu.backend.rag.mcp.McpToolCall;
-import com.hnu.backend.rag.mcp.McpToolExecutor;
+import com.hnu.backend.rag.mcp.ToolExecutor;
 import com.hnu.backend.rag.mcp.ToolObservation;
-import com.hnu.backend.rag.retrieval.CandidateMerge;
+import com.hnu.backend.rag.retrieval.CandidateFusion;
 import com.hnu.backend.rag.retrieval.EvidenceCandidate;
-import com.hnu.backend.rag.retrieval.RetrievalService;
+import com.hnu.backend.rag.retrieval.EvidenceRetriever;
 import jakarta.annotation.PreDestroy;
 import java.util.ArrayList;
 import java.util.List;
@@ -24,12 +25,12 @@ import org.springframework.stereotype.Component;
 
 /** 按子问题路由并发执行检索或 MCP 调用，再生成可供重排的全局候选池。 */
 @Component
-public class ExecutionStage {
+public class ExecutionStage implements QueryExecution {
 
-  private final RetrievalService retrievalService;
-  private final McpToolExecutor tools;
-  private final CandidateMerge candidateMerge;
-  private final RagProperties config;
+  private final EvidenceRetriever retrievalService;
+  private final ToolExecutor tools;
+  private final CandidateFusion candidateMerge;
+  private final RagStageSettings.Execution config;
   private final SubQuestionScheduler scheduler;
 
   /**
@@ -42,25 +43,24 @@ public class ExecutionStage {
    */
   @Autowired
   public ExecutionStage(
-      RetrievalService retrievalService,
-      McpToolExecutor tools,
-      CandidateMerge candidateMerge,
-      RagProperties config) {
+      EvidenceRetriever retrievalService,
+      ToolExecutor tools,
+      CandidateFusion candidateMerge,
+      RagStageSettings.Execution config) {
     this(
         retrievalService,
         tools,
         candidateMerge,
         config,
-        Executors.newFixedThreadPool(
-            config.getPipeline().getMaxSubQuestions(), Thread.ofVirtual().factory()));
+        Executors.newFixedThreadPool(config.parallelism(), Thread.ofVirtual().factory()));
   }
 
   /** 测试可传入可控执行器验证排队边界；生产并发数仍由子问题预算决定。 */
   ExecutionStage(
-      RetrievalService retrievalService,
-      McpToolExecutor tools,
-      CandidateMerge candidateMerge,
-      RagProperties config,
+      EvidenceRetriever retrievalService,
+      ToolExecutor tools,
+      CandidateFusion candidateMerge,
+      RagStageSettings.Execution config,
       ExecutorService executor) {
     this.retrievalService = retrievalService;
     this.tools = tools;
@@ -77,6 +77,7 @@ public class ExecutionStage {
    * @param routing 与查询计划对齐的路由计划
    * @return 执行结果
    */
+  @Override
   public ExecutionResult execute(UUID ownerId, QueryPlan plan, RoutingPlan routing) {
     return execute(ownerId, plan, routing, null, CancellationToken.NONE);
   }
@@ -91,6 +92,7 @@ public class ExecutionStage {
    * @param cancellationToken 取消信号
    * @return 聚合后的执行结果
    */
+  @Override
   public ExecutionResult execute(
       UUID ownerId,
       QueryPlan plan,
@@ -111,6 +113,7 @@ public class ExecutionStage {
    * @param trace 当前问答 Trace
    * @return 聚合后的执行结果
    */
+  @Override
   public ExecutionResult execute(
       UUID ownerId,
       QueryPlan plan,
@@ -127,6 +130,7 @@ public class ExecutionStage {
   }
 
   /** 执行检索范围；候选合并由调用方的证据整理阶段负责。 */
+  @Override
   public ExecutionResult executeRetrieval(
       UUID ownerId,
       QueryPlan plan,
@@ -152,7 +156,7 @@ public class ExecutionStage {
       TraceContext trace) {
     validateAlignment(plan, routing);
     cancellationToken.throwIfCancelled();
-    RagBudgetSnapshot snapshot = RagBudgetSnapshot.from(config);
+    RagBudgetSnapshot snapshot = config.budget();
     if (plan.subQuestions().size() > snapshot.maxSubQuestions()) {
       throw new IllegalArgumentException("Query plan exceeds max sub-questions");
     }
@@ -179,8 +183,7 @@ public class ExecutionStage {
         continue;
       }
       // 向量通道预算由检索服务仅在数据库召回时扣除，Embedding 不占用该预算。
-      long timeoutMs =
-          route.intent() == IntentType.MCP_TOOL ? config.getPipeline().getMcp().getTimeoutMs() : 0;
+      long timeoutMs = route.intent() == IntentType.MCP_TOOL ? config.toolTimeoutMs() : 0;
       tasks.add(
           new SubQuestionScheduler.Task(
               question,
@@ -209,6 +212,7 @@ public class ExecutionStage {
   }
 
   /** 在证据整理父节点下合并候选，保留原来的召回数量与排序规则。 */
+  @Override
   public ExecutionResult merge(ExecutionResult execution, TraceContext trace) {
     List<String> knowledgeQuestionIds =
         execution.subQuestions().stream()
@@ -383,5 +387,24 @@ public class ExecutionStage {
 
   private long elapsedMillis(long startedAt) {
     return Math.max(0, (System.nanoTime() - startedAt) / 1_000_000);
+  }
+
+  /** 兼容独立测试的旧配置装配方式。 */
+  public ExecutionStage(
+      EvidenceRetriever retrievalService,
+      ToolExecutor tools,
+      CandidateFusion candidateMerge,
+      RagProperties config) {
+    this(retrievalService, tools, candidateMerge, RagStageSettings.execution(config));
+  }
+
+  /** 兼容独立测试的旧配置装配方式。 */
+  ExecutionStage(
+      EvidenceRetriever retrievalService,
+      ToolExecutor tools,
+      CandidateFusion candidateMerge,
+      RagProperties config,
+      ExecutorService executor) {
+    this(retrievalService, tools, candidateMerge, RagStageSettings.execution(config), executor);
   }
 }

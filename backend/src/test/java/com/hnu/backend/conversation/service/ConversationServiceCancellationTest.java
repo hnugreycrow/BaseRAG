@@ -25,19 +25,23 @@ import com.hnu.backend.model.config.AiProperties;
 import com.hnu.backend.observability.service.RagTraceManager;
 import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.observability.trace.TraceContext;
+import com.hnu.backend.rag.api.RagRequest;
 import com.hnu.backend.rag.config.RagProperties;
 import com.hnu.backend.rag.generation.AnswerStage;
 import com.hnu.backend.rag.generation.ChatAnswerGenerator;
 import com.hnu.backend.rag.generation.ContextBuilder;
 import com.hnu.backend.rag.generation.PromptAssemblyStage;
 import com.hnu.backend.rag.mcp.ToolObservation;
+import com.hnu.backend.rag.memory.RagMemory;
 import com.hnu.backend.rag.pipeline.CancellationToken;
+import com.hnu.backend.rag.pipeline.DefaultRagEngine;
 import com.hnu.backend.rag.pipeline.ExecutionResult;
 import com.hnu.backend.rag.pipeline.ExecutionStage;
 import com.hnu.backend.rag.pipeline.IntentRoute;
 import com.hnu.backend.rag.pipeline.IntentType;
 import com.hnu.backend.rag.pipeline.QueryPlan;
 import com.hnu.backend.rag.pipeline.RagBudgetSnapshot;
+import com.hnu.backend.rag.pipeline.RagContextPreparation;
 import com.hnu.backend.rag.pipeline.RoutingPlan;
 import com.hnu.backend.rag.pipeline.RoutingReasonCode;
 import com.hnu.backend.rag.pipeline.SubQuestion;
@@ -72,7 +76,7 @@ class ConversationServiceCancellationTest {
   @Mock private ConversationMapper conversationMapper;
   @Mock private MessageMapper messageMapper;
   @Mock private GenerationAttemptMapper generationAttemptMapper;
-  @Mock private ConversationContextService conversationContextService;
+  @Mock private RagContextPreparation conversationContextService;
   @Mock private ExecutionStage executionStage;
   @Mock private DeduplicationStage deduplicationStage;
   @Mock private RerankStage rerankStage;
@@ -83,11 +87,20 @@ class ConversationServiceCancellationTest {
   @Mock private RagTraceManager traces;
 
   private ConversationService conversationService;
-  private final PromptAssemblyStage prompts =
-      new PromptAssemblyStage(new ContextBuilder(new RagProperties()));
+  private final PromptAssemblyStage prompts = new PromptAssemblyStage(new ContextBuilder());
 
   @BeforeEach
   void setUp() {
+    var engine =
+        new DefaultRagEngine(
+            conversationContextService,
+            executionStage,
+            deduplicationStage,
+            rerankStage,
+            prompts,
+            new AnswerStage(new ChatAnswerGenerator(chat), prompts),
+            null,
+            null);
     conversationService =
         new ConversationService(
             conversationMapper,
@@ -96,22 +109,14 @@ class ConversationServiceCancellationTest {
                 conversationMapper,
                 messageMapper,
                 generationAttemptMapper,
-                new AnswerStage(new ChatAnswerGenerator(chat), prompts),
+                engine,
                 rag,
                 tx,
                 traces,
                 new ConversationTerminalWriter(
                     conversationMapper, messageMapper, generationAttemptMapper, tx, traces),
                 new ConversationGenerationRunner(
-                    conversationContextService,
-                    executionStage,
-                    deduplicationStage,
-                    rerankStage,
-                    prompts,
-                    new AnswerStage(new ChatAnswerGenerator(chat), prompts),
-                    messageMapper,
-                    generationAttemptMapper,
-                    config)));
+                    engine, messageMapper, generationAttemptMapper, config)));
     lenient()
         .when(traces.start(any(), any(), any(), any(), any(), any()))
         .thenReturn(RagRunTrace.noop());
@@ -225,8 +230,7 @@ class ConversationServiceCancellationTest {
     when(conversationMapper.find(ownerId, conversationId)).thenReturn(conversation);
     when(messageMapper.nextTurn(ownerId, conversationId)).thenReturn(1);
     when(rag.getMaxQuestionChars()).thenReturn(2000);
-    when(conversationContextService.prepare(
-            any(Conversation.class), eq(1), eq("你好"), any(RagRunTrace.class)))
+    when(conversationContextService.prepare(any(RagRequest.class), any(RagRunTrace.class), any()))
         .thenReturn(preparedSystemChat("你好"));
     when(messageMapper.markStreaming(eq(ownerId), any(UUID.class))).thenReturn(1);
     if (hasOutput) {
@@ -308,8 +312,7 @@ class ConversationServiceCancellationTest {
     when(conversationMapper.find(ownerId, conversationId)).thenReturn(conversation);
     when(messageMapper.nextTurn(ownerId, conversationId)).thenReturn(1);
     when(rag.getMaxQuestionChars()).thenReturn(2000);
-    when(conversationContextService.prepare(
-            any(Conversation.class), eq(1), eq("原问题"), any(RagRunTrace.class)))
+    when(conversationContextService.prepare(any(RagRequest.class), any(RagRunTrace.class), any()))
         .thenReturn(preparedMixed("改写后的独立问题"));
     ExecutionResult empty =
         new ExecutionResult(List.of(), List.of(), RagBudgetSnapshot.from(new RagProperties()));
@@ -373,8 +376,7 @@ class ConversationServiceCancellationTest {
     when(conversationMapper.find(ownerId, conversationId)).thenReturn(conversation);
     when(messageMapper.nextTurn(ownerId, conversationId)).thenReturn(1);
     when(rag.getMaxQuestionChars()).thenReturn(2000);
-    when(conversationContextService.prepare(
-            any(Conversation.class), eq(1), eq("你好"), any(RagRunTrace.class)))
+    when(conversationContextService.prepare(any(RagRequest.class), any(RagRunTrace.class), any()))
         .thenReturn(preparedSystemChat("你好"));
     when(chat.stream(anyString(), anyString(), any(), any()))
         .thenReturn(new ChatClient.Generation("你好，有什么可以帮你？", "chat", "test", "model"));
@@ -396,9 +398,8 @@ class ConversationServiceCancellationTest {
     when(conversationMapper.find(ownerId, conversationId)).thenReturn(conversation);
     when(messageMapper.nextTurn(ownerId, conversationId)).thenReturn(1);
     when(rag.getMaxQuestionChars()).thenReturn(2000);
-    ConversationContextService.PreparedContext prepared = preparedTool("查询今日排班");
-    when(conversationContextService.prepare(
-            any(Conversation.class), eq(1), eq("查询今日排班"), any(RagRunTrace.class)))
+    RagContextPreparation.PreparedContext prepared = preparedTool("查询今日排班");
+    when(conversationContextService.prepare(any(RagRequest.class), any(RagRunTrace.class), any()))
         .thenReturn(prepared);
     ToolObservation observation =
         new ToolObservation(
@@ -474,8 +475,7 @@ class ConversationServiceCancellationTest {
     when(rag.getMaxQuestionChars()).thenReturn(2000);
     when(config.getCheckpointChars()).thenReturn(1000);
     when(config.getCheckpointIntervalMs()).thenReturn(60_000L);
-    when(conversationContextService.prepare(
-            any(Conversation.class), eq(1), eq("你好"), any(RagRunTrace.class)))
+    when(conversationContextService.prepare(any(RagRequest.class), any(RagRunTrace.class), any()))
         .thenReturn(preparedSystemChat("你好"));
     when(messageMapper.markStreaming(eq(ownerId), any(UUID.class))).thenReturn(1);
     AiProperties.ModelTarget target =
@@ -516,7 +516,7 @@ class ConversationServiceCancellationTest {
         captured.getAllValues().stream().map(GenerationAttempt::getReason).toList());
   }
 
-  private ConversationContextService.PreparedContext preparedMixed(String question) {
+  private RagContextPreparation.PreparedContext preparedMixed(String question) {
     QueryPlan plan =
         new QueryPlan(
             question, List.of(new SubQuestion("Q1", question), new SubQuestion("Q2", "你好")));
@@ -531,10 +531,10 @@ class ConversationServiceCancellationTest {
                     null,
                     Map.of(),
                     RoutingReasonCode.GENERAL_CHAT)));
-    return new ConversationContextService.PreparedContext(emptyMemory(), plan, routing);
+    return new RagContextPreparation.PreparedContext(emptyMemory(), plan, routing);
   }
 
-  private ConversationContextService.PreparedContext preparedSystemChat(String question) {
+  private RagContextPreparation.PreparedContext preparedSystemChat(String question) {
     QueryPlan plan = QueryPlan.fallback(question);
     RoutingPlan routing =
         new RoutingPlan(
@@ -546,10 +546,10 @@ class ConversationServiceCancellationTest {
                     null,
                     Map.of(),
                     RoutingReasonCode.GENERAL_CHAT)));
-    return new ConversationContextService.PreparedContext(emptyMemory(), plan, routing);
+    return new RagContextPreparation.PreparedContext(emptyMemory(), plan, routing);
   }
 
-  private ConversationContextService.PreparedContext preparedTool(String question) {
+  private RagContextPreparation.PreparedContext preparedTool(String question) {
     QueryPlan plan = QueryPlan.fallback(question);
     RoutingPlan routing =
         new RoutingPlan(
@@ -561,11 +561,11 @@ class ConversationServiceCancellationTest {
                     "schedule.read",
                     Map.of(),
                     RoutingReasonCode.EXTERNAL_SOURCE_REQUIRED)));
-    return new ConversationContextService.PreparedContext(emptyMemory(), plan, routing);
+    return new RagContextPreparation.PreparedContext(emptyMemory(), plan, routing);
   }
 
-  private com.hnu.backend.rag.memory.RagMemory emptyMemory() {
-    return new com.hnu.backend.rag.memory.RagMemory("{}", 0, List.of(), List.of(), 0);
+  private RagMemory emptyMemory() {
+    return new RagMemory("{}", 0, List.of(), List.of(), 0);
   }
 
   private Message assistant(UUID conversationId, UUID generationId, MessageStatus status) {

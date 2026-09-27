@@ -2,14 +2,15 @@ package com.hnu.backend.rag.retrieval;
 
 import com.hnu.backend.common.exception.ApiException;
 import com.hnu.backend.common.exception.ErrorCode;
-import com.hnu.backend.knowledgebase.entity.KnowledgeBase;
-import com.hnu.backend.knowledgebase.mapper.KnowledgeBaseMapper;
-import com.hnu.backend.model.client.EmbeddingClient;
+import com.hnu.backend.knowledgebase.api.KnowledgeBaseCatalog;
+import com.hnu.backend.model.client.EmbeddingEncoder;
+import com.hnu.backend.model.client.EmbeddingVector;
 import com.hnu.backend.observability.RagStageName;
 import com.hnu.backend.observability.TraceReasonCatalog;
 import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.observability.trace.TraceContext;
 import com.hnu.backend.rag.config.RagProperties;
+import com.hnu.backend.rag.config.RagStageSettings;
 import com.hnu.backend.rag.pipeline.CancellationToken;
 import com.hnu.backend.rag.pipeline.RagBudgetSnapshot;
 import com.hnu.backend.rag.pipeline.StageBudget;
@@ -29,13 +30,13 @@ import org.springframework.stereotype.Service;
 
 /** 负责跨向量模型检索知识库分块，并按模型内名次统一归并、排序结果。 */
 @Service
-public class RetrievalService {
+public class RetrievalService implements EvidenceRetriever {
   private static final long CANCELLATION_POLL_MS = 50;
-  private final EmbeddingClient embedding;
+  private final EmbeddingEncoder embedding;
   private final RetrievalMapper retrievalMapper;
-  private final KnowledgeBaseMapper knowledgeBaseMapper;
-  private final RagProperties config;
-  private final CandidateMerge candidateMerge;
+  private final KnowledgeBaseCatalog knowledgeBaseMapper;
+  private final RagStageSettings.Retrieval config;
+  private final CandidateFusion candidateMerge;
   private final ExecutorService searchExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
   /**
@@ -48,11 +49,11 @@ public class RetrievalService {
    */
   @Autowired
   public RetrievalService(
-      EmbeddingClient embedding,
+      EmbeddingEncoder embedding,
       RetrievalMapper retrievalMapper,
-      KnowledgeBaseMapper knowledgeBaseMapper,
-      RagProperties config,
-      CandidateMerge candidateMerge) {
+      KnowledgeBaseCatalog knowledgeBaseMapper,
+      RagStageSettings.Retrieval config,
+      CandidateFusion candidateMerge) {
     this.embedding = embedding;
     this.retrievalMapper = retrievalMapper;
     this.knowledgeBaseMapper = knowledgeBaseMapper;
@@ -62,10 +63,10 @@ public class RetrievalService {
 
   /** 保留不启动 Spring 容器的检索单元测试构造方式。 */
   public RetrievalService(
-      EmbeddingClient embedding,
+      EmbeddingEncoder embedding,
       RetrievalMapper retrievalMapper,
-      RagProperties config,
-      CandidateMerge candidateMerge) {
+      RagStageSettings.Retrieval config,
+      CandidateFusion candidateMerge) {
     this(embedding, retrievalMapper, null, config, candidateMerge);
   }
 
@@ -81,6 +82,7 @@ public class RetrievalService {
    * @param question 已规范化的检索问题
    * @return 按 RRF 融合分排列且不超过最终 Top K 的候选分块
    */
+  @Override
   public List<SearchHit> retrieve(UUID ownerId, String question) {
     return retrieve(ownerId, question, null);
   }
@@ -93,8 +95,9 @@ public class RetrievalService {
    * @param knowledgeBaseIds 允许检索的知识库；null 表示全部知识库
    * @return 按 RRF 融合分排列且不超过最终 Top K 的候选分块
    */
+  @Override
   public List<SearchHit> retrieve(UUID ownerId, String question, List<UUID> knowledgeBaseIds) {
-    RagBudgetSnapshot snapshot = RagBudgetSnapshot.from(config);
+    RagBudgetSnapshot snapshot = config.budget();
     return retrieveCandidates(
             ownerId,
             "Q1",
@@ -121,6 +124,7 @@ public class RetrievalService {
    * @param cancellationToken 异步取消信号
    * @return 可供全局合并的证据候选
    */
+  @Override
   public List<EvidenceCandidate> retrieveCandidates(
       UUID ownerId,
       String subQuestionId,
@@ -150,6 +154,7 @@ public class RetrievalService {
    * @param trace 当前问答 Trace
    * @return 可供全局合并的证据候选
    */
+  @Override
   public List<EvidenceCandidate> retrieveCandidates(
       UUID ownerId,
       String subQuestionId,
@@ -271,6 +276,7 @@ public class RetrievalService {
   }
 
   /** 绑定库与其余公共库分配 75%/25% 召回预算，每个模型只生成一次查询向量。 */
+  @Override
   public List<EvidenceCandidate> retrieveDirectedCandidates(
       UUID ownerId,
       String subQuestionId,
@@ -289,10 +295,7 @@ public class RetrievalService {
     }
     List<UUID> primary = primaryKnowledgeBaseIds.stream().distinct().toList();
     List<UUID> supplementalScope =
-        knowledgeBaseMapper.selectWithDocumentCount(null, Integer.MAX_VALUE, 0).stream()
-            .map(KnowledgeBase::getId)
-            .filter(id -> !primary.contains(id))
-            .toList();
+        knowledgeBaseMapper.availableIds().stream().filter(id -> !primary.contains(id)).toList();
     int supplementLimit =
         !supplementalScope.isEmpty() && budget.recallBudget() > 1
             ? Math.max(1, (int) Math.round(budget.recallBudget() * 0.25))
@@ -427,7 +430,7 @@ public class RetrievalService {
     if (remainingNanos <= 0) {
       throw channelTimeout();
     }
-    String literal = EmbeddingClient.literal(vector);
+    String literal = EmbeddingVector.literal(vector);
     Future<List<SearchHit>> future =
         searchExecutor.submit(
             () ->
@@ -493,9 +496,7 @@ public class RetrievalService {
 
   /** 将异常转换为不包含消息正文的稳定错误码。 */
   private String errorCode(RuntimeException error, String fallback) {
-    return error instanceof com.hnu.backend.common.exception.ApiException api
-        ? api.code()
-        : fallback;
+    return error instanceof ApiException api ? api.code() : fallback;
   }
 
   private EvidenceCandidate toCandidate(
@@ -557,6 +558,7 @@ public class RetrievalService {
   }
 
   /** 兼容根 Trace 入口；内部显式传递父节点上下文。 */
+  @Override
   public List<EvidenceCandidate> retrieveCandidates(
       UUID ownerId,
       String subQuestionId,
@@ -576,6 +578,7 @@ public class RetrievalService {
   }
 
   /** 兼容根 Trace 入口；内部显式传递父节点上下文。 */
+  @Override
   public List<EvidenceCandidate> retrieveDirectedCandidates(
       UUID ownerId,
       String subQuestionId,
@@ -592,5 +595,29 @@ public class RetrievalService {
         budget,
         cancellationToken,
         trace.context());
+  }
+
+  /** 兼容独立测试的旧配置装配方式。 */
+  public RetrievalService(
+      EmbeddingEncoder embedding,
+      RetrievalMapper retrievalMapper,
+      KnowledgeBaseCatalog knowledgeBaseMapper,
+      RagProperties config,
+      CandidateFusion candidateMerge) {
+    this(
+        embedding,
+        retrievalMapper,
+        knowledgeBaseMapper,
+        RagStageSettings.retrieval(config),
+        candidateMerge);
+  }
+
+  /** 兼容独立测试的旧配置装配方式。 */
+  public RetrievalService(
+      EmbeddingEncoder embedding,
+      RetrievalMapper retrievalMapper,
+      RagProperties config,
+      CandidateFusion candidateMerge) {
+    this(embedding, retrievalMapper, RagStageSettings.retrieval(config), candidateMerge);
   }
 }

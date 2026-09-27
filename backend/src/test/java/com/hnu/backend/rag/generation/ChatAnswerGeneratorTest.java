@@ -10,10 +10,13 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.hnu.backend.common.exception.ApiException;
 import com.hnu.backend.common.exception.ErrorCode;
 import com.hnu.backend.model.client.ChatClient;
 import com.hnu.backend.model.client.ModelHttpClient;
 import com.hnu.backend.model.config.AiProperties;
+import com.hnu.backend.rag.api.AnswerGenerator;
+import com.hnu.backend.rag.api.RagExecutionControl;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 
@@ -24,7 +27,7 @@ class ChatAnswerGeneratorTest {
   @Test
   void mapsPrimaryAndProviderFallbackEventsToNeutralTypes() {
     AnswerGenerator.StreamObserver observer = mock(AnswerGenerator.StreamObserver.class);
-    AnswerGenerator.Control control = generator.newControl();
+    RagExecutionControl control = generator.newControl();
     AiProperties.ModelTarget primary = target("primary");
     AiProperties.ModelTarget fallback = target("fallback");
     when(chat.stream(eq("system"), eq("user"), any(), any(ModelHttpClient.StreamControl.class)))
@@ -34,10 +37,7 @@ class ChatAnswerGeneratorTest {
               delegate.started(primary, "PRIMARY");
               delegate.requesting(primary);
               delegate.failed(
-                  primary,
-                  "",
-                  com.hnu.backend.common.exception.ApiException.upstream(
-                      ErrorCode.MODEL_UNAVAILABLE, "failed"));
+                  primary, "", ApiException.upstream(ErrorCode.MODEL_UNAVAILABLE, "failed"));
               delegate.started(fallback, "PROVIDER_FALLBACK");
               delegate.requesting(fallback);
               delegate.delta("answer");
@@ -84,7 +84,7 @@ class ChatAnswerGeneratorTest {
   @Test
   void keepsFallbackInsideCitationRepairAndClosesUnderlyingControl() {
     AnswerGenerator.StreamObserver observer = mock(AnswerGenerator.StreamObserver.class);
-    AnswerGenerator.Control control = generator.newControl();
+    RagExecutionControl control = generator.newControl();
     AiProperties.ModelTarget fallback = target("fallback");
     when(chat.stream(any(), any(), any(), any(ModelHttpClient.StreamControl.class)))
         .thenAnswer(

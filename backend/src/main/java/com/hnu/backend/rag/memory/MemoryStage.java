@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
 
 /** RAG 流程的记忆加载阶段，负责统一校验阶段输入和提供者输出。 */
 @Component
-public final class MemoryStage {
+public final class MemoryStage implements MemoryLoader {
   private final MemoryProvider provider;
 
   /**
@@ -28,6 +28,7 @@ public final class MemoryStage {
    * @param beforeTurn 当前问题所在轮次
    * @return 已校验的会话记忆
    */
+  @Override
   public RagMemory execute(UUID ownerId, UUID conversationId, int beforeTurn) {
     Objects.requireNonNull(ownerId, "ownerId");
     Objects.requireNonNull(conversationId, "conversationId");
@@ -47,6 +48,7 @@ public final class MemoryStage {
    * @param trace 当前问答 Trace
    * @return 已校验的会话记忆
    */
+  @Override
   public RagMemory execute(UUID ownerId, UUID conversationId, int beforeTurn, TraceContext trace) {
     Objects.requireNonNull(ownerId, "ownerId");
     Objects.requireNonNull(conversationId, "conversationId");
@@ -58,6 +60,7 @@ public final class MemoryStage {
   }
 
   /** 兼容根 Trace 入口；内部显式传递父节点上下文。 */
+  @Override
   public RagMemory execute(UUID ownerId, UUID conversationId, int beforeTurn, RagRunTrace trace) {
     return execute(ownerId, conversationId, beforeTurn, trace.context());
   }

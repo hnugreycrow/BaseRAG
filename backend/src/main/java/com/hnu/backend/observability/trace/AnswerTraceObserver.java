@@ -2,17 +2,17 @@ package com.hnu.backend.observability.trace;
 
 import com.hnu.backend.common.exception.ApiException;
 import com.hnu.backend.observability.RagStageName;
-import com.hnu.backend.rag.generation.AnswerGenerator;
-import com.hnu.backend.rag.generation.AnswerStage;
+import com.hnu.backend.rag.api.AnswerGenerator;
+import com.hnu.backend.rag.api.RagObserver;
 import java.util.UUID;
 import java.util.function.BooleanSupplier;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
 /** 将流式业务观察器与模型尝试、引用校验的追踪生命周期组合。 */
-public final class AnswerTraceObserver implements AnswerStage.Observer {
+public final class AnswerTraceObserver implements RagObserver, AnswerTrace {
   private final TraceContext context;
-  private final AnswerStage.Observer delegate;
+  private final RagObserver delegate;
   private final Supplier<UUID> attemptId;
   private final IntSupplier attemptIndex;
   private final BooleanSupplier cancelled;
@@ -22,7 +22,7 @@ public final class AnswerTraceObserver implements AnswerStage.Observer {
   /** 创建一次回答生成范围内的追踪适配器，尝试标识在业务 started 回调后读取。 */
   public AnswerTraceObserver(
       TraceContext context,
-      AnswerStage.Observer delegate,
+      RagObserver delegate,
       Supplier<UUID> attemptId,
       IntSupplier attemptIndex,
       BooleanSupplier cancelled) {
@@ -34,11 +34,13 @@ public final class AnswerTraceObserver implements AnswerStage.Observer {
   }
 
   /** 返回最后一次模型调用句柄，由引用校验成功后的运行终态选择为有效模型。 */
+  @Override
   public RagRunTrace.Span finalModelSpan() {
     return current == null ? null : current.span;
   }
 
   /** 业务成功发送 SSE 后调用；不把 checkpoint 成功与否作为首内容的条件。 */
+  @Override
   public void sent(boolean reasoning, String text) {
     context.trace().deltaSent(reasoning, text);
   }

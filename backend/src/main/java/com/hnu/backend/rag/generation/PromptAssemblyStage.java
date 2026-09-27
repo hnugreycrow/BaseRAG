@@ -24,7 +24,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 /** 将流水线中间结果组装为边界清晰、顺序稳定且可直接交给模型的两条消息。 */
 @Component
-public class PromptAssemblyStage {
+public class PromptAssemblyStage implements PromptAssembler {
   private final ContextBuilder contexts;
   private final JsonMapper json = JsonCodecs.models();
 
@@ -48,6 +48,7 @@ public class PromptAssemblyStage {
    * @param selectedCandidates 重排阶段最终选中的知识证据
    * @return 可直接传给回答模型的提示词快照
    */
+  @Override
   public AssembledPrompt assemblePipeline(
       RagMemory memory,
       String originalQuestion,
@@ -81,6 +82,7 @@ public class PromptAssemblyStage {
    * @param routing 全部为系统闲聊的路由计划
    * @return 不包含虚假证据或工具结果的提示词快照
    */
+  @Override
   public AssembledPrompt assembleSystemChat(
       RagMemory memory, String originalQuestion, QueryPlan plan, RoutingPlan routing) {
     if (!routing.systemChatOnly()) {
@@ -103,6 +105,7 @@ public class PromptAssemblyStage {
    * @param context 旧检索链路已经构造的知识来源
    * @return 与新流水线数据区结构一致的提示词快照
    */
+  @Override
   public AssembledPrompt assembleLegacy(String originalQuestion, ContextBuilder.Context context) {
     List<SourceResponse> sources = context.sources();
     QueryPlan plan = QueryPlan.fallback(originalQuestion);
@@ -127,6 +130,7 @@ public class PromptAssemblyStage {
    * @param original 首次生成使用的完整提示词快照
    * @return 用户数据和来源完全不变的引用修复快照
    */
+  @Override
   public AssembledPrompt forCitationRepair(AssembledPrompt original) {
     return new AssembledPrompt(
         AnswerPrompts.citationRepair(),

@@ -12,12 +12,13 @@ import org.springframework.stereotype.Component;
 
 /** 按检索归因合并重复分块，并在截断时保护各知识型子问题的最低覆盖。 */
 @Component
-public class CandidateMerge {
+public class CandidateMerge implements CandidateFusion {
   private static final Comparator<EvidenceCandidate> ORDER =
       Comparator.comparingDouble(EvidenceCandidate::fusionScore)
           .reversed()
           .thenComparing(candidate -> candidate.candidateId().toString());
 
+  @Override
   public List<EvidenceCandidate> mergeAndSelect(
       List<EvidenceCandidate> input, List<String> orderedSubQuestionIds, int limit) {
     List<EvidenceCandidate> merged = mergeByChunk(input);

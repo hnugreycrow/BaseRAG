@@ -9,9 +9,9 @@ import com.hnu.backend.conversation.mapper.GenerationAttemptMapper;
 import com.hnu.backend.conversation.mapper.MessageMapper;
 import com.hnu.backend.observability.service.RagTraceManager;
 import com.hnu.backend.observability.trace.RagRunTrace;
+import com.hnu.backend.rag.api.RagEngine;
+import com.hnu.backend.rag.api.RagExecutionControl;
 import com.hnu.backend.rag.config.RagProperties;
-import com.hnu.backend.rag.generation.AnswerGenerator;
-import com.hnu.backend.rag.generation.AnswerStage;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -46,8 +46,8 @@ class ConversationGenerationLifecycleTest {
               TransactionCallback<?> callback = invocation.getArgument(0);
               return callback.doInTransaction(mock(TransactionStatus.class));
             });
-    AnswerStage answers = mock(AnswerStage.class);
-    when(answers.newControl()).thenAnswer(ignored -> mock(AnswerGenerator.Control.class));
+    RagEngine answers = mock(RagEngine.class);
+    when(answers.newControl()).thenAnswer(ignored -> mock(RagExecutionControl.class));
     RagTraceManager traces = mock(RagTraceManager.class);
     when(traces.start(any(), any(), any(), any(), any(), any())).thenReturn(RagRunTrace.noop());
     doAnswer(

@@ -6,6 +6,8 @@ import com.hnu.backend.model.client.ChatGenerationRequest;
 import com.hnu.backend.model.client.ModelHttpClient;
 import com.hnu.backend.model.config.AiProperties;
 import com.hnu.backend.observability.TraceReasonCatalog;
+import com.hnu.backend.rag.api.AnswerGenerator;
+import com.hnu.backend.rag.api.RagExecutionControl;
 import org.springframework.stereotype.Component;
 
 /** 将现有支持候选回退的 {@link ChatClient} 适配为 RAG 回答模型端口。 */
@@ -24,7 +26,7 @@ public class ChatAnswerGenerator implements AnswerGenerator {
 
   /** {@inheritDoc} */
   @Override
-  public Control newControl() {
+  public RagExecutionControl newControl() {
     return new ChatControl(new ModelHttpClient.StreamControl());
   }
 
@@ -35,13 +37,13 @@ public class ChatAnswerGenerator implements AnswerGenerator {
       String userPrompt,
       AttemptReason reason,
       StreamObserver observer,
-      Control control) {
+      RagExecutionControl control) {
     return generate(new Request(systemPrompt, userPrompt, false), reason, observer, control);
   }
 
   @Override
   public Generation generate(
-      Request request, AttemptReason reason, StreamObserver observer, Control control) {
+      Request request, AttemptReason reason, StreamObserver observer, RagExecutionControl control) {
     if (!(control instanceof ChatControl chatControl)) {
       throw new IllegalArgumentException("Unsupported answer stream control");
     }
@@ -137,7 +139,7 @@ public class ChatAnswerGenerator implements AnswerGenerator {
   }
 
   /** 把 RAG 中立控制接口绑定到模型 HTTP 客户端的可关闭响应流。 */
-  private static final class ChatControl implements Control {
+  private static final class ChatControl implements RagExecutionControl {
     private final ModelHttpClient.StreamControl delegate;
 
     /**

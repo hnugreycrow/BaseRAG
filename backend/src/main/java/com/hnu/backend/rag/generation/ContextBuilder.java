@@ -1,6 +1,5 @@
 package com.hnu.backend.rag.generation;
 
-import com.hnu.backend.rag.config.RagProperties;
 import com.hnu.backend.rag.retrieval.EvidenceCandidate;
 import com.hnu.backend.rag.retrieval.SearchHit;
 import com.hnu.backend.rag.vo.SourceResponse;
@@ -16,10 +15,15 @@ import org.springframework.stereotype.Component;
 @Component
 public class ContextBuilder {
   /** 同一批模型证据文本和对应的文档级来源。 */
-  public record Context(String text, List<SourceResponse> sources) {}
+  public record Context(String text, List<SourceResponse> sources) {
+    /** 固定来源顺序，防止装配后被调用方修改。 */
+    public Context {
+      sources = List.copyOf(sources);
+    }
+  }
 
-  /** 保留现有依赖注入契约；分块预算仍由上游检索与重排决定。 */
-  public ContextBuilder(RagProperties config) {}
+  /** 创建无外部依赖的证据上下文装配器。 */
+  public ContextBuilder() {}
 
   /** 将旧单轮检索结果按其原有 Top K 顺序聚合。 */
   public Context build(List<SearchHit> hits) {
