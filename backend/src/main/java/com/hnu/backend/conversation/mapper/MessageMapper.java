@@ -26,6 +26,15 @@ public interface MessageMapper extends BaseMapper<Message> {
             .orderByAsc(Message::getVariantIndex));
   }
 
+  /**
+   * 向前读取用户提问，用于快速定位历史轮次。
+   *
+   * @param ownerId 所属用户标识
+   * @param conversationId 会话标识
+   * @param before 不包含的轮次上界
+   * @param limit 最大返回数量；持久化层限制在 1 到 101 之间
+   * @return 按轮次从新到旧排列的提问，且只填充标识、轮次和正文
+   */
   default List<Message> questions(UUID ownerId, UUID conversationId, int before, int limit) {
     return selectList(
         Wrappers.<Message>lambdaQuery()

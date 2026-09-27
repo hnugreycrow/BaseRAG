@@ -12,6 +12,7 @@ import java.util.Objects;
  */
 public record RerankDecision(
     EvidenceCandidate candidate, double relevanceScore, int rank, boolean selected) {
+  /** 仅允许 0 到 1 的模型分数或降级哨兵值 -1，名次从 1 开始。 */
   public RerankDecision {
     candidate = Objects.requireNonNull(candidate, "candidate");
     if ((!Double.isFinite(relevanceScore) || relevanceScore < 0 || relevanceScore > 1)

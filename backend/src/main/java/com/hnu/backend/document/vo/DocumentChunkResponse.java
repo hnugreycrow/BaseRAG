@@ -10,7 +10,7 @@ import java.util.UUID;
  * @param heading 分块所属标题
  * @param lineStart 兼容旧版 Markdown 的起始行号，其他格式为空
  * @param lineEnd 兼容旧版 Markdown 的结束行号，其他格式为空
- * @param characterCount 正文字符数
+ * @param characterCount 正文长度，按 Java UTF-16 代码单元计数
  * @param preview 正文预览
  * @param sourceUnit 来源位置单位：行、页或段落
  * @param sourceStart 来源起始位置

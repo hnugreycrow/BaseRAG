@@ -9,7 +9,7 @@ import org.apache.ibatis.type.JdbcType;
 import org.apache.ibatis.type.MappedJdbcTypes;
 import org.apache.ibatis.type.MappedTypes;
 
-/** Binds textual JSONB and pgvector values through PostgreSQL's OTHER JDBC type. */
+/** 将 JSONB 和 pgvector 的文本值作为 PostgreSQL {@code OTHER} 类型绑定，避免 JDBC 按普通字符串推断列类型。 */
 @MappedTypes(String.class)
 @MappedJdbcTypes(JdbcType.OTHER)
 public class PostgresTextTypeHandler extends BaseTypeHandler<String> {

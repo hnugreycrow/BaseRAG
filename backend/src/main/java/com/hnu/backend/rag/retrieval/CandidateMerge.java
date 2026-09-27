@@ -93,7 +93,6 @@ public class CandidateMerge implements CandidateFusion {
           new ArrayList<>(sources),
           new ArrayList<>(attributions),
           score,
-          // 候选合并后保留代表分块的来源元数据。
           representative.format(),
           representative.sourceUnit());
     }

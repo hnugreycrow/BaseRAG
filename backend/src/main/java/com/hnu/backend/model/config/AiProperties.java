@@ -7,6 +7,7 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
+/** 汇总模型供应商、候选顺序和调用预算，并在启动时拒绝无效配置。 */
 @Data
 @Configuration
 @ConfigurationProperties(prefix = "ai")
@@ -46,6 +47,11 @@ public class AiProperties {
     rerankModels();
   }
 
+  /**
+   * 按默认档位配置的顺序解析聊天候选；缺失档位或候选会使启动校验失败。
+   *
+   * @return 可依次尝试的聊天模型目标
+   */
   public List<ModelTarget> chatModels() {
     Tier tier = chat.tiers.get(chat.defaultTier);
     if (tier == null || tier.candidates.isEmpty()) {
@@ -58,16 +64,32 @@ public class AiProperties {
         .toList();
   }
 
+  /**
+   * 解析当前默认向量模型。
+   *
+   * @return 默认向量模型及其维度、端点和预算
+   */
   public ModelTarget embeddingModel() {
     return embeddingModel(embedding.defaultModel);
   }
 
+  /**
+   * 按本地候选 ID 解析向量模型，并校验该候选可用于 Embedding。
+   *
+   * @param id 配置中的模型候选 ID
+   * @return 对应向量模型目标
+   */
   public ModelTarget embeddingModel(String id) {
     Candidate candidate = index(embedding.candidates).get(id);
     int dimension = candidate == null ? 0 : candidate.dimension;
     return resolve(candidate, id, "embedding", requestTimeoutMs, dimension);
   }
 
+  /**
+   * 按配置顺序解析全部向量候选，供现有知识库绑定校验使用。
+   *
+   * @return 向量模型目标列表
+   */
   public List<ModelTarget> embeddingModels() {
     return embedding.candidates.stream().map(candidate -> embeddingModel(candidate.id)).toList();
   }
@@ -176,6 +198,19 @@ public class AiProperties {
     return resolve(candidate, candidate.id, "rerank", requestTimeoutMs, 0);
   }
 
+  /**
+   * 解析后的单个模型调用目标；密钥仅供服务端发起请求，不应进入 API 响应或日志。
+   *
+   * @param id 本地候选 ID
+   * @param provider 供应商配置标识
+   * @param model 供应商模型名称
+   * @param baseUrl 供应商服务地址
+   * @param endpoint 当前能力的请求路径
+   * @param apiKey 请求凭据
+   * @param timeoutMs 单次请求超时毫秒数
+   * @param dimension 向量维度；非向量模型为 0
+   * @param supportsThinking 聊天模型是否支持思考参数
+   */
   public record ModelTarget(
       String id,
       String provider,
@@ -187,6 +222,7 @@ public class AiProperties {
       int dimension,
       boolean supportsThinking) {}
 
+  /** 单个供应商的共享地址、凭据和能力端点。 */
   @Data
   public static class Provider {
     private String url = "";
@@ -194,6 +230,7 @@ public class AiProperties {
     private Endpoints endpoints = new Endpoints();
   }
 
+  /** 供应商各能力的相对请求路径。 */
   @Data
   public static class Endpoints {
     private String chat = "";
@@ -201,6 +238,7 @@ public class AiProperties {
     private String rerank = "";
   }
 
+  /** 故障熔断与重试配置；重试次数不包括首次调用。 */
   @Data
   public static class Selection {
     private int failureThreshold = 2;
@@ -223,6 +261,7 @@ public class AiProperties {
     private int totalTimeoutMs = 180_000;
   }
 
+  /** 聊天候选和默认档位的配置容器。 */
   @Data
   public static class Chat {
     private String defaultTier = "standard";
@@ -230,12 +269,14 @@ public class AiProperties {
     private Map<String, Tier> tiers = new LinkedHashMap<>();
   }
 
+  /** 一个聊天档位的候选顺序和单次调用超时预算。 */
   @Data
   public static class Tier {
     private List<String> candidates = new ArrayList<>();
     private int timeoutMs = 30_000;
   }
 
+  /** 向量模型候选、默认绑定与每批输入数量。 */
   @Data
   public static class Embedding {
     private String defaultModel = "";
@@ -243,12 +284,14 @@ public class AiProperties {
     private int batchSize = 16;
   }
 
+  /** 重排模型候选及默认优先目标。 */
   @Data
   public static class Rerank {
     private String defaultModel = "";
     private List<Candidate> candidates = new ArrayList<>();
   }
 
+  /** 候选中的模型标识、优先级及能力特征；优先级用于重排后备排序。 */
   @Data
   public static class Candidate {
     private String id = "";

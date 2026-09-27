@@ -25,6 +25,7 @@ public record RerankResult(
     String model,
     String requestId,
     long totalTokens) {
+  /** 冻结最终证据和逐项决策，保证提示词与观测数据读取同一结果。 */
   public RerankResult {
     selectedCandidates = List.copyOf(selectedCandidates);
     decisions = List.copyOf(decisions);

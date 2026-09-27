@@ -12,7 +12,15 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-/** 单次意图路由使用的不可变树快照。 */
+/**
+ * 单次意图路由使用的不可变树快照。
+ *
+ * @param nodes 构建快照时读取的全部节点
+ * @param activeLeaves 当前可参与分类的启用叶子
+ * @param activeLeavesById 以标识索引的启用叶子
+ * @param paths 节点标识到层级路径的映射
+ * @param promptLeaves 供分类模型读取的服务端叶子描述
+ */
 public record IntentTreeSnapshot(
     List<IntentNode> nodes,
     List<IntentNode> activeLeaves,
@@ -20,6 +28,7 @@ public record IntentTreeSnapshot(
     Map<UUID, String> paths,
     List<Map<String, Object>> promptLeaves) {
 
+  /** 固定所有集合的顶层结构，使路由期间的数据库或工具配置变化不影响本次快照。 */
   public IntentTreeSnapshot {
     nodes = List.copyOf(nodes);
     activeLeaves = List.copyOf(activeLeaves);

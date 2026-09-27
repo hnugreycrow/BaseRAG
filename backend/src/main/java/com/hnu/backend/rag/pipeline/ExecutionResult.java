@@ -14,6 +14,7 @@ public record ExecutionResult(
     List<EvidenceCandidate> candidates,
     List<SubQuestionExecution> subQuestions,
     RagBudgetSnapshot budget) {
+  /** 冻结候选和子问题结果，避免后续阶段看到调度线程对列表的修改。 */
   public ExecutionResult {
     candidates = List.copyOf(candidates);
     subQuestions = List.copyOf(subQuestions);

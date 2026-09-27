@@ -12,7 +12,7 @@ import java.util.UUID;
  * @param conversationId 会话标识；兼容单轮入口为空
  * @param turn 当前轮次；兼容单轮入口为零
  * @param knowledgeBaseIds 限定知识库；null 表示原有全范围语义
- * @param thinkingEnabled 是否输出思考内容
+ * @param thinkingEnabled 是否向支持的模型请求思考模式
  * @param mode 原有完整或单轮兼容流程
  */
 public record RagRequest(

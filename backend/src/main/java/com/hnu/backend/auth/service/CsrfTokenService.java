@@ -12,7 +12,9 @@ import org.springframework.stereotype.Service;
 /** 在 Sa-Token Token Session 中签发和验证 CSRF nonce。 */
 @Service
 public class CsrfTokenService {
+  /** 客户端提交 CSRF nonce 时使用的请求头名称。 */
   public static final String HEADER = "X-CSRF-Token";
+
   private static final String SESSION_KEY = "baserag.csrf";
   private final SecureRandom random = new SecureRandom();
 

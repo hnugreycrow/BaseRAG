@@ -27,10 +27,17 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+/** 将业务及框架异常映射为统一响应；未预期异常只记录类型与不含异常消息的堆栈。 */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
   private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+  /**
+   * 请求字段校验失败时对外返回的单项错误。
+   *
+   * @param field 出错字段名
+   * @param message 可展示的校验提示
+   */
   public record FieldViolation(String field, String message) {}
 
   private String requestId(HttpServletRequest request) {
@@ -149,7 +156,7 @@ public class GlobalExceptionHandler {
     if (isAuthStoreFailure(e)) {
       return redisUnavailableResponse(e, request);
     }
-    // Do not log raw provider responses, SQL values, credentials or document text.
+    // 异常消息可能包含供应商响应、SQL 参数或文档正文；只记录异常类型和脱敏堆栈。
     log.error(
         "requestId={} code={} exceptionType={} safeStack={}",
         requestId(request),

@@ -15,6 +15,11 @@ import tools.jackson.databind.JsonNode;
 public class OpenAICompatibleEmbeddingAdapter implements EmbeddingAdapter {
   private final ModelHttpClient http;
 
+  /**
+   * 创建共享模型 HTTP 客户端的协议适配器。
+   *
+   * @param http 负责超时、重试和供应商 HTTP 请求的客户端
+   */
   public OpenAICompatibleEmbeddingAdapter(ModelHttpClient http) {
     this.http = http;
   }

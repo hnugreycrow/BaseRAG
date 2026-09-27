@@ -86,6 +86,7 @@ public record EvidenceCandidate(
         "LINE");
   }
 
+  /** 固定来源与归因，并保证首个来源对应代表分块。 */
   public EvidenceCandidate {
     candidateId = Objects.requireNonNull(candidateId, "candidateId");
     chunkId = Objects.requireNonNull(chunkId, "chunkId");

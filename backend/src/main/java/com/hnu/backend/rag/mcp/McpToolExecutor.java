@@ -35,6 +35,12 @@ public class McpToolExecutor implements ToolExecutor {
   private final JsonMapper json = JsonCodecs.models();
   private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
+  /**
+   * 装配服务端安全复核与工具执行预算。
+   *
+   * @param registry 工具注册和调用前复核入口
+   * @param config 工具超时与输出长度预算
+   */
   @org.springframework.beans.factory.annotation.Autowired
   public McpToolExecutor(McpToolRegistry registry, RagStageSettings.Tools config) {
     this.registry = registry;

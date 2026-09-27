@@ -24,6 +24,7 @@ public record SubQuestionExecution(
     ToolObservation toolObservation,
     String reasonCode,
     long elapsedMs) {
+  /** 固定候选列表并拒绝负耗时或缺失的状态标识。 */
   public SubQuestionExecution {
     subQuestionId = Objects.requireNonNull(subQuestionId, "subQuestionId");
     intent = Objects.requireNonNull(intent, "intent");
@@ -35,6 +36,7 @@ public record SubQuestionExecution(
     }
   }
 
+  /** 子问题终态；空结果和跳过不表示执行失败。 */
   public enum Status {
     SUCCESS,
     EMPTY,

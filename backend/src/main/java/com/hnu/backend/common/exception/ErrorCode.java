@@ -124,18 +124,22 @@ public enum ErrorCode {
     this.retryable = retryable;
   }
 
+  /** 返回已持久化并对外暴露的稳定错误码；值等于当前枚举常量名。 */
   public String code() {
     return name();
   }
 
+  /** 返回可直接展示给用户且不包含内部异常细节的默认提示。 */
   public String defaultMessage() {
     return defaultMessage;
   }
 
+  /** 返回该错误码对应的 HTTP 状态。 */
   public HttpStatus status() {
     return status;
   }
 
+  /** 返回生成终态是否允许前端再次请求；此标志不表示服务端会自动重试。 */
   public boolean retryable() {
     return retryable;
   }

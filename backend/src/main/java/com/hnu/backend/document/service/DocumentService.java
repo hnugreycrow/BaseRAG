@@ -288,7 +288,13 @@ public class DocumentService {
     return reader.preview(ownerId, knowledgeBaseId, documentId);
   }
 
-  /** 原文件下载内容。 */
+  /**
+   * 原文件下载内容。
+   *
+   * @param name 下载时使用的文件名
+   * @param mediaType 原文件的 MIME 类型
+   * @param bytes 原文件字节内容
+   */
   public record OriginalFile(String name, String mediaType, byte[] bytes) {}
 
   private String normalizeDocumentName(String rawName) {

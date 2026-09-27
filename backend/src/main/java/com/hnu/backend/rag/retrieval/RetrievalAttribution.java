@@ -22,6 +22,7 @@ public record RetrievalAttribution(
     int retrievalRank,
     RetrievalChannel retrievalChannel,
     double fusionContribution) {
+  /** 要求正名次、有限相似度和正融合贡献，避免无效归因进入合并排序。 */
   public RetrievalAttribution {
     chunkId = Objects.requireNonNull(chunkId, "chunkId");
     subQuestionId = Objects.requireNonNull(subQuestionId, "subQuestionId");

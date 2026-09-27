@@ -7,6 +7,7 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
+/** RAG 流水线的可配置预算和检索策略，启动时统一验证边界条件。 */
 @Data
 @Configuration
 @ConfigurationProperties(prefix = "rag")
@@ -61,6 +62,7 @@ public class RagProperties {
     }
   }
 
+  /** 子问题数量及规划、路由、工具、去重和重排阶段的配置集合。 */
   @Data
   public static class Pipeline {
     private int maxSubQuestions = 4;
@@ -71,17 +73,20 @@ public class RagProperties {
     private Rerank rerank = new Rerank();
   }
 
+  /** 查询规划可读取的最近完整会话轮次数量。 */
   @Data
   public static class Planning {
     private int recentTurns = 4;
   }
 
+  /** 意图路由的模型置信度阈值和调用超时，阈值范围为 0 到 1。 */
   @Data
   public static class Routing {
     private double confidenceThreshold = 0.70;
     private int timeoutMs = 10_000;
   }
 
+  /** MCP 工具开关、白名单及单次执行的时间和输出长度预算。 */
   @Data
   public static class Mcp {
     private boolean enabled;
@@ -90,11 +95,13 @@ public class RagProperties {
     private int maxOutputChars = 6000;
   }
 
+  /** 相邻证据正文的重叠率去重阈值，范围为大于 0 且不超过 1。 */
   @Data
   public static class Deduplication {
     private double overlapThreshold = 0.85;
   }
 
+  /** 重排的输入候选上限与最终证据数量预算。 */
   @Data
   public static class Rerank {
     private boolean enabled = true;
@@ -102,6 +109,7 @@ public class RagProperties {
     private int selectedEvidence = 8;
   }
 
+  /** 向量召回数量、通道超时和融合参数。 */
   @Data
   public static class Search {
     private int defaultTopK = 10;
@@ -115,17 +123,20 @@ public class RagProperties {
     }
   }
 
+  /** 检索通道共享超时及各通道开关。 */
   @Data
   public static class Channels {
     private int timeoutMs = 5_000;
     private Vector vector = new Vector();
   }
 
+  /** 向量检索通道的启用状态。 */
   @Data
   public static class Vector {
     private boolean enabled = true;
   }
 
+  /** RRF 融合策略及通道权重。 */
   @Data
   public static class Fusion {
     private String strategy = "rrf";
@@ -133,11 +144,13 @@ public class RagProperties {
     private ChannelWeights channelWeights = new ChannelWeights();
   }
 
+  /** 向量通道参与融合时的正权重。 */
   @Data
   public static class ChannelWeights {
     private double vector = 1.0;
   }
 
+  /** 原文件对象存储的连接与桶配置，凭据只供服务端使用。 */
   @Data
   public static class Storage {
     private String endpoint;

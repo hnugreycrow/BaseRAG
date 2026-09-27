@@ -23,6 +23,7 @@ public record ToolObservation(
     String content,
     boolean truncated,
     long elapsedMs) {
+  /** 将缺失的摘要或输出归一化为空文本，并拒绝负耗时。 */
   public ToolObservation {
     toolName = Objects.requireNonNull(toolName, "toolName");
     argumentsSummary = argumentsSummary == null ? "" : argumentsSummary;
@@ -35,6 +36,7 @@ public record ToolObservation(
     }
   }
 
+  /** 工具调用终态；拒绝发生在外部网关调用之前。 */
   public enum Status {
     SUCCESS,
     REJECTED,

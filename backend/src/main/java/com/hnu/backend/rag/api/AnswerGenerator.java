@@ -33,7 +33,13 @@ public interface AnswerGenerator {
   Generation generate(
       Request request, AttemptReason reason, StreamObserver observer, RagExecutionControl control);
 
-  /** 回答阶段的中立生成请求。 */
+  /**
+   * 回答阶段的中立生成请求，思考选择由当前回答版本固定。
+   *
+   * @param systemPrompt 服务端可信系统提示词
+   * @param userPrompt 包含本轮输入和已选证据的用户提示词
+   * @param thinkingEnabled 是否向支持的模型请求思考模式
+   */
   record Request(String systemPrompt, String userPrompt, boolean thinkingEnabled) {}
 
   /** 一次模型调用的业务原因，用于区分主生成、供应商回退和引用修复。 */

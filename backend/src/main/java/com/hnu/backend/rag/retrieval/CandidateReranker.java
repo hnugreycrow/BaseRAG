@@ -5,6 +5,13 @@ import java.util.UUID;
 
 /** RAG 核心使用的候选重排端口，不暴露供应商请求或响应结构。 */
 public interface CandidateReranker {
+  /**
+   * 为候选证据请求重排分数；无模型可用时由实现报告降级或抛出错误。
+   *
+   * @param standaloneQuestion 不依赖会话上下文的独立问题
+   * @param candidates 待重排的候选证据，返回分数通过候选 ID 对应
+   * @return 分数及实际模型信息，或确定性降级标记
+   */
   Output rerank(String standaloneQuestion, List<EvidenceCandidate> candidates);
 
   /**
@@ -26,6 +33,7 @@ public interface CandidateReranker {
       String requestId,
       long totalTokens,
       boolean noop) {
+    /** 固定模型分数快照，避免后续排序受到调用方列表修改影响。 */
     public Output {
       scores = List.copyOf(scores);
     }

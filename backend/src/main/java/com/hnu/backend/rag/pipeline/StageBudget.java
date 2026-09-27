@@ -19,6 +19,7 @@ public record StageBudget(
     int rrfK,
     double vectorWeight,
     boolean vectorEnabled) {
+  /** 拒绝非正预算、非有限权重和空子问题标识，避免检索阶段使用无效限制或融合分。 */
   public StageBudget {
     subQuestionId = Objects.requireNonNull(subQuestionId, "subQuestionId");
     if (subQuestionId.isBlank()

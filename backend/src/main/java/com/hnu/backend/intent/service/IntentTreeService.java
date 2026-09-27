@@ -40,6 +40,15 @@ public class IntentTreeService {
   private final ApplicationEventPublisher events;
   private final JsonMapper json = JsonCodecs.snapshots();
 
+  /**
+   * 装配意图节点、知识库和工具绑定的校验及持久化边界。
+   *
+   * @param intentNodeMapper 意图节点持久化接口
+   * @param intentBindingMapper 知识库绑定持久化接口
+   * @param knowledgeBaseMapper 公共知识库可用性接口
+   * @param tools 服务端只读工具注册表
+   * @param events 提交后用于失效路由快照的事件发布器
+   */
   public IntentTreeService(
       IntentNodeMapper intentNodeMapper,
       IntentBindingMapper intentBindingMapper,

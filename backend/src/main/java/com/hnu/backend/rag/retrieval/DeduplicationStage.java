@@ -235,7 +235,6 @@ public class DeduplicationStage implements EvidenceDeduplicator {
           orderedSources,
           new ArrayList<>(attributions),
           representative.fusionScore(),
-          // 归并后仍使用代表分块的文件格式和来源单位。
           representative.format(),
           representative.sourceUnit());
     }

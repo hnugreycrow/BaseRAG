@@ -15,6 +15,7 @@ public record DeduplicationResult(
     int exactChunkMerged,
     int normalizedContentMerged,
     int adjacentOverlapMerged) {
+  /** 固定输出候选，防止后续阶段改写去重结果；各归并计数不得为负。 */
   public DeduplicationResult {
     candidates = List.copyOf(candidates);
     if (exactChunkMerged < 0 || normalizedContentMerged < 0 || adjacentOverlapMerged < 0) {

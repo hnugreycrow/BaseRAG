@@ -49,6 +49,14 @@ public class IntentTreeRoutingStage implements IntentRouter {
   private final JsonMapper json = JsonCodecs.models();
   private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
+  /**
+   * 装配树快照、分类模型和工具白名单，使路由只使用同一次执行的服务端配置。
+   *
+   * @param snapshots 不可变意图树快照提供者
+   * @param chat 负责模型分类请求的客户端
+   * @param tools 服务端工具注册表
+   * @param config 当前路由预算
+   */
   @org.springframework.beans.factory.annotation.Autowired
   public IntentTreeRoutingStage(
       IntentTreeSnapshotProvider snapshots,

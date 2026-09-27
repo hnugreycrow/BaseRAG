@@ -14,8 +14,8 @@ import java.util.UUID;
  * @param documentName 来源文档名称
  * @param chunkIndex 分块在当前文档版本内的零基顺序，用于判断相邻分块
  * @param heading 分块标题，可能为空
- * @param lineStart 原文起始行
- * @param lineEnd 原文结束行
+ * @param lineStart 原文起始位置，按所属候选的 {@link EvidenceCandidate#sourceUnit()} 解释
+ * @param lineEnd 原文结束位置，按所属候选的 {@link EvidenceCandidate#sourceUnit()} 解释
  */
 public record EvidenceSource(
     UUID chunkId,
@@ -28,6 +28,7 @@ public record EvidenceSource(
     String heading,
     int lineStart,
     int lineEnd) {
+  /** 来源起止位置均为包含边界，且结束位置不得早于起始位置。 */
   public EvidenceSource {
     chunkId = Objects.requireNonNull(chunkId, "chunkId");
     documentId = Objects.requireNonNull(documentId, "documentId");

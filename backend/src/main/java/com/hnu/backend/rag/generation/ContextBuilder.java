@@ -14,7 +14,12 @@ import org.springframework.stereotype.Component;
 /** 将已选分块按文档版本聚合，同时冻结模型证据和来源快照的编号。 */
 @Component
 public class ContextBuilder {
-  /** 同一批模型证据文本和对应的文档级来源。 */
+  /**
+   * 同一批模型证据文本和对应的文档级来源。
+   *
+   * @param text 按编号排列、交给回答模型的证据文本
+   * @param sources 与证据编号对应的文档来源快照
+   */
   public record Context(String text, List<SourceResponse> sources) {
     /** 固定来源顺序，防止装配后被调用方修改。 */
     public Context {

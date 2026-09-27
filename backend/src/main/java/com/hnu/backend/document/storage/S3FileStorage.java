@@ -21,6 +21,11 @@ public class S3FileStorage implements FileStorage {
   private S3Client client;
   private boolean bucketReady;
 
+  /**
+   * 创建延迟连接的原文件存储适配器；首次文件操作时才建立 S3 客户端。
+   *
+   * @param config 包含 RustFS 地址、桶和访问凭据的配置
+   */
   public S3FileStorage(RagProperties config) {
     this.config = config;
   }
@@ -56,7 +61,7 @@ public class S3FileStorage implements FileStorage {
         try {
           client.createBucket(b -> b.bucket(storage.getBucket()));
         } catch (BucketAlreadyOwnedByYouException ignored) {
-          /* another request initialized it */
+          // 其他实例可能在检查后已创建同名桶，此时直接使用该桶。
         }
       }
       bucketReady = true;
@@ -103,6 +108,7 @@ public class S3FileStorage implements FileStorage {
     }
   }
 
+  /** 应用停止时释放已建立的 S3 客户端连接。 */
   @PreDestroy
   public synchronized void close() {
     if (client != null) {

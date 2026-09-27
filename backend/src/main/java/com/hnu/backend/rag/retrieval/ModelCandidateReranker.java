@@ -9,6 +9,11 @@ import org.springframework.stereotype.Component;
 public class ModelCandidateReranker implements CandidateReranker {
   private final RerankClient client;
 
+  /**
+   * 创建将模型结果下标映射回证据候选 ID 的适配器。
+   *
+   * @param client 执行供应商请求与候选回退的模型客户端
+   */
   public ModelCandidateReranker(RerankClient client) {
     this.client = client;
   }

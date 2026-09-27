@@ -10,6 +10,15 @@ import java.util.List;
  * <p>切分结果保留标题路径和原文行号，便于回答引用回溯到原文。
  */
 public class MarkdownChunker {
+  /**
+   * 旧版 Markdown 测试使用的分块投影。
+   *
+   * @param content 展示正文
+   * @param embeddingText 向量化正文
+   * @param heading 所属标题
+   * @param lineStart 原文起始行
+   * @param lineEnd 原文结束行
+   */
   public record Piece(
       String content, String embeddingText, String heading, int lineStart, int lineEnd) {}
 

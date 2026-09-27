@@ -6,7 +6,20 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
-/** 单个子问题经模型分类和服务端安全策略归一化后的路由结果。 */
+/**
+ * 单个子问题经模型分类和服务端安全策略归一化后的路由结果。
+ *
+ * @param subQuestionId 与查询计划中的子问题一一对应的标识
+ * @param intent 安全策略确认后的最终意图
+ * @param confidence 模型置信度，范围为 0 到 1
+ * @param toolHint 工具路由建议；非工具路由可为空
+ * @param toolArguments 工具参数快照，空值会归一化为空映射
+ * @param reasonCode 最终路由原因码
+ * @param intentNodeId 命中的意图节点；降级路由可为空
+ * @param secondCandidateId 次优意图节点；没有时为空
+ * @param secondCandidateScore 次优模型分数；没有时为空
+ * @param knowledgeBaseIds 允许检索的知识库范围；空值表示不限制该范围
+ */
 public record IntentRoute(
     String subQuestionId,
     IntentType intent,
@@ -18,6 +31,7 @@ public record IntentRoute(
     UUID secondCandidateId,
     Double secondCandidateScore,
     List<UUID> knowledgeBaseIds) {
+  /** 固定模型参数与知识库范围，并确保置信度位于闭区间 0 到 1。 */
   public IntentRoute {
     subQuestionId = Objects.requireNonNull(subQuestionId, "subQuestionId");
     intent = Objects.requireNonNull(intent, "intent");

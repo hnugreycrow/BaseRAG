@@ -55,6 +55,14 @@ public class ConversationService {
     return create(ownerId, rawTitle, false);
   }
 
+  /**
+   * 为指定用户创建会话，并保存新回答的默认思考开关。
+   *
+   * @param ownerId 所属用户标识；新会话只对该用户可见
+   * @param rawTitle 未归一化标题
+   * @param thinkingEnabled 新回答默认是否启用思考
+   * @return 新会话摘要
+   */
   public ConversationResponses.Summary create(
       UUID ownerId, String rawTitle, boolean thinkingEnabled) {
     String title = normalizeTitle(rawTitle);
@@ -93,6 +101,18 @@ public class ConversationService {
     return detail(conversation, all);
   }
 
+  /**
+   * 以单个游标加载会话轮次窗口，每轮保留所有回答版本。
+   *
+   * @param ownerId 所属用户标识
+   * @param id 会话标识
+   * @param before 不包含的轮次上界；与其他游标互斥
+   * @param after 不包含的轮次下界；与其他游标互斥
+   * @param target 希望落在窗口内的轮次；与其他游标互斥
+   * @param rawLimit 请求的窗口大小，实际限制在 1 到 50 轮
+   * @return 轮次窗口、前后是否还有数据以及最新轮次
+   * @throws ApiException 游标无效或会话不可见时抛出
+   */
   public ConversationResponses.TurnPage page(
       UUID ownerId, UUID id, Integer before, Integer after, Integer target, int rawLimit) {
     Conversation conversation = require(ownerId, id);
@@ -122,6 +142,15 @@ public class ConversationService {
         latest);
   }
 
+  /**
+   * 向前分页读取用户提问，正文最多保留前 120 个 UTF-16 代码单元。
+   *
+   * @param ownerId 所属用户标识
+   * @param id 会话标识
+   * @param before 不包含的轮次上界；为空时从最新轮次开始
+   * @param rawLimit 请求的数量，实际限制在 1 到 100 条
+   * @return 从新到旧的提问及是否还有更早提问
+   */
   public ConversationResponses.QuestionPage questions(
       UUID ownerId, UUID id, Integer before, int rawLimit) {
     require(ownerId, id);

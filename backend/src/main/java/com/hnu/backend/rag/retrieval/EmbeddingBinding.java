@@ -3,6 +3,8 @@ package com.hnu.backend.rag.retrieval;
 /**
  * 知识库数据所绑定的向量模型规格。
  *
+ * @param modelId 本地向量模型候选 ID
+ * @param provider 供应商配置标识
  * @param model 模型名称
  * @param dimensions 向量维度
  */

@@ -8,6 +8,12 @@ import java.util.Set;
 public final class SafeExceptionLog {
   private SafeExceptionLog() {}
 
+  /**
+   * 输出异常类型、调用栈、被抑制异常和原因链，不输出任何异常消息。
+   *
+   * @param error 待记录的异常；为 {@code null} 时返回空字符串
+   * @return 可用于诊断的脱敏堆栈文本
+   */
   public static String render(Throwable error) {
     StringBuilder output = new StringBuilder();
     Set<Throwable> visited = Collections.newSetFromMap(new IdentityHashMap<>());

@@ -16,6 +16,7 @@ public final class ConversationResponses {
    *
    * @param id 会话标识
    * @param title 会话标题
+   * @param thinkingEnabled 新回答默认使用的思考开关
    * @param createdAt 创建时间
    * @param updatedAt 最近更新时间
    */
@@ -31,6 +32,7 @@ public final class ConversationResponses {
    *
    * @param id 会话标识
    * @param title 会话标题
+   * @param thinkingEnabled 新回答默认使用的思考开关
    * @param createdAt 创建时间
    * @param updatedAt 最近更新时间
    * @param turns 按轮次排列的消息
@@ -43,12 +45,32 @@ public final class ConversationResponses {
       OffsetDateTime updatedAt,
       List<Turn> turns) {}
 
-  /** 有界消息窗口，轮次游标不受新消息插入影响。 */
+  /**
+   * 有界消息窗口，轮次游标不受新消息插入影响。
+   *
+   * @param conversation 仅包含本窗口轮次的会话详情
+   * @param hasOlder 是否仍有更早轮次
+   * @param hasNewer 是否仍有更新轮次
+   * @param latestTurnIndex 查询时会话的最新轮次，空会话为 0
+   */
   public record TurnPage(
       Detail conversation, boolean hasOlder, boolean hasNewer, int latestTurnIndex) {}
 
+  /**
+   * 供历史轮次定位使用的提问摘要。
+   *
+   * @param id 用户消息标识
+   * @param turnIndex 从 1 开始的会话轮次
+   * @param preview 截取后的提问正文
+   */
   public record Question(UUID id, int turnIndex, String preview) {}
 
+  /**
+   * 向前浏览提问的结果。
+   *
+   * @param items 按轮次从新到旧排列的提问摘要
+   * @param hasMore 是否还有更早提问
+   */
   public record QuestionPage(List<Question> items, boolean hasMore) {}
 
   /**
@@ -81,6 +103,8 @@ public final class ConversationResponses {
    * @param active 是否为当前生效版本
    * @param status 生成状态
    * @param content 回答正文或已保存的部分正文
+   * @param thinkingEnabled 本回答版本创建时固定的思考选择
+   * @param reasoningContent 已保存的思考内容，与回答正文分开存储
    * @param retrievalQuery 实际用于检索的问题
    * @param sources 检索来源
    * @param citations 回答实际使用的引用标识

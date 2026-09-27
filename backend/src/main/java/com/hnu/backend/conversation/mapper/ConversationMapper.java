@@ -22,6 +22,15 @@ public interface ConversationMapper extends BaseMapper<Conversation> {
     return insert(ownerId, id, title, false);
   }
 
+  /**
+   * 创建会话，并保存本次会话默认的思考开关。
+   *
+   * @param ownerId 所属用户标识
+   * @param id 会话标识
+   * @param title 初始标题
+   * @param thinkingEnabled 新回答默认是否启用思考
+   * @return 受影响行数
+   */
   default int insert(UUID ownerId, UUID id, String title, boolean thinkingEnabled) {
     Conversation conversation = new Conversation();
     conversation.setId(id);

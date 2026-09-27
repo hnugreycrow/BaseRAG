@@ -8,6 +8,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
+/** 验证跨子问题候选归并时的来源、归因和稳定排序。 */
 public class CandidateMergeTest {
   private final CandidateMerge merge = new CandidateMerge();
 
@@ -52,6 +53,17 @@ public class CandidateMergeTest {
         List.of(id(1), id(2)), result.stream().map(EvidenceCandidate::candidateId).toList());
   }
 
+  /**
+   * 创建拥有单条向量检索归因的候选，供归并测试复用。
+   *
+   * @param id 同时作为候选、分块和来源标识
+   * @param subQuestionId 命中该候选的子问题
+   * @param model 生成查询向量的模型
+   * @param rawSimilarity 原始相似度
+   * @param rank 模型内一基名次
+   * @param contribution 本次检索的融合分贡献
+   * @return 可用于候选归并的测试数据
+   */
   public static EvidenceCandidate candidate(
       UUID id,
       String subQuestionId,
@@ -87,6 +99,7 @@ public class CandidateMergeTest {
         contribution);
   }
 
+  /** 使用固定低位生成稳定 UUID，避免随机 ID 干扰顺序断言。 */
   public static UUID id(long value) {
     return new UUID(0, value);
   }

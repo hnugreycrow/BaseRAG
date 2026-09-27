@@ -20,6 +20,13 @@ public class McpToolRegistry {
   private final McpInputSchemaValidator schemas;
   private final Map<String, RegisteredTool> tools;
 
+  /**
+   * 建立唯一的服务端工具索引；重复名称或无效 schema 会阻止启动。
+   *
+   * @param gateways 可登记工具的外部网关
+   * @param config 当前工具开关与白名单
+   * @param schemas 工具输入 schema 校验器
+   */
   @org.springframework.beans.factory.annotation.Autowired
   public McpToolRegistry(
       List<McpToolGateway> gateways,
@@ -90,6 +97,7 @@ public class McpToolRegistry {
     schemas.validateSchema(definition.inputSchema());
   }
 
+  /** 工具在服务端复核后的拒绝原因；仅 {@code ALLOWED} 可进入外部网关。 */
   public enum RoutingCheck {
     ALLOWED,
     MCP_DISABLED,
@@ -98,6 +106,12 @@ public class McpToolRegistry {
     INVALID_ARGUMENTS
   }
 
+  /**
+   * 服务端工具定义与实际执行网关的绑定，不能由模型输出替换。
+   *
+   * @param definition 已校验的服务端工具定义
+   * @param gateway 登记该工具的执行网关
+   */
   public record RegisteredTool(McpToolDefinition definition, McpToolGateway gateway) {}
 
   /** 兼容独立测试的旧配置装配方式。 */

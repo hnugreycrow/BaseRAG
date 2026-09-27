@@ -15,6 +15,12 @@ public class IntentTreeSnapshotProvider {
   private final Object monitor = new Object();
   private volatile IntentTreeSnapshot cached;
 
+  /**
+   * 创建延迟构建的路由快照提供者。
+   *
+   * @param intentTreeService 意图节点读取服务
+   * @param tools 当前可用只读工具注册表
+   */
   public IntentTreeSnapshotProvider(IntentTreeService intentTreeService, McpToolRegistry tools) {
     this.intentTreeService = intentTreeService;
     this.tools = tools;

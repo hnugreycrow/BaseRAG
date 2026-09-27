@@ -24,11 +24,26 @@ public class RerankClient {
   private final AiProperties config;
   private final ModelHttpClient http;
 
+  /**
+   * 创建按配置候选顺序尝试的重排客户端。
+   *
+   * @param config 模型候选及降级配置
+   * @param http 执行供应商请求的客户端
+   */
   public RerankClient(AiProperties config, ModelHttpClient http) {
     this.config = config;
     this.http = http;
   }
 
+  /**
+   * 对候选文档请求模型相关性分数；候选失败时尝试下一个配置候选。
+   *
+   * @param query 非空查询文本
+   * @param documents 非空候选文档列表，顺序与返回分数下标对应
+   * @return 模型分数或 {@code noop} 确定性降级标记
+   * @throws IllegalArgumentException 查询或文档列表为空时抛出
+   * @throws ApiException 全部候选失败或请求被取消时抛出
+   */
   public Generation rerank(String query, List<String> documents) {
     if (query == null || query.isBlank() || documents.isEmpty()) {
       throw new IllegalArgumentException("Rerank query and documents must not be empty");
@@ -143,6 +158,7 @@ public class RerankClient {
       String requestId,
       long totalTokens,
       boolean noop) {
+    /** 固定单次模型分数的顺序，防止调用方修改原始列表。 */
     public Generation {
       ranks = List.copyOf(ranks);
     }

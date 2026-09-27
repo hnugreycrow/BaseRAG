@@ -7,7 +7,14 @@ import com.hnu.backend.rag.retrieval.SearchHit;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 
+/** 验证证据分组、上下文编号与引用处理的边界行为。 */
 public class ContextAndCitationsTest {
+  /**
+   * 创建带独立来源标识的检索命中，便于测试同文档及跨文档聚合。
+   *
+   * @param content 分块正文
+   * @return 位置位于原文第 1 至 2 行的命中
+   */
   public static SearchHit hit(String content) {
     SearchHit hit = new SearchHit();
     hit.setKnowledgeBaseId(UUID.randomUUID());
