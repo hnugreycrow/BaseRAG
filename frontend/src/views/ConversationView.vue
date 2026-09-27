@@ -1312,6 +1312,7 @@ onBeforeUnmount(() => {
         </Transition>
         <ClarificationChoices
           v-if="conversation?.pendingClarification"
+          v-show="!sending && conversation.pendingClarification.status === 'PENDING'"
           ref="clarificationPanel"
           :supplement="draft"
           :clarification="conversation.pendingClarification"
@@ -1328,9 +1329,11 @@ onBeforeUnmount(() => {
             maxlength="2000"
             resize="none"
             :placeholder="
-              conversation?.pendingClarification
-                ? '补充说明（可选），或直接确认上方选择'
-                : '向知识库提问'
+              sending && conversation?.pendingClarification
+                ? '正在处理你的补充…'
+                : conversation?.pendingClarification
+                  ? '补充说明（可选），或直接确认上方选择'
+                  : '向知识库提问'
             "
             aria-label="输入问题"
             @keydown="handleComposerKeydown"

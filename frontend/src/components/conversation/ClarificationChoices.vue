@@ -171,10 +171,14 @@ h3 {
   cursor: pointer;
 }
 .clarification-option.is-selected {
-  border-color: var(--color-primary);
-  background: var(--color-primary-soft);
+  background: #f5f6f7;
 }
-.clarification-option:focus-within {
+@media (hover: hover) {
+  fieldset:not(:disabled) .clarification-option:hover {
+    background: #f5f6f7;
+  }
+}
+.clarification-option:has(input:focus-visible) {
   outline: 2px solid var(--color-primary);
   outline-offset: 3px;
 }
