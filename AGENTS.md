@@ -60,6 +60,17 @@ When writing or modifying database-access code, use the official [MyBatis-Plus p
 
 Follow the comment and Javadoc rules in the [Google Java Style Guide](https://google.github.io/styleguide/javaguide.html), especially sections 4.8.6 and 7. The Chinese language and business-documentation requirements below are project conventions. Use traditional `/** ... */` Javadoc for this Java 21 project.
 
+Good comments help maintainers understand intent, constraints, and consequences, and must remain trustworthy. Apply these quality criteria when writing or reviewing comments:
+
+- Explain why a decision exists, especially business reasons, design tradeoffs, and seemingly unusual behavior that must be preserved. Avoid translating obvious code into prose: prefer `处理中禁止重复提交，避免生成重复分块并重复计费。` over `判断文档是否正在处理。` only when those reasons match the actual implementation.
+- Make caller contracts unambiguous. For example, distinguish an empty retrieval result from a retrieval failure, and state whether deleting a document also removes its vectors. Document only verified behavior; do not invent guarantees or motivations.
+- Make important boundaries concrete. For retrieval, chunking, retries, and cancellation, clarify applicable units, inclusive or exclusive limits, ordering, and behavior at the boundary. For example, specify whether a size limit counts characters or tokens and how truncation affects chunk boundaries.
+- Improve unclear names and structure before adding explanatory prose. Prefer descriptive methods and named constants when they express the intent directly; use comments for information the code cannot express clearly.
+- Treat required Javadoc as a contract-completeness requirement, not a comment-count target. Mechanical descriptions such as `获取 ID` or `设置名称` add little value. Preserve required documentation and meaningful contracts while removing repetition.
+- During review, ask: "What important information would a maintainer lose if this comment were removed?" Rewrite or omit comments that add no useful information, subject to the Javadoc requirements below. Check accuracy against the implementation, placement near the relevant contract or logic, and consistency after behavior changes.
+
+Apply the following documentation and formatting rules together with these quality criteria:
+
 - Provide Javadoc for every visible class, member, and record component: public top-level classes; public or protected members of visible classes; and components of visible records. Omit it only for genuinely self-explanatory members/components or overriding methods whose inherited documentation is sufficient. Being a constructor or CRUD method alone is not an exemption. Use Javadoc whenever documenting the overall purpose or behavior of a class or member, including non-public ones.
 - Begin Javadoc with a concise summary phrase ending in appropriate punctuation. Avoid boilerplate such as "This method..." and do not use an isolated `@return` tag as the summary. Separate paragraphs and the block-tag group with a blank `*` line; prefix subsequent prose paragraphs with `<p>` without a following space, but do not prefix block-level HTML elements such as `<ul>` or `<table>` with `<p>`.
 - Order block tags as `@param`, `@return`, `@throws`, then `@deprecated`, with non-empty descriptions. Indent wrapped tag descriptions at least four spaces beyond the `@`. Use single-line Javadoc only when the entire comment fits on one line and contains no block tags. Use `{@code ...}` for inline code and `{@link ...}` for Java references.
