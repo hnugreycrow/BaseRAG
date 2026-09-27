@@ -176,6 +176,7 @@ com.hnu.backend
 │   ├── vo
 │   └── client
 ├── rag
+│   ├── api
 │   ├── config
 │   ├── controller
 │   ├── service
@@ -201,7 +202,7 @@ com.hnu.backend
 | model | Chat、Embedding、Rerank、模型选择、重试和熔断 |
 | common | 统一响应、全局异常、请求 ID、公共持久化能力 |
 
-Controller 只负责 HTTP 参数和响应；一般业务编排位于 service，RAG 编排按流水线阶段组织；数据库访问位于 mapper 或所属 RAG 阶段包，模型与对象存储访问分别位于 client 和 storage。DTO、VO 与 Entity 分目录，跨模块通过公开 Service 或 RAG 端口协作。
+Controller 只负责 HTTP 参数和响应；一般业务编排位于 service，RAG 编排集中在 pipeline 的统一引擎中；数据库访问位于 mapper 或所属 RAG 阶段包，模型与对象存储访问分别位于 client 和 storage。DTO、VO 与 Entity 分目录，跨模块通过明确能力契约协作。会话模块通过 RagEngine 执行问答，保持交付与算法分离；详细边界及兼容规则见后端目录结构规范。
 
 ---
 

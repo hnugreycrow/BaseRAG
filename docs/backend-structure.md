@@ -37,6 +37,7 @@ com.hnu.backend
 │  ├─ parser/
 │  └─ storage/
 ├─ rag/
+│  ├─ api/                    # 引擎请求、结果、取消控制和事件契约
 │  ├─ config/                 # RAG 流水线预算与策略参数
 │  ├─ controller/             # /api/questions 兼容入口
 │  ├─ dto/
@@ -53,8 +54,8 @@ com.hnu.backend
 │  ├─ controller/
 │  ├─ dto/
 │  ├─ vo/
-│  ├─ service/                # 会话管理、上下文查询、响应装配与记忆适配
-│  ├─ generation/             # 生成协调、状态、准备、执行、终态写入与 SSE 通道
+│  ├─ service/                # 会话管理、响应装配与记忆适配
+│  ├─ generation/             # 生成生命周期、检查点、终态写入与 SSE 通道
 │  ├─ entity/
 │  └─ mapper/
 ├─ model/
@@ -101,9 +102,9 @@ src/main/resources
 
 会话生成内部协作类集中在 `conversation/generation/`，包级可见的状态和通道不对外开放。`service/` 通过生成服务入口发起任务和执行会话删除前的活动检查；共用的消息映射与记忆适配放在 `service/`，仍保留独立类和原有接口契约。生成服务仍负责执行器关闭，跨包只暴露必要操作。
 
-业务参数统一放在所属模块的 `config/`；根 `config/` 只放全局装配。包移动不改变 `@ConfigurationProperties` 前缀，仍由启动类从 `com.hnu.backend` 根包扫描。意图节点模型和数据库实体分开，快照缓存通过 `event/` 中的事件失效；此次分层不改变跨模块调用关系。
+业务参数统一放在所属模块的 `config/`；根 `config/` 只放全局装配。包移动不改变 `@ConfigurationProperties` 前缀，仍由启动类从 `com.hnu.backend` 根包扫描。意图节点模型和数据库实体分开，快照缓存通过 `event/` 中的事件失效；跨模块调用通过业务能力契约完成。
 
-`rag/service/RagService` 编排旧单轮问答兼容流程，`rag/generation/` 保留最终生成与引用处理。历史来源快照的解析逻辑位于 `rag/generation/SourceSnapshotDecoder`，`rag/vo/` 保留对外响应类型；目录调整不改变 HTTP 接口和快照格式。
+`rag/service/RagService` 通过统一引擎的 LEGACY 模式执行旧单轮问答兼容流程，`rag/generation/` 保留最终生成与引用处理。历史来源快照的解析逻辑位于 `rag/generation/SourceSnapshotDecoder`，`rag/vo/` 保留对外响应类型；目录调整不改变 HTTP 接口和快照格式。
 
 ## 3. 模块职责
 
@@ -131,7 +132,7 @@ Mapper → Entity
 - RAG 的 pipeline 聚合规划、路由与执行调度，retrieval 聚合检索、去重与重排，generation 聚合提示词、生成与引用处理；保留独立阶段类及其协作契约。
 - Entity 只描述持久化数据，不直接作为 API 响应。
 - 非持久化内部数据随所属能力放置；已有独立业务模型可保留模块内 model，不为少量值对象统一增建目录。
-- 跨模块优先通过明确的业务接口协作；已有依赖本次只迁移包名，不扩展其他模块 Mapper 的访问。
+- 跨模块通过明确的业务接口协作；禁止直接访问其他模块 Mapper，知识库目录和意图绑定校验使用 KnowledgeBaseCatalog。
 - 模型 HTTP、对象存储等外部边界可以定义接口；单实现业务 Service 不创建空转的 `Impl`。
 - MyBatis XML 按业务模块归档，namespace 必须与 Java Mapper 全限定名一致；XML 文件路径不要求镜像 Java 能力子包。
 
@@ -153,7 +154,7 @@ Mapper → Entity
 目录迁移不改变 REST 路径、数据库字段或 SSE 协议。已提取的职责包括：
 
 1. `DocumentIndexService` 负责解析、分块、向量化和索引切换；同步调用与后台任务共用该流程。`DocumentImportService` 保留上传、并发限流、任务入队与中断恢复。入队事务提前抢占版本，后台处理不重复抢占。
-2. 会话 CRUD、生成协调、流水线执行和 SSE 通道分别由对应服务承担。`ConversationGenerationPreparation` 负责新一轮消息与回答版本的事务准备，以及重试、重新生成条件校验；`ConversationGenerationService` 保留所有权、幂等、空闲检查和会话锁，在准备成功后启动任务。
+2. 会话 CRUD、生成协调和 SSE 通道由会话模块承担，流水线执行由 RAG 引擎承担。`ConversationGenerationPreparation` 负责新一轮消息与回答版本的事务准备，以及重试、重新生成条件校验；`ConversationGenerationService` 保留所有权、幂等、空闲检查和会话锁，在准备成功后启动任务。
 3. `ExecutionStage` 负责路由执行、检索策略和候选合并；`SubQuestionScheduler` 管理并发任务提交、结果等待、超时、取消与子任务 Trace 终态。线程池容量与生命周期仍由阶段入口配置和触发。
 
 MCP 超时从任务提交开始计时，包含排队；知识检索的通道预算仍由检索服务控制。调度器优先读取已完成结果，按结果自身耗时判断超时，避免等待前序任务影响后序结果；外部取消与任务提交失败会清理本批已提交任务。观测耗时仍以工作线程实际执行区间为准。
@@ -196,3 +197,34 @@ cd backend
 业务代码禁止自行调用 `JsonMapper.builder()`，由 `ModuleBoundaryTest` 约束。不要跨用途借用 mapper，以免后续修改快照兼容策略时影响模型响应校验。
 
 来源快照保留旧版编号与顺序，不在读取时改写数据库。null、空白和 JSON null 表示未保存来源；旧版缺失 heading 允许为空。未知显式版本、错误结构和损坏 JSON 仍报错，不静默变成空来源。模型信息和引用编号快照也覆盖历史空值情况。
+
+## RAG 全链路替换边界
+
+会话生成和单轮问答都调用 `rag.api.RagEngine`。`DefaultRagEngine` 根据请求模式编排阶段；LEGACY 不执行记忆、规划或路由，CONVERSATION 保留完整流程及系统闲聊分支。
+
+```text
+上传 → DocumentUploadValidator → DocumentParserRegistry → DocumentParser
+索引 → DocumentParser → StructuredBlock → DocumentChunker → DocumentChunkResult
+     → EmbeddingEncoder → 原子索引切换
+
+ConversationGenerationRunner / RagService
+  → RagEngine（RagRequest、RagObserver、RagExecutionControl、RagResult）
+  → MemoryLoader → QueryPlanning → IntentRouter → QueryExecution
+  → EvidenceRetriever / ToolExecutor → CandidateFusion
+  → EvidenceDeduplicator → EvidenceReranker → PromptAssembler
+  → AnswerGeneration → AnswerGenerator + CitationPolicy + CitationRepairPrompt
+```
+
+- 上传仍调用解析器确认可解析性，后台仍重新解析；这是为保持上传错误时机而保留的兼容行为。
+- Markdown、PDF、DOCX 解析器独立，注册表只选择格式。`MarkdownStructureParser` 保留原有结构切分规则，`StructuredChunkPacker` 实现通用分块契约，版本仍为 `structured-block-v6`。原 `MarkdownChunker` 组合仅保留在测试源码中。
+- 文档参数通过 `DocumentParsingOptions` 注入，原配置键不变；RAG 算法字段持有所属阶段的 `RagStageSettings` 视图或不可变预算，不持有整份可变配置。保留的旧配置构造重载仅用于独立测试装配。
+- 阶段接口与实现同包；替换能力时提供接口实现并在 Spring 装配中选择唯一候选，不修改消费者。默认解析格式在 `DocumentParserConfiguration` 装配。
+- 候选 ID 和子问题 ID 是一次流水线内的稳定关联键；RRF 分数与模型重排分数不可混用。候选顺序、来源位置、引用首次出现顺序和空结果语义沿用现有算法。
+- 引擎不接收会话实体、Mapper、SSE 通道或活动任务。会话事件适配器负责模型尝试、正文与思考增量、检查点和引用重置；来源准备与事件回调失败直接终止执行。
+- `RagExecutionControl` 由每次请求独占，调用方最终关闭；取消传递给子问题、重排和模型流，并在记忆、规划和路由边界检查。组件继续负责原有线程池关闭，超时起算点及并发上限不变。
+- `RagObserver` 的 `prepared` 在系统闲聊时接收 null 查询和空来源。`AnswerTrace` 是传输确认与最终模型选择的最小观测句柄，不暴露会话存储。
+- Trace 的阶段树、原因码与引用修复流程不变；不吞掉 SSE、检查点或观测异常。
+
+架构测试检查会话生成仅访问 RAG API/VO/配置、RAG 算法不访问会话或观测 Mapper、不依赖 Web 类型、模块不跨界调用 Mapper，以及编排和算法不依赖其他阶段的默认实现。该检查不宣称整个业务系统不存在所有形式的依赖环。
+
+`DefaultRagEngineTest` 用替代阶段验证完整链路、系统闲聊、旧单轮模式、取消及回调失败；`DocumentIndexServiceTest` 验证更换分块实现和版本无需修改索引流程。既有固定模型响应测试继续验证 SSE、引用修复、回答版本、超时及取消竞争。
