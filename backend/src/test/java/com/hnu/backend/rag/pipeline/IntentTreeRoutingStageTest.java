@@ -88,10 +88,10 @@ class IntentTreeRoutingStageTest {
     RagRunTrace trace = trace();
     RoutingPlan result = stage.execute(plan, trace);
 
-    assertTrue(output.getOut().contains("intent routing completed runId=" + trace.runId()));
-    assertTrue(output.getOut().contains("\"subQuestionId\":\"Q1\""));
-    assertTrue(output.getOut().contains("\"intentPath\":\"制度\""));
-    assertTrue(output.getOut().contains("\"intent\":\"MCP_TOOL\""));
+    assertTrue(output.getOut().contains("意图识别完成 | runId=" + trace.runId()));
+    assertTrue(output.getOut().contains("\n    \"Q1\""));
+    assertTrue(output.getOut().contains("\"制度\""));
+    assertTrue(output.getOut().contains("第二候选："));
     assertEquals(
         List.of(IntentType.KNOWLEDGE_RETRIEVAL, IntentType.SYSTEM_CHAT, IntentType.MCP_TOOL),
         result.routes().stream().map(IntentRoute::intent).toList());
@@ -159,9 +159,9 @@ class IntentTreeRoutingStageTest {
     RoutingPlan result = stage.execute(QueryPlan.fallback("secret-question"), trace);
 
     assertEquals(IntentType.KNOWLEDGE_RETRIEVAL, result.routes().getFirst().intent());
-    assertTrue(output.getOut().contains("intent routing fallback runId=" + trace.runId()));
-    assertTrue(output.getOut().contains("reason=INTENT_TREE_EMPTY"));
-    assertTrue(output.getOut().contains("\"reasonCode\":\"INTENT_TREE_FALLBACK\""));
+    assertTrue(output.getOut().contains("意图识别降级 | runId=" + trace.runId()));
+    assertTrue(output.getOut().contains("原因：INTENT_TREE_EMPTY"));
+    assertTrue(output.getOut().contains("未识别出有效意图"));
     assertFalse(output.getOut().contains("secret-question"));
   }
 

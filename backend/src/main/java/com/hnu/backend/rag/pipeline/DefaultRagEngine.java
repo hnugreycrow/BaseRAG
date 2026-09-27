@@ -146,10 +146,20 @@ public class DefaultRagEngine implements RagEngine {
                           null,
                           execution.candidates().size(),
                           span -> {
+                            long startedAt = System.nanoTime();
                             var result =
                                 deduplicationStage.execute(
                                     execution.candidates(), execution.budget());
                             span.success(result.candidates().size());
+                            com.hnu.backend.observability.RagDecisionLog.emit(
+                                () ->
+                                    org.slf4j.LoggerFactory.getLogger(DefaultRagEngine.class)
+                                        .info(
+                                            "去重完成 | runId={} | 输入：{} 条 | 输出：{} 条 | 耗时：{}ms",
+                                            trace.runId(),
+                                            execution.candidates().size(),
+                                            result.candidates().size(),
+                                            (System.nanoTime() - startedAt) / 1_000_000));
                             return result;
                           });
                   ensureActive(observer, control);

@@ -51,8 +51,8 @@ public class DeduplicationStage implements EvidenceDeduplicator {
 
     List<EvidenceCandidate> candidates =
         groups.stream().map(Group::build).sorted(CANDIDATE_ORDER).toList();
-    log.info(
-        "deduplication completed input={} output={} exactMerged={} normalizedMerged={} overlapMerged={} deduplicationMs={}",
+    log.debug(
+        "去重明细 输入={} 输出={} 相同分块合并={} 正文合并={} 重叠合并={} 耗时={}ms",
         input.size(),
         candidates.size(),
         exactMerged,

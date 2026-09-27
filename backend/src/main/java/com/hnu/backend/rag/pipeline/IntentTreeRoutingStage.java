@@ -152,9 +152,9 @@ public class IntentTreeRoutingStage implements IntentRouter {
             RagDecisionLog.emit(
                 () ->
                     log.info(
-                        "intent routing completed runId={} fallbackReasons={} routes={}",
+                        "意图识别完成 | runId={}{}\n  候选意图：{}",
                         trace.runId(),
-                        parsed.fallbacks(),
+                        parsed.fallbacks().isEmpty() ? "" : "\n  降级原因：" + parsed.fallbacks(),
                         routeSummary(routed, paths)));
             return routed;
           } catch (ApiException error) {
@@ -193,7 +193,7 @@ public class IntentTreeRoutingStage implements IntentRouter {
     RagDecisionLog.emit(
         () ->
             log.warn(
-                "intent routing fallback runId={} reason={} routes={}",
+                "意图识别降级 | runId={}\n  原因：{}\n  使用公共知识库回退：{}",
                 trace.runId(),
                 reason,
                 routeSummary(routed, Map.of())));
@@ -201,22 +201,33 @@ public class IntentTreeRoutingStage implements IntentRouter {
   }
 
   private String routeSummary(RoutingPlan plan, Map<UUID, String> paths) {
-    return json.writeValueAsString(
-        plan.routes().stream()
-            .map(
-                route -> {
-                  Map<String, Object> result = new LinkedHashMap<>();
-                  result.put("subQuestionId", route.subQuestionId());
-                  result.put("intent", route.intent());
-                  result.put("intentNodeId", route.intentNodeId());
-                  result.put(
-                      "intentPath",
-                      route.intentNodeId() == null ? null : paths.get(route.intentNodeId()));
-                  result.put("confidence", route.confidence());
-                  result.put("reasonCode", route.reasonCode());
-                  return result;
-                })
-            .toList());
+    return plan.routes().stream()
+        .map(
+            route -> {
+              String best =
+                  route.intentNodeId() == null
+                      ? "未识别出有效意图"
+                      : RagDecisionLog.value(paths.get(route.intentNodeId()));
+              String detail =
+                  "\n    "
+                      + RagDecisionLog.value(route.subQuestionId())
+                      + "："
+                      + best
+                      + (route.intentNodeId() == null ? "" : "（" + route.confidence() + "）");
+              if (route.secondCandidateId() != null) {
+                detail +=
+                    "\n      第二候选："
+                        + RagDecisionLog.value(paths.get(route.secondCandidateId()))
+                        + "（"
+                        + route.secondCandidateScore()
+                        + "）"
+                        + "\n      分差："
+                        + java.math.BigDecimal.valueOf(route.confidence())
+                            .subtract(java.math.BigDecimal.valueOf(route.secondCandidateScore()));
+              }
+              return detail;
+            })
+        .collect(java.util.stream.Collectors.joining());
   }
 
   private boolean isCancelled(Throwable error) {

@@ -109,7 +109,7 @@ public class ConversationMemoryProvider implements MemoryProvider {
             turns);
     int memoryChars = json.writeValueAsString(memory).length();
     log.info(
-        "conversation={} memory loaded summaryRevision={} unsummarizedTurns={} recentTurns={} loadedThroughTurn={} memoryChars={}",
+        "会话记忆加载完成 | conversationId={} | 摘要版本={} | 未摘要轮次={} | 近期轮次={} | 已加载至第 {} 轮 | 字符数={}",
         conversationId,
         memory.summaryRevision(),
         memory.unsummarizedTurns().size(),

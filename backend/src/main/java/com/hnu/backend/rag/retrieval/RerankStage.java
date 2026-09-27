@@ -98,103 +98,131 @@ public class RerankStage implements EvidenceReranker {
     List<EvidenceCandidate> input =
         candidateMerge.mergeAndSelect(
             deduplicatedCandidates, knowledgeQuestionIds, budget.rerankInputLimit());
-    return trace.execute(
-        RagStageName.RERANK,
-        null,
-        input.size(),
-        span -> {
-          if (input.isEmpty()) {
-            return observed(
-                span,
-                result(
-                    List.of(),
-                    List.of(),
-                    RerankResult.Status.EMPTY,
-                    TraceReasonCatalog.NO_RERANK_INPUT.code(),
-                    null,
-                    startedAt));
-          }
-          if (!budget.rerankEnabled()) {
-            return observed(
-                span,
-                fallback(
-                    input,
-                    knowledgeQuestionIds,
-                    budget.selectedEvidenceLimit(),
-                    RerankResult.Status.DISABLED,
-                    TraceReasonCatalog.RERANK_DISABLED.code(),
-                    null,
-                    startedAt));
-          }
+    RerankResult outcome =
+        trace.execute(
+            RagStageName.RERANK,
+            null,
+            input.size(),
+            span -> {
+              if (input.isEmpty()) {
+                return observed(
+                    span,
+                    result(
+                        List.of(),
+                        List.of(),
+                        RerankResult.Status.EMPTY,
+                        TraceReasonCatalog.NO_RERANK_INPUT.code(),
+                        null,
+                        startedAt));
+              }
+              if (!budget.rerankEnabled()) {
+                return observed(
+                    span,
+                    fallback(
+                        input,
+                        knowledgeQuestionIds,
+                        budget.selectedEvidenceLimit(),
+                        RerankResult.Status.DISABLED,
+                        TraceReasonCatalog.RERANK_DISABLED.code(),
+                        null,
+                        startedAt));
+              }
 
-          CandidateReranker.Output output = null;
-          try {
-            output = await(plan.standaloneQuestion(), input, cancellationToken);
-            cancellationToken.throwIfCancelled();
-            if (output.noop()) {
-              return observed(
-                  span,
-                  fallback(
-                      input,
-                      knowledgeQuestionIds,
-                      budget.selectedEvidenceLimit(),
-                      RerankResult.Status.DEGRADED,
-                      "RERANK_NOOP",
-                      output,
-                      startedAt));
-            }
-            List<RerankDecision> ranking = modelRanking(input, output.scores());
-            Set<UUID> selectedIds =
-                selectIds(ranking, knowledgeQuestionIds, budget.selectedEvidenceLimit());
-            List<RerankDecision> decisions = markSelected(ranking, selectedIds);
-            List<EvidenceCandidate> selected =
-                decisions.stream()
-                    .filter(RerankDecision::selected)
-                    .map(RerankDecision::candidate)
-                    .toList();
-            return observed(
-                span,
-                result(
-                    selected,
-                    decisions,
-                    RerankResult.Status.SUCCESS,
-                    "RERANK_COMPLETED",
-                    output,
-                    startedAt));
-          } catch (ApiException error) {
-            if (cancellationToken.cancelled()
-                || ErrorCode.GENERATION_CANCELLED.code().equals(error.code())) {
-              throw error;
-            }
-            return observed(
-                span,
-                fallback(
-                    input,
-                    knowledgeQuestionIds,
-                    budget.selectedEvidenceLimit(),
-                    RerankResult.Status.DEGRADED,
-                    ErrorCode.MODEL_TIMEOUT.code().equals(error.code())
-                            || ErrorCode.RERANK_TIMEOUT.code().equals(error.code())
-                        ? ErrorCode.RERANK_TIMEOUT.code()
-                        : ErrorCode.RERANK_FAILED.code(),
-                    output,
-                    startedAt));
-          } catch (RuntimeException error) {
-            if (cancellationToken.cancelled()) {
-              throw ApiException.cancelled();
-            }
-            return observed(
-                span,
-                fallback(
-                    input,
-                    knowledgeQuestionIds,
-                    budget.selectedEvidenceLimit(),
-                    RerankResult.Status.DEGRADED,
-                    ErrorCode.RERANK_INVALID_RESULT.code(),
-                    output,
-                    startedAt));
+              CandidateReranker.Output output = null;
+              try {
+                output = await(plan.standaloneQuestion(), input, cancellationToken);
+                cancellationToken.throwIfCancelled();
+                if (output.noop()) {
+                  return observed(
+                      span,
+                      fallback(
+                          input,
+                          knowledgeQuestionIds,
+                          budget.selectedEvidenceLimit(),
+                          RerankResult.Status.DEGRADED,
+                          "RERANK_NOOP",
+                          output,
+                          startedAt));
+                }
+                List<RerankDecision> ranking = modelRanking(input, output.scores());
+                Set<UUID> selectedIds =
+                    selectIds(ranking, knowledgeQuestionIds, budget.selectedEvidenceLimit());
+                List<RerankDecision> decisions = markSelected(ranking, selectedIds);
+                List<EvidenceCandidate> selected =
+                    decisions.stream()
+                        .filter(RerankDecision::selected)
+                        .map(RerankDecision::candidate)
+                        .toList();
+                return observed(
+                    span,
+                    result(
+                        selected,
+                        decisions,
+                        RerankResult.Status.SUCCESS,
+                        "RERANK_COMPLETED",
+                        output,
+                        startedAt));
+              } catch (ApiException error) {
+                if (cancellationToken.cancelled()
+                    || ErrorCode.GENERATION_CANCELLED.code().equals(error.code())) {
+                  throw error;
+                }
+                return observed(
+                    span,
+                    fallback(
+                        input,
+                        knowledgeQuestionIds,
+                        budget.selectedEvidenceLimit(),
+                        RerankResult.Status.DEGRADED,
+                        ErrorCode.MODEL_TIMEOUT.code().equals(error.code())
+                                || ErrorCode.RERANK_TIMEOUT.code().equals(error.code())
+                            ? ErrorCode.RERANK_TIMEOUT.code()
+                            : ErrorCode.RERANK_FAILED.code(),
+                        output,
+                        startedAt));
+              } catch (RuntimeException error) {
+                if (cancellationToken.cancelled()) {
+                  throw ApiException.cancelled();
+                }
+                return observed(
+                    span,
+                    fallback(
+                        input,
+                        knowledgeQuestionIds,
+                        budget.selectedEvidenceLimit(),
+                        RerankResult.Status.DEGRADED,
+                        ErrorCode.RERANK_INVALID_RESULT.code(),
+                        output,
+                        startedAt));
+              }
+            });
+    com.hnu.backend.observability.RagDecisionLog.emit(
+        () -> {
+          String status =
+              switch (outcome.status()) {
+                case SUCCESS -> "重排完成";
+                case DEGRADED -> "重排降级，使用回退排序";
+                case DISABLED -> "重排已禁用";
+                case EMPTY -> "无候选，跳过重排";
+              };
+          String message =
+              status
+                  + " | runId="
+                  + trace.runId()
+                  + " | 输入："
+                  + input.size()
+                  + " 条 | 保留："
+                  + outcome.selectedCandidates().size()
+                  + " 条 | 耗时："
+                  + elapsedMillis(startedAt)
+                  + "ms";
+          if (outcome.status() == RerankResult.Status.DEGRADED) {
+            log.warn("{} | 原因：{}", message, outcome.reasonCode());
+          } else {
+            log.info(message);
           }
         });
+    return outcome;
   }
 
   /** 根据重排结果结束观测阶段。 */
@@ -363,8 +391,8 @@ public class RerankStage implements EvidenceReranker {
             output == null ? null : output.model(),
             output == null ? null : output.requestId(),
             output == null ? 0 : output.totalTokens());
-    log.info(
-        "rerank completed status={} reason={} input={} selected={} modelId={} provider={} totalTokens={} rerankMs={}",
+    log.debug(
+        "重排技术明细 status={} reason={} input={} selected={} modelId={} provider={} totalTokens={} rerankMs={}",
         status,
         reasonCode,
         decisions.size(),

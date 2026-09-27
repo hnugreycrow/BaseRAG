@@ -48,9 +48,9 @@ class QueryPlanningStageTest {
 
     stage.execute(emptyMemory, "original-secret", trace);
 
-    assertTrue(output.getOut().contains("runId=" + runId + " status=SUCCESS"));
-    assertTrue(output.getOut().contains("originalLength=15"));
-    assertTrue(output.getOut().contains("rewritten=true subQuestions=1"));
+    assertTrue(output.getOut().contains("问题改写与拆分完成 | runId=" + runId));
+    assertTrue(output.getOut().contains("耗时："));
+    assertFalse(output.getOut().contains("reason=null"));
     assertFalse(output.getOut().contains("original-secret"));
     assertFalse(output.getOut().contains("rewritten-secret"));
     assertFalse(output.getOut().contains("sub-secret"));
@@ -65,13 +65,10 @@ class QueryPlanningStageTest {
 
     stage.execute(emptyMemory, "first-line\nsecret-marker", trace);
 
-    assertTrue(output.getOut().contains("runId=" + runId + " status=SUCCESS"));
-    assertTrue(output.getOut().contains("originalQuestion=\"first-line\\nsecret-marker\""));
-    assertTrue(output.getOut().contains("standaloneQuestion=\"rewritten-question\""));
-    assertTrue(
-        output
-            .getOut()
-            .contains("subQuestionsDetail=[{\"id\":\"Q1\",\"question\":\"sub-question\"}]"));
+    assertTrue(output.getOut().contains("问题改写与拆分完成 | runId=" + runId));
+    assertTrue(output.getOut().contains("原始问题：\"first-line\\nsecret-marker\""));
+    assertTrue(output.getOut().contains("改写结果：\"rewritten-question\""));
+    assertTrue(output.getOut().contains("子问题：\n    \"Q1\": \"sub-question\""));
   }
 
   @Test
@@ -82,7 +79,7 @@ class QueryPlanningStageTest {
 
     stage.execute(emptyMemory, "fallback-secret", trace);
 
-    assertTrue(output.getOut().contains("runId=" + runId + " status=FALLBACK reason=INVALID_JSON"));
+    assertTrue(output.getOut().contains("问题规划降级 | runId=" + runId));
     assertFalse(output.getOut().contains("fallback-secret"));
   }
 

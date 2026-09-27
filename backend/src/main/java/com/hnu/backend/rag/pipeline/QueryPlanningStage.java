@@ -132,36 +132,39 @@ public class QueryPlanningStage implements QueryPlanning {
             return;
           }
           String message =
-              "query planning result runId="
+              (fallback ? "问题规划降级" : "问题改写与拆分完成")
+                  + " | runId="
                   + trace.runId()
-                  + " status="
-                  + status
-                  + " reason="
-                  + reason
-                  + " exceptionType="
-                  + exceptionType
-                  + " originalLength="
-                  + originalQuestion.length()
-                  + " standaloneLength="
-                  + plan.standaloneQuestion().length()
-                  + " rewritten="
-                  + !originalQuestion.strip().equals(plan.standaloneQuestion())
-                  + " subQuestions="
-                  + plan.subQuestions().size()
-                  + " provider="
-                  + (output == null ? null : output.provider())
-                  + " model="
-                  + (output == null ? null : output.model())
-                  + " planningMs="
-                  + elapsedMillis(startedAt);
+                  + " | 耗时："
+                  + elapsedMillis(startedAt)
+                  + "ms";
+          if (fallback) {
+            message +=
+                "\n  原因：" + reason + (exceptionType == null ? "" : "（" + exceptionType + "）");
+          }
+          log.debug(
+              "问题规划明细 | runId={} | 状态={} | 原问题长度={} | 改写长度={} | 模型={}/{}",
+              trace.runId(),
+              status,
+              originalQuestion.length(),
+              plan.standaloneQuestion().length(),
+              output == null ? null : output.provider(),
+              output == null ? null : output.model());
           if (observability.isLogQuestionContent()) {
             message +=
-                " originalQuestion="
-                    + json.writeValueAsString(originalQuestion)
-                    + " standaloneQuestion="
-                    + json.writeValueAsString(plan.standaloneQuestion())
-                    + " subQuestionsDetail="
-                    + json.writeValueAsString(plan.subQuestions());
+                "\n  原始问题："
+                    + RagDecisionLog.value(originalQuestion)
+                    + "\n  改写结果："
+                    + RagDecisionLog.value(plan.standaloneQuestion())
+                    + "\n  子问题："
+                    + plan.subQuestions().stream()
+                        .map(
+                            q ->
+                                "\n    "
+                                    + RagDecisionLog.value(q.id())
+                                    + ": "
+                                    + RagDecisionLog.value(q.question()))
+                        .collect(java.util.stream.Collectors.joining());
           }
           if (fallback) {
             log.warn(message);

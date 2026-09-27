@@ -138,12 +138,55 @@ public class ExecutionStage implements QueryExecution {
       List<UUID> knowledgeBaseIds,
       CancellationToken cancellationToken,
       TraceContext trace) {
-    return trace.execute(
-        RagStageName.RETRIEVAL,
-        null,
-        plan.subQuestions().size(),
-        span ->
-            retrieve(ownerId, plan, routing, knowledgeBaseIds, cancellationToken, span.context()));
+    long startedAt = System.nanoTime();
+    ExecutionResult outcome =
+        trace.execute(
+            RagStageName.RETRIEVAL,
+            null,
+            plan.subQuestions().size(),
+            span ->
+                retrieve(
+                    ownerId, plan, routing, knowledgeBaseIds, cancellationToken, span.context()));
+    com.hnu.backend.observability.RagDecisionLog.emit(
+        () -> {
+          var logger = org.slf4j.LoggerFactory.getLogger(ExecutionStage.class);
+          for (var item : outcome.subQuestions()) {
+            String status =
+                switch (item.status()) {
+                  case SUCCESS -> "完成";
+                  case EMPTY -> "无结果";
+                  case SKIPPED -> "已跳过";
+                  case TIMEOUT -> "超时，结果不再采用";
+                  case FAILED -> "失败";
+                };
+            String message =
+                "子问题执行"
+                    + status
+                    + " | runId="
+                    + trace.runId()
+                    + " | 子问题："
+                    + com.hnu.backend.observability.RagDecisionLog.value(item.subQuestionId())
+                    + " | 类型："
+                    + item.intent()
+                    + " | 候选："
+                    + item.candidates().size()
+                    + " 条 | 耗时："
+                    + item.elapsedMs()
+                    + "ms";
+            if (item.status() == SubQuestionExecution.Status.TIMEOUT
+                || item.status() == SubQuestionExecution.Status.FAILED) {
+              logger.warn("{} | 原因：{}", message, item.reasonCode());
+            } else {
+              logger.info(message);
+            }
+          }
+          logger.info(
+              "检索与工具执行汇总 | runId={} | 子问题：{} 项 | 耗时：{}ms",
+              trace.runId(),
+              outcome.subQuestions().size(),
+              (System.nanoTime() - startedAt) / 1_000_000);
+        });
+    return outcome;
   }
 
   /** 在检索父节点下提交独立任务，并保留现有超时预算口径。 */

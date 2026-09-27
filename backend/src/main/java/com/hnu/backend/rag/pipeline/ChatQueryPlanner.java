@@ -57,7 +57,7 @@ public class ChatQueryPlanner implements QueryPlanner {
     input.put("maxSubQuestions", maxSubQuestions);
 
     String prompt = json.writeValueAsString(input);
-    log.info("query planning input chars={} recentTurns={}", prompt.length(), recentTurns.size());
+    log.debug("问题规划输入 | 字符数={} | 近期轮次={}", prompt.length(), recentTurns.size());
     ChatClient.Generation generation = chat.generate(QueryPlanningPrompts.system(), prompt);
     return new PlanningOutput(
         generation.content(), generation.id(), generation.provider(), generation.model());
