@@ -19,6 +19,9 @@ class ModuleBoundaryTest {
   private static final JavaClasses CLASSES =
       new ClassFileImporter()
           .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
+          // 自定义构建目录也只检查生产代码，不能把测试装配依赖视为架构依赖。
+          .withImportOption(
+              location -> !location.toString().replace('\\', '/').contains("/test-classes/"))
           .importPackages("com.hnu.backend");
 
   @Test
@@ -157,5 +160,98 @@ class ModuleBoundaryTest {
             && !type.getPackageName().startsWith(ROOT + module + ".api.");
       }
     };
+  }
+
+  @Test
+  void conversationExecutionUsesOnlyRagPublicContracts() {
+    noClasses()
+        .that()
+        .resideInAPackage(ROOT + "conversation.generation..")
+        .should()
+        .dependOnClassesThat(
+            new DescribedPredicate<>("RAG 内部阶段") {
+              @Override
+              public boolean test(JavaClass type) {
+                String name = type.getPackageName();
+                return name.startsWith(ROOT + "rag.")
+                    && !name.startsWith(ROOT + "rag.api")
+                    && !name.startsWith(ROOT + "rag.vo")
+                    && !name.startsWith(ROOT + "rag.config");
+              }
+            })
+        .check(CLASSES);
+  }
+
+  @Test
+  void ragStagesDoNotAccessConversationPersistenceOrWeb() {
+    noClasses()
+        .that()
+        .resideInAnyPackage(
+            ROOT + "rag.pipeline..",
+            ROOT + "rag.retrieval..",
+            ROOT + "rag.generation..",
+            ROOT + "rag.memory..",
+            ROOT + "rag.mcp..",
+            ROOT + "rag.api..")
+        .should()
+        .dependOnClassesThat()
+        .resideInAnyPackage(
+            ROOT + "conversation..",
+            ROOT + "observability.mapper..",
+            "org.springframework.web..",
+            "jakarta.servlet..")
+        .check(CLASSES);
+  }
+
+  @Test
+  void modulesDoNotAccessOtherModulesMappers() {
+    for (JavaClass source : CLASSES) {
+      if (!source.getPackageName().startsWith(ROOT)) {
+        continue;
+      }
+      String module = source.getPackageName().substring(ROOT.length()).split("\\.")[0];
+      for (var dependency : source.getDirectDependenciesFromSelf()) {
+        JavaClass target = dependency.getTargetClass();
+        if (target.getPackageName().startsWith(ROOT)
+            && target.isAnnotatedWith(org.apache.ibatis.annotations.Mapper.class)) {
+          org.junit.jupiter.api.Assertions.assertEquals(
+              module,
+              target.getPackageName().substring(ROOT.length()).split("\\.")[0],
+              dependency.getDescription());
+        }
+      }
+    }
+  }
+
+  @Test
+  void algorithmsDoNotDependOnOtherStageImplementations() {
+    Set<String> implementations =
+        Set.of(
+            "MemoryStage",
+            "QueryPlanningStage",
+            "IntentTreeRoutingStage",
+            "ExecutionStage",
+            "RetrievalService",
+            "CandidateMerge",
+            "DeduplicationStage",
+            "RerankStage",
+            "PromptAssemblyStage",
+            "AnswerStage",
+            "McpToolExecutor");
+    for (JavaClass source : CLASSES) {
+      if (!source.getPackageName().startsWith(ROOT + "rag.")) {
+        continue;
+      }
+      for (var dependency : source.getDirectDependenciesFromSelf()) {
+        JavaClass target = dependency.getTargetClass();
+        if (target.getPackageName().startsWith(ROOT + "rag.")
+            && implementations.contains(target.getSimpleName())) {
+          org.junit.jupiter.api.Assertions.assertTrue(
+              source.getName().equals(target.getName())
+                  || source.getName().startsWith(target.getName() + "$"),
+              dependency.getDescription());
+        }
+      }
+    }
   }
 }
