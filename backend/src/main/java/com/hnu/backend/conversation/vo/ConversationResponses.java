@@ -36,6 +36,7 @@ public final class ConversationResponses {
    * @param createdAt 创建时间
    * @param updatedAt 最近更新时间
    * @param turns 按轮次排列的消息
+   * @param pendingClarification 当前待办，独立于消息窗口；无待办时为空
    */
   public record Detail(
       UUID id,
@@ -43,7 +44,19 @@ public final class ConversationResponses {
       boolean thinkingEnabled,
       OffsetDateTime createdAt,
       OffsetDateTime updatedAt,
-      List<Turn> turns) {}
+      List<Turn> turns,
+      ClarificationResponse pendingClarification) {
+    /** 兼容没有待办的详情构造。 */
+    public Detail(
+        UUID id,
+        String title,
+        boolean thinkingEnabled,
+        OffsetDateTime createdAt,
+        OffsetDateTime updatedAt,
+        List<Turn> turns) {
+      this(id, title, thinkingEnabled, createdAt, updatedAt, turns, null);
+    }
+  }
 
   /**
    * 有界消息窗口，轮次游标不受新消息插入影响。
@@ -114,6 +127,7 @@ public final class ConversationResponses {
    * @param createdAt 创建时间
    * @param updatedAt 最近更新时间
    * @param completedAt 生成进入终态的时间
+   * @param clarification 澄清展示快照；普通回答为空
    */
   public record AssistantMessage(
       UUID id,
@@ -133,5 +147,6 @@ public final class ConversationResponses {
       String errorMessage,
       OffsetDateTime createdAt,
       OffsetDateTime updatedAt,
-      OffsetDateTime completedAt) {}
+      OffsetDateTime completedAt,
+      ClarificationResponse clarification) {}
 }

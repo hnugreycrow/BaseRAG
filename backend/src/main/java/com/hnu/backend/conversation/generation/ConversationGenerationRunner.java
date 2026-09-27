@@ -9,10 +9,12 @@ import com.hnu.backend.conversation.entity.GenerationAttempt;
 import com.hnu.backend.conversation.entity.GenerationAttemptStatus;
 import com.hnu.backend.conversation.mapper.GenerationAttemptMapper;
 import com.hnu.backend.conversation.mapper.MessageMapper;
+import com.hnu.backend.conversation.service.ConversationClarificationService;
 import com.hnu.backend.conversation.vo.ConversationStreamEvents;
 import com.hnu.backend.conversation.vo.ConversationStreamEvents.Kind;
 import com.hnu.backend.observability.trace.AnswerTrace;
 import com.hnu.backend.rag.api.AnswerGenerator;
+import com.hnu.backend.rag.api.ClarificationContext;
 import com.hnu.backend.rag.api.RagEngine;
 import com.hnu.backend.rag.api.RagObserver;
 import com.hnu.backend.rag.api.RagRequest;
@@ -22,6 +24,7 @@ import java.util.List;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -33,6 +36,14 @@ public class ConversationGenerationRunner {
   private final MessageMapper messageMapper;
   private final GenerationAttemptMapper generationAttemptMapper;
   private final ConversationProperties config;
+  private ConversationClarificationService clarifications;
+
+  /** 注入会话澄清状态服务。 */
+  @Autowired
+  public void setClarifications(ConversationClarificationService service) {
+    this.clarifications = service;
+  }
+
   private final JsonMapper json = JsonCodecs.snapshots();
 
   /** 创建仅负责会话交付的执行器。 */
@@ -53,7 +64,8 @@ public class ConversationGenerationRunner {
         ActiveGeneration active,
         String content,
         List<String> citations,
-        AnswerGenerator.Generation generation);
+        AnswerGenerator.Generation generation,
+        ClarificationContext clarification);
 
     void cancelled(ActiveGeneration active);
 
@@ -82,18 +94,25 @@ public class ConversationGenerationRunner {
                   active.user().getTurnIndex(),
                   active.variantIndex()));
       var request =
-          new RagRequest(
-              active.ownerId(),
-              active.user().getContent(),
-              active.conversation().getId(),
-              active.user().getTurnIndex(),
-              null,
-              active.thinkingEnabled(),
-              RagRequest.Mode.CONVERSATION);
+          clarifications != null
+              ? clarifications.request(active.ownerId(), active.user(), active.thinkingEnabled())
+              : new RagRequest(
+                  active.ownerId(),
+                  active.user().getContent(),
+                  active.conversation().getId(),
+                  active.user().getTurnIndex(),
+                  null,
+                  active.thinkingEnabled(),
+                  RagRequest.Mode.CONVERSATION);
       var answer =
           engine.execute(
               request, new ConversationAnswerObserver(active), active.control(), active.trace());
-      callbacks.completed(active, answer.content(), answer.citations(), answer.generation());
+      callbacks.completed(
+          active,
+          answer.content(),
+          answer.citations(),
+          answer.generation(),
+          answer.clarification());
     } catch (ApiException e) {
       if (active.cancelled() || ErrorCode.GENERATION_CANCELLED.code().equals(e.code())) {
         callbacks.cancelled(active);

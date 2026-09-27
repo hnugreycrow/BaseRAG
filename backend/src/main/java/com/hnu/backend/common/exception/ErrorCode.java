@@ -66,6 +66,7 @@ public enum ErrorCode {
   INVALID_PASSWORD("密码至少 12 个字符且 UTF-8 编码不能超过 72 字节", HttpStatus.BAD_REQUEST),
   INVALID_PDF("PDF 文件无法解析", HttpStatus.BAD_REQUEST),
   INVALID_QUESTION("请输入有效问题", HttpStatus.BAD_REQUEST, false),
+  CLARIFICATION_CONFLICT("澄清已失效或正在续接", HttpStatus.CONFLICT),
   INVALID_REQUEST("请检查请求参数及文件", HttpStatus.BAD_REQUEST),
   INVALID_TIME_RANGE("开始时间必须早于结束时间", HttpStatus.BAD_REQUEST),
   INVALID_USERNAME("用户名应为 3 到 64 位 ASCII 字母、数字或 . _ -", HttpStatus.BAD_REQUEST),

@@ -116,7 +116,17 @@ public class ConversationController {
         id,
         request.clientMessageId(),
         request.content(),
-        requestTiming(http));
+        requestTiming(http),
+        request.clarificationId(),
+        request.selectedNodeId());
+  }
+
+  /** 取消澄清，历史追问与补充消息保留。 */
+  @DeleteMapping("/{id}/clarifications/{clarificationId}")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  public void cancelClarification(@PathVariable UUID id, @PathVariable UUID clarificationId) {
+    conversationService.cancelClarification(
+        currentUserService.require().getId(), id, clarificationId);
   }
 
   /** 重试失败或已取消的回答。 */

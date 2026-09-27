@@ -2,6 +2,7 @@ package com.hnu.backend.conversation.service;
 
 import com.hnu.backend.common.json.JsonCodecs;
 import com.hnu.backend.conversation.entity.Message;
+import com.hnu.backend.conversation.vo.ClarificationResponse;
 import com.hnu.backend.conversation.vo.ConversationResponses;
 import com.hnu.backend.rag.generation.SourceSnapshotDecoder;
 import com.hnu.backend.rag.vo.ModelInfoResponse;
@@ -47,7 +48,10 @@ public final class ConversationMessagePresenter {
         message.getErrorMessage(),
         message.getCreatedAt(),
         message.getUpdatedAt(),
-        message.getCompletedAt());
+        message.getCompletedAt(),
+        message.getClarificationJson() == null
+            ? null
+            : json.readValue(message.getClarificationJson(), ClarificationResponse.class));
   }
 
   /**

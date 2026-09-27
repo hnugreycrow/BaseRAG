@@ -25,6 +25,7 @@ export const STAGE_STATUS_LABELS: Record<RagStageStatus, string> = {
 
 export const EXECUTION_MODE_LABELS: Record<RagExecutionMode, string> = {
   FULL_PIPELINE: '完整链路',
+  WAITING_CLARIFICATION: '等待澄清',
   SYSTEM_CHAT: '系统闲聊',
   FAST_PATH: '快速路径',
 }
@@ -39,6 +40,7 @@ export const STAGE_NAME_LABELS: Record<RagStageName, string> = {
   MEMORY_SUMMARY: '生成记忆摘要',
   QUERY_PLANNING: '问题改写与拆分',
   INTENT_ROUTING: '意图路由',
+  CLARIFICATION: 'KB 意图澄清',
   SUBQUESTION_EXECUTION: '执行子问题',
   EMBEDDING: '生成向量',
   DATABASE_RETRIEVAL: '数据库检索',

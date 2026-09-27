@@ -61,3 +61,12 @@
 - [Spring Boot 构建与 starter](https://docs.spring.io/spring-boot/reference/using/build-systems.html)
 - [pgvector 官方仓库](https://github.com/pgvector/pgvector)
 - [RustFS 官方安装说明](https://docs.rustfs.com/en/installation)
+
+
+### KB 意图消歧采用执行前整轮暂停
+
+业务系统归属不增加为新字段，首版只比较意图树中的两个有效 KB 叶子。
+分数接近只触发语义确认，不直接触发追问；模型故障保留现有路由。
+任一子问题待选时暂停全部检索及工具执行，避免用户选择之前产生部分执行结果。
+补充作为新消息轮次保存，原计划与已选叶子通过持久化上下文关联；数据库约束和条件更新
+负责唯一待办与认领，SSE 仅交付持久化结果。MCP 参数澄清继续留作后续。

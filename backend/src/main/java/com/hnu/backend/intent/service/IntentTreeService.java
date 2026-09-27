@@ -82,6 +82,30 @@ public class IntentTreeService {
         .toList();
   }
 
+  /** 为跨请求续接重新验证所有 KB 绑定的公共权限；失效叶子不参与路由。 */
+  public List<IntentNode> nodesForResume() {
+    return list().stream()
+        .map(
+            node -> {
+              if (node.kind() != IntentNode.Kind.KB
+                  || node.knowledgeBaseIds().stream().allMatch(knowledgeBaseMapper::contains)) {
+                return node;
+              }
+              return new IntentNode(
+                  node.id(),
+                  node.parentId(),
+                  node.name(),
+                  node.description(),
+                  node.examples(),
+                  node.kind(),
+                  node.toolName(),
+                  List.of(),
+                  node.enabled(),
+                  node.sortOrder());
+            })
+        .toList();
+  }
+
   /** 返回当前可执行的启用叶子；配置失效的绑定不会交给模型。 */
   public List<IntentNode> activeLeaves() {
     return IntentTreeSnapshot.from(list(), tools.availableReadOnlyTools()).activeLeaves();

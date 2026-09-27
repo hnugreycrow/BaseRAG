@@ -12,12 +12,14 @@ import com.hnu.backend.conversation.entity.MessageStatus;
 import com.hnu.backend.conversation.mapper.ConversationMapper;
 import com.hnu.backend.conversation.mapper.GenerationAttemptMapper;
 import com.hnu.backend.conversation.mapper.MessageMapper;
+import com.hnu.backend.conversation.service.ConversationClarificationService;
 import com.hnu.backend.conversation.service.ConversationMessagePresenter;
 import com.hnu.backend.conversation.vo.ConversationStreamEvents;
 import com.hnu.backend.conversation.vo.ConversationStreamEvents.Kind;
 import com.hnu.backend.observability.service.RagTraceManager;
 import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.rag.api.AnswerGenerator;
+import com.hnu.backend.rag.api.ClarificationContext;
 import com.hnu.backend.rag.api.RagEngine;
 import com.hnu.backend.rag.config.RagProperties;
 import com.hnu.backend.rag.vo.ModelInfoResponse;
@@ -33,6 +35,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -58,8 +61,9 @@ public class ConversationGenerationService {
             ActiveGeneration active,
             String content,
             List<String> citations,
-            AnswerGenerator.Generation generation) {
-          complete(active, content, citations, generation);
+            AnswerGenerator.Generation generation,
+            ClarificationContext clarification) {
+          complete(active, content, citations, generation, clarification);
         }
 
         @Override
@@ -72,6 +76,15 @@ public class ConversationGenerationService {
           errorTerminal(active, code, message);
         }
       };
+  private ConversationClarificationService clarifications;
+
+  /** 注入会话澄清状态服务。 */
+  @Autowired
+  public void setClarifications(ConversationClarificationService service) {
+    this.clarifications = service;
+    this.preparation.clarifications = service;
+  }
+
   private final JsonMapper json = JsonCodecs.snapshots();
   private final ConversationMessagePresenter presenter = new ConversationMessagePresenter();
   private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
@@ -122,6 +135,9 @@ public class ConversationGenerationService {
     int recoveredAttempts = generationAttemptMapper.recoverInterrupted();
     int recoveredMessages = messageMapper.recoverInterrupted();
     int recoveredRuns = traces.recoverInterrupted();
+    if (clarifications != null) {
+      clarifications.recover();
+    }
     if (recoveredMessages > 0 || recoveredAttempts > 0 || recoveredRuns > 0) {
       log.warn(
           "Recovered interrupted generation state messages={} attempts={} runs={}",
@@ -177,7 +193,18 @@ public class ConversationGenerationService {
       UUID clientMessageId,
       String rawQuestion,
       RequestTiming timing) {
-    String question = normalizeQuestion(rawQuestion);
+    return ask(ownerId, conversationId, clientMessageId, rawQuestion, timing, null, null);
+  }
+
+  /** 提交文本或经过服务端校验的 KB 选择。 */
+  public SseEmitter ask(
+      UUID ownerId,
+      UUID conversationId,
+      UUID clientMessageId,
+      String rawQuestion,
+      RequestTiming timing,
+      UUID clarificationId,
+      UUID selectedNodeId) {
     Object lock = conversationLocks.computeIfAbsent(conversationId, ignored -> new Object());
     synchronized (lock) {
       Conversation conversation = require(ownerId, conversationId);
@@ -191,8 +218,21 @@ public class ConversationGenerationService {
         return replayOrConflict(conversation, existing, assistant, timing.requestId());
       }
       ensureIdle(ownerId, conversationId);
+      String question =
+          normalizeQuestion(
+              clarifications == null
+                  ? rawQuestion
+                  : clarifications.question(
+                      conversationId, clarificationId, selectedNodeId, rawQuestion));
       var prepared =
-          preparation.prepareNew(ownerId, conversation, clientMessageId, question, timing);
+          preparation.prepareNew(
+              ownerId,
+              conversation,
+              clientMessageId,
+              question,
+              timing,
+              clarificationId,
+              selectedNodeId);
       return launch(
           conversation,
           prepared.user(),
@@ -454,7 +494,8 @@ public class ConversationGenerationService {
       ActiveGeneration active,
       String content,
       List<String> citations,
-      AnswerGenerator.Generation generation) {
+      AnswerGenerator.Generation generation,
+      ClarificationContext clarification) {
     if (!active.tryComplete()) {
       if (active.cancelled()) {
         cancelTerminal(active);
@@ -478,7 +519,10 @@ public class ConversationGenerationService {
                   new ModelInfoResponse(
                       generation.modelId(), generation.provider(), generation.model()));
       terminalWriter.complete(
-          terminalContext(active, content), json.writeValueAsString(citations), modelInfo);
+          terminalContext(active, content),
+          json.writeValueAsString(citations),
+          modelInfo,
+          clarification);
       finishPersisted(active, Kind.COMPLETE, ErrorCode.INTERNAL_ERROR.code(), "回答保存失败，请重试");
     } catch (RuntimeException e) {
       terminalPersistenceFailed(active, Kind.COMPLETE, e);

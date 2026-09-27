@@ -5,6 +5,8 @@ import java.util.Arrays;
 
 /** 追踪原因的唯一展示目录；稳定代码不随文案调整而改变，通用错误复用错误码目录。 */
 public enum TraceReasonCatalog {
+  CLARIFICATION_CONFIRMATION_FAILED("语义确认不可用，沿用原路由"),
+  KB_INTENT_AMBIGUOUS("KB 意图接近且语义存在歧义，等待用户选择"),
   /** 使用主模型。 */
   PRIMARY("使用主模型"),
   /** 切换至备用模型。 */

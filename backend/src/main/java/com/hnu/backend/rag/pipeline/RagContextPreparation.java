@@ -80,7 +80,9 @@ public class RagContextPreparation {
             1,
             span -> {
               QueryPlan queryPlan =
-                  queryPlanningStage.execute(memory, request.question(), span.context());
+                  request.clarification() == null
+                      ? queryPlanningStage.execute(memory, request.question(), span.context())
+                      : request.clarification().plan();
               cancellation.throwIfCancelled();
               RoutingPlan routingPlan = treeRoutingStage.execute(queryPlan, span.context());
               cancellation.throwIfCancelled();

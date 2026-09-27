@@ -26,6 +26,12 @@ public class IntentTreeSnapshotProvider {
     this.tools = tools;
   }
 
+  /** 重新读取公共库和节点权限，供跨请求续接使用。 */
+  public IntentTreeSnapshot freshSnapshot() {
+    return IntentTreeSnapshot.from(
+        intentTreeService.nodesForResume(), tools.availableReadOnlyTools());
+  }
+
   /** 返回当前路由快照；缓存失效后由第一个读取线程完成重建。 */
   public IntentTreeSnapshot snapshot() {
     IntentTreeSnapshot current = cached;

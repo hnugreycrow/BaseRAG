@@ -17,6 +17,7 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import {
+  cancelClarification,
   createConversation,
   deleteConversation,
   getConversation,
@@ -30,6 +31,7 @@ import {
   type ConversationTurn,
 } from '../api'
 import AppSidebar from '../layout/AppSidebar.vue'
+import ClarificationChoices from '../components/conversation/ClarificationChoices.vue'
 import ConversationHistory from '../components/conversation/ConversationHistory.vue'
 import QuestionDirectory from '../components/conversation/QuestionDirectory.vue'
 import SourcePanel from '../components/conversation/SourcePanel.vue'
@@ -46,6 +48,7 @@ const conversations = ref<ConversationSummary[]>([])
 const conversation = ref<ConversationDetail | null>(null)
 const searchQuery = ref('')
 const draft = ref('')
+const clarificationPanel = ref<InstanceType<typeof ClarificationChoices> | null>(null)
 const thinkingEnabled = ref(false)
 const thinkingSaving = ref(false)
 const listLoading = ref(false)
@@ -569,6 +572,10 @@ async function scrollToBottom(smooth = true) {
 }
 
 async function submitQuestion() {
+  if (conversation.value?.pendingClarification) {
+    clarificationPanel.value?.confirm()
+    return
+  }
   if (submitting.value || detailLoading.value || pageLoading.value) {
     return
   }
@@ -580,8 +587,11 @@ async function submitQuestion() {
   }
 }
 
-async function sendQuestion() {
-  const content = draft.value.trim()
+async function sendQuestion(
+  selection?: import('../api').ClarificationSelection,
+  suppliedContent?: string,
+) {
+  const content = (suppliedContent ?? draft.value).trim()
   if (!content || thinkingSaving.value || generationStore.isActive(currentConversationId.value))
     return
   if (content.length > 2000) {
@@ -589,7 +599,9 @@ async function sendQuestion() {
     return
   }
 
-  draft.value = ''
+  if (suppliedContent === undefined) {
+    draft.value = ''
+  }
   let id = currentConversationId.value
   if (!id) {
     try {
@@ -601,7 +613,9 @@ async function sendQuestion() {
       skipRouteLoadId = id
       await router.replace(`/chat/${id}`)
     } catch (error) {
-      draft.value = content
+      if (suppliedContent === undefined) {
+        draft.value = content
+      }
       ElMessage.error(getErrorMessage(error))
       return
     }
@@ -616,7 +630,9 @@ async function sendQuestion() {
       }
       conversation.value = generationStore.mergeIntoDetail(latest)
     } catch (error) {
-      draft.value = content
+      if (suppliedContent === undefined) {
+        draft.value = content
+      }
       ElMessage.error(getErrorMessage(error))
       return
     }
@@ -641,7 +657,54 @@ async function sendQuestion() {
   viewedVersions.value[turnIndex] = assistant.id
   await scrollToBottom()
 
-  void generationStore.startAsk(id, turn.user, assistant, content)
+  void generationStore.startAsk(id, turn.user, assistant, content, selection)
+  return true
+}
+
+async function confirmIntent(
+  clarificationId: string,
+  answer: {
+    option: import('../api').Clarification['options'][number] | null
+    text: string
+  },
+) {
+  if (sending.value || submitting.value || detailLoading.value || pageLoading.value) {
+    return
+  }
+  submitting.value = true
+  const content = answer.option
+    ? answer.option.label + (answer.text ? `\n补充说明：${answer.text}` : '')
+    : answer.text
+  try {
+    const submitted = await sendQuestion(
+      answer.option ? { clarificationId, selectedNodeId: answer.option.nodeId } : undefined,
+      content,
+    )
+    if (submitted && draft.value.trim() === answer.text) {
+      draft.value = ''
+    }
+  } finally {
+    submitting.value = false
+  }
+}
+
+async function dismissClarification(id: string) {
+  if (sending.value || submitting.value) {
+    return
+  }
+  submitting.value = true
+  const conversationId = currentConversationId.value
+  try {
+    await cancelClarification(conversationId, id)
+    const latest = await getConversation(conversationId)
+    if (currentConversationId.value === conversationId) {
+      conversation.value = generationStore.mergeIntoDetail(latest)
+    }
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error))
+  } finally {
+    submitting.value = false
+  }
 }
 
 async function toggleThinking() {
@@ -755,7 +818,34 @@ watch(
   () => {
     void loadConversationList()
     const id = currentConversationId.value
-    if (id && !generationStore.isActive(id)) generationStore.markSeen(id)
+    if (id && !generationStore.isActive(id)) {
+      generationStore.markSeen(id)
+      const sequence = detailSequence
+      void getConversation(id)
+        .then((latest) => {
+          if (
+            currentConversationId.value === id &&
+            sequence === detailSequence &&
+            !generationStore.isActive(id) &&
+            conversation.value
+          ) {
+            conversation.value.pendingClarification = latest.pendingClarification
+            for (const turn of conversation.value.turns) {
+              for (const message of turn.assistantVersions) {
+                if (message.clarification) {
+                  message.clarification.status =
+                    message.clarification.id === latest.pendingClarification?.id
+                      ? latest.pendingClarification.status
+                      : 'RESOLVED'
+                }
+              }
+            }
+          }
+        })
+        .catch(() => {
+          /* 保留现有消息，刷新时可重新同步待办。 */
+        })
+    }
   },
 )
 
@@ -895,6 +985,8 @@ onBeforeUnmount(() => {
                   v-else-if="
                     currentAssistant(turn)?.thinkingEnabled &&
                     currentAssistant(turn)?.status === 'COMPLETED' &&
+                    !currentAssistant(turn)?.clarification &&
+                    !conversation?.pendingClarification &&
                     currentAssistant(turn)?.modelInfo
                   "
                   class="reasoning-unavailable"
@@ -1068,6 +1160,25 @@ onBeforeUnmount(() => {
                   正在查找资料并组织回答
                 </div>
 
+                <div v-if="currentAssistant(turn)?.clarification" class="clarification-record">
+                  <p>
+                    {{
+                      currentAssistant(turn)!.clarification!.status === 'PENDING'
+                        ? '等待选择，请在输入框上方确认。'
+                        : currentAssistant(turn)!.clarification!.status === 'CANCELLED'
+                          ? '已取消澄清。'
+                          : '澄清记录（已处理）'
+                    }}
+                  </p>
+                  <ul>
+                    <li
+                      v-for="option in currentAssistant(turn)!.clarification!.options"
+                      :key="option.nodeId"
+                    >
+                      {{ option.label }}
+                    </li>
+                  </ul>
+                </div>
                 <div
                   v-if="['FAILED', 'CANCELLED'].includes(currentAssistant(turn)?.status || '')"
                   class="answer-error"
@@ -1116,6 +1227,12 @@ onBeforeUnmount(() => {
                     v-if="['FAILED', 'CANCELLED'].includes(currentAssistant(turn)?.status || '')"
                     type="button"
                     class="retry-button"
+                    :disabled="
+                      sending ||
+                      Boolean(
+                        conversation?.pendingClarification && turn !== conversation?.turns.at(-1),
+                      )
+                    "
                     @click="rerunAnswer(turn, 'retry')"
                   >
                     <el-icon><RefreshRight /></el-icon>
@@ -1124,6 +1241,8 @@ onBeforeUnmount(() => {
                   <button
                     v-if="
                       currentAssistant(turn)?.status === 'COMPLETED' &&
+                      !currentAssistant(turn)?.clarification &&
+                      !conversation?.pendingClarification &&
                       turn === conversation?.turns.at(-1) &&
                       !conversation?.hasNewer &&
                       currentAssistant(turn)?.active
@@ -1191,6 +1310,16 @@ onBeforeUnmount(() => {
             返回最新消息
           </button>
         </Transition>
+        <ClarificationChoices
+          v-if="conversation?.pendingClarification"
+          ref="clarificationPanel"
+          :supplement="draft"
+          :clarification="conversation.pendingClarification"
+          :active-id="conversation.pendingClarification.id"
+          :busy="sending || submitting || thinkingSaving || detailLoading || pageLoading"
+          @confirm="(answer) => confirmIntent(conversation!.pendingClarification!.id, answer)"
+          @cancel="dismissClarification(conversation!.pendingClarification!.id)"
+        />
         <div class="composer-shell" :class="{ 'is-busy': sending }">
           <el-input
             v-model="draft"
@@ -1198,7 +1327,11 @@ onBeforeUnmount(() => {
             :autosize="{ minRows: 1, maxRows: 6 }"
             maxlength="2000"
             resize="none"
-            placeholder="向知识库提问"
+            :placeholder="
+              conversation?.pendingClarification
+                ? '补充说明（可选），或直接确认上方选择'
+                : '向知识库提问'
+            "
             aria-label="输入问题"
             @keydown="handleComposerKeydown"
           />
@@ -1226,7 +1359,7 @@ onBeforeUnmount(() => {
               <el-icon><VideoPause /></el-icon>
             </button>
             <button
-              v-else
+              v-else-if="!conversation?.pendingClarification"
               type="button"
               class="send-button"
               :disabled="
@@ -1239,7 +1372,13 @@ onBeforeUnmount(() => {
             </button>
           </div>
         </div>
-        <p>Enter 发送 · Shift + Enter 换行</p>
+        <p>
+          {{
+            conversation?.pendingClarification
+              ? 'Enter 确认并继续 · Shift + Enter 换行'
+              : 'Enter 发送 · Shift + Enter 换行'
+          }}
+        </p>
       </footer>
     </main>
 

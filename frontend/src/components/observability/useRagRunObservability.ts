@@ -27,7 +27,12 @@ interface FilterState {
 }
 
 const RUN_STATUSES: RagRunStatus[] = ['RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED', 'INTERRUPTED']
-const EXECUTION_MODES: RagExecutionMode[] = ['FULL_PIPELINE', 'SYSTEM_CHAT', 'FAST_PATH']
+const EXECUTION_MODES: RagExecutionMode[] = [
+  'FULL_PIPELINE',
+  'SYSTEM_CHAT',
+  'FAST_PATH',
+  'WAITING_CLARIFICATION',
+]
 const RANGE_VALUES: TraceRange[] = ['all', '1h', '24h', '7d', 'custom']
 
 function queryString(value: unknown): string {

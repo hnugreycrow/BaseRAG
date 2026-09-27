@@ -9,6 +9,7 @@ import com.hnu.backend.conversation.entity.MessageRole;
 import com.hnu.backend.conversation.entity.MessageStatus;
 import com.hnu.backend.conversation.mapper.ConversationMapper;
 import com.hnu.backend.conversation.mapper.MessageMapper;
+import com.hnu.backend.conversation.service.ConversationClarificationService;
 import com.hnu.backend.observability.service.RagTraceManager;
 import com.hnu.backend.observability.trace.RagRunTrace;
 import java.util.UUID;
@@ -20,6 +21,7 @@ final class ConversationGenerationPreparation {
   private final MessageMapper messageMapper;
   private final TransactionTemplate tx;
   private final RagTraceManager traces;
+  ConversationClarificationService clarifications;
 
   /** 组装生成准备依赖，消息写入与 Trace 创建沿用同一事务。 */
   ConversationGenerationPreparation(
@@ -49,6 +51,18 @@ final class ConversationGenerationPreparation {
       UUID clientMessageId,
       String question,
       RequestTiming timing) {
+    return prepareNew(ownerId, conversation, clientMessageId, question, timing, null, null);
+  }
+
+  /** 在同一事务认领澄清并创建补充轮次。 */
+  Prepared prepareNew(
+      UUID ownerId,
+      Conversation conversation,
+      UUID clientMessageId,
+      String question,
+      RequestTiming timing,
+      UUID clarificationId,
+      UUID selectedNodeId) {
     UUID conversationId = conversation.getId();
     Prepared prepared =
         tx.execute(
@@ -59,6 +73,9 @@ final class ConversationGenerationPreparation {
               Message assistant = assistantMessage(conversationId, null, turn, 1, user.getId());
               assistant.setThinkingEnabled(conversation.isThinkingEnabled());
               messageMapper.insert(assistant);
+              if (clarifications != null) {
+                clarifications.claim(user, assistant, clarificationId, selectedNodeId);
+              }
               RagRunTrace trace =
                   traces.start(
                       ownerId, conversationId, user.getId(), assistant.getId(), question, timing);
@@ -97,6 +114,9 @@ final class ConversationGenerationPreparation {
         || previous.getRole() != MessageRole.ASSISTANT) {
       throw ApiException.notFound(ErrorCode.MESSAGE_NOT_FOUND, "回答不存在");
     }
+    if (clarifications != null) {
+      clarifications.checkRestart(previous, regenerate);
+    }
     if (regenerate) {
       int lastTurn = messageMapper.nextTurn(ownerId, conversationId) - 1;
       if (!previous.isActive()
@@ -125,6 +145,9 @@ final class ConversationGenerationPreparation {
                       user.getId());
               value.setThinkingEnabled(conversation.isThinkingEnabled());
               messageMapper.insert(value);
+              if (clarifications != null) {
+                clarifications.restart(user, value);
+              }
               RagRunTrace trace =
                   traces.start(
                       ownerId,

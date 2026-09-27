@@ -75,6 +75,12 @@ public class Message {
       typeHandler = PostgresTextTypeHandler.class)
   private String modelInfoJson;
 
+  /** 澄清展示快照，不包含问题规划或补充正文。 */
+  private String clarificationJson;
+
+  /** 仅用于续接的原计划、已确认选择及消息引用。 */
+  private String clarificationContextJson;
+
   /** 失败或取消时的稳定错误码。 */
   private String errorCode;
 

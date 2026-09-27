@@ -7,16 +7,16 @@
         SELECT (r.started_at AT TIME ZONE 'Asia/Shanghai')::date AS date,
                COUNT(*) AS request_count,
                COUNT(*) FILTER (WHERE r.status = 'FAILED') AS failure_count,
-               COUNT(*) FILTER (WHERE r.status = 'COMPLETED' AND r.end_to_end_ttft_ms IS NOT NULL) AS ttft_sample_count,
-               COUNT(*) FILTER (WHERE r.status = 'COMPLETED' AND r.total_ms IS NOT NULL) AS total_sample_count,
+               COUNT(*) FILTER (WHERE r.status = 'COMPLETED' AND r.execution_mode &lt;&gt; 'WAITING_CLARIFICATION' AND r.end_to_end_ttft_ms IS NOT NULL) AS ttft_sample_count,
+               COUNT(*) FILTER (WHERE r.status = 'COMPLETED' AND r.execution_mode &lt;&gt; 'WAITING_CLARIFICATION' AND r.total_ms IS NOT NULL) AS total_sample_count,
                ROUND(percentile_cont(0.50) WITHIN GROUP (ORDER BY r.end_to_end_ttft_ms)
-                   FILTER (WHERE r.status = 'COMPLETED' AND r.end_to_end_ttft_ms IS NOT NULL))::bigint AS ttft_p50_ms,
+                   FILTER (WHERE r.status = 'COMPLETED' AND r.execution_mode &lt;&gt; 'WAITING_CLARIFICATION' AND r.end_to_end_ttft_ms IS NOT NULL))::bigint AS ttft_p50_ms,
                ROUND(percentile_cont(0.95) WITHIN GROUP (ORDER BY r.end_to_end_ttft_ms)
-                   FILTER (WHERE r.status = 'COMPLETED' AND r.end_to_end_ttft_ms IS NOT NULL))::bigint AS ttft_p95_ms,
+                   FILTER (WHERE r.status = 'COMPLETED' AND r.execution_mode &lt;&gt; 'WAITING_CLARIFICATION' AND r.end_to_end_ttft_ms IS NOT NULL))::bigint AS ttft_p95_ms,
                ROUND(percentile_cont(0.50) WITHIN GROUP (ORDER BY r.total_ms)
-                   FILTER (WHERE r.status = 'COMPLETED' AND r.total_ms IS NOT NULL))::bigint AS total_p50_ms,
+                   FILTER (WHERE r.status = 'COMPLETED' AND r.execution_mode &lt;&gt; 'WAITING_CLARIFICATION' AND r.total_ms IS NOT NULL))::bigint AS total_p50_ms,
                ROUND(percentile_cont(0.95) WITHIN GROUP (ORDER BY r.total_ms)
-                   FILTER (WHERE r.status = 'COMPLETED' AND r.total_ms IS NOT NULL))::bigint AS total_p95_ms
+                   FILTER (WHERE r.status = 'COMPLETED' AND r.execution_mode &lt;&gt; 'WAITING_CLARIFICATION' AND r.total_ms IS NOT NULL))::bigint AS total_p95_ms
         FROM rag_runs r
         <include refid="filters"/>
         GROUP BY (r.started_at AT TIME ZONE 'Asia/Shanghai')::date
@@ -67,9 +67,9 @@
 
     <select id="summary" resultType="com.hnu.backend.observability.mapper.RagRunSummaryRow">
         SELECT COUNT(*) AS request_count,
-               COUNT(*) FILTER (WHERE r.status &lt;&gt; 'RUNNING') AS terminal_count,
-               COUNT(*) FILTER (WHERE r.status = 'COMPLETED') AS success_count,
-               COUNT(*) FILTER (WHERE r.status &lt;&gt; 'RUNNING' AND r.degraded) AS degraded_count,
+               COUNT(*) FILTER (WHERE r.status &lt;&gt; 'RUNNING' AND r.execution_mode &lt;&gt; 'WAITING_CLARIFICATION') AS terminal_count,
+               COUNT(*) FILTER (WHERE r.status = 'COMPLETED' AND r.execution_mode &lt;&gt; 'WAITING_CLARIFICATION') AS success_count,
+               COUNT(*) FILTER (WHERE r.status &lt;&gt; 'RUNNING' AND r.execution_mode &lt;&gt; 'WAITING_CLARIFICATION' AND r.degraded) AS degraded_count,
                ROUND(percentile_cont(0.50) WITHIN GROUP (ORDER BY r.total_ms)
                    FILTER (WHERE r.total_ms IS NOT NULL))::bigint AS total_p50_ms,
                ROUND(percentile_cont(0.95) WITHIN GROUP (ORDER BY r.total_ms)

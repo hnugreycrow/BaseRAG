@@ -11,6 +11,7 @@ import com.hnu.backend.conversation.mapper.ConversationMapper;
 import com.hnu.backend.conversation.mapper.MessageMapper;
 import com.hnu.backend.conversation.vo.ConversationResponses;
 import java.util.*;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -21,6 +22,38 @@ public class ConversationService {
   private final ConversationMapper conversationMapper;
   private final MessageMapper messageMapper;
   private final ConversationGenerationService generation;
+  private ConversationClarificationService clarifications;
+
+  /** 注入待办查询及取消能力。 */
+  @Autowired
+  public void setClarifications(ConversationClarificationService service) {
+    this.clarifications = service;
+  }
+
+  /** 提交 KB 选择，权限和幂等校验在生成协调器内执行。 */
+  public SseEmitter ask(
+      UUID ownerId,
+      UUID conversationId,
+      UUID clientMessageId,
+      String question,
+      RequestTiming timing,
+      UUID clarificationId,
+      UUID selectedNodeId) {
+    return generation.ask(
+        ownerId,
+        conversationId,
+        clientMessageId,
+        question,
+        timing,
+        clarificationId,
+        selectedNodeId);
+  }
+
+  /** 取消本人会话的澄清待办。 */
+  public void cancelClarification(UUID ownerId, UUID conversationId, UUID clarificationId) {
+    clarifications.cancel(ownerId, conversationId, clarificationId);
+  }
+
   private final ConversationMessagePresenter presenter = new ConversationMessagePresenter();
 
   /**
@@ -210,7 +243,8 @@ public class ConversationService {
         conversation.isThinkingEnabled(),
         conversation.getCreatedAt(),
         conversation.getUpdatedAt(),
-        List.copyOf(turns));
+        List.copyOf(turns),
+        clarifications == null ? null : clarifications.pending(conversation.getId()));
   }
 
   /**

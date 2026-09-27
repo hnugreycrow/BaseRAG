@@ -43,7 +43,30 @@ export interface UserMessage {
   createdAt: string
 }
 
+export interface Clarification {
+  id: string
+  type: 'KB_INTENT'
+  status: 'PENDING' | 'RESUMING' | 'RESOLVED' | 'CANCELLED'
+  question?: string
+  currentStep?: number
+  totalSteps?: number
+  options: { nodeId: string; label: string; description?: string }[]
+}
+
+export interface ClarificationSelection {
+  clarificationId: string
+  selectedNodeId: string
+}
+
+export function cancelClarification(conversationId: string, id: string) {
+  return request<void>({
+    url: `/conversations/${conversationId}/clarifications/${id}`,
+    method: 'delete',
+  })
+}
+
 export interface AssistantMessage {
+  clarification?: Clarification | null
   id: string
   replyToId: string
   turnIndex: number
@@ -71,6 +94,7 @@ export interface ConversationTurn {
 }
 
 export interface ConversationDetail extends ConversationSummary {
+  pendingClarification?: Clarification | null
   turns: ConversationTurn[]
   hasOlder?: boolean
   hasNewer?: boolean
@@ -272,10 +296,11 @@ export function askConversation(
   content: string,
   onEvent: (event: ConversationStreamEvent) => void,
   signal?: AbortSignal,
+  selection?: ClarificationSelection,
 ) {
   return streamRequest(
     `/conversations/${conversationId}/messages`,
-    { clientMessageId, content },
+    { clientMessageId, content, ...selection },
     onEvent,
     signal,
   )

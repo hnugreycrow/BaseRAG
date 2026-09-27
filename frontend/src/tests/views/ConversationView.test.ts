@@ -27,6 +27,40 @@ vi.mock('../../api', async () => {
 })
 
 describe('ConversationView', () => {
+  it('restores pending choices above the shared composer even outside the history window', async () => {
+    Object.defineProperty(HTMLElement.prototype, 'scrollTo', { configurable: true, value: vi.fn() })
+    const pending = {
+      id: 'pending',
+      type: 'KB_INTENT' as const,
+      status: 'PENDING' as const,
+      options: [{ nodeId: 'finance', label: '财务 > 权限申请' }],
+    }
+    vi.mocked(getConversation).mockResolvedValue({
+      id: 'conversation',
+      title: '测试',
+      thinkingEnabled: false,
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+      turns: [],
+      pendingClarification: pending,
+    })
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/chat/:conversationId?', component: { template: '<div />' } }],
+    })
+    await router.push('/chat/conversation')
+    await router.isReady()
+    const wrapper = shallowMount(ConversationView, { global: { plugins: [createPinia(), router] } })
+    await flushPromises()
+    const panel = wrapper.get('.composer-area clarification-choices-stub')
+    expect(wrapper.findAll('clarification-choices-stub')).toHaveLength(1)
+    expect(panel.element.nextElementSibling?.classList.contains('composer-shell')).toBe(true)
+    expect(wrapper.find('.composer-shell .send-button').exists()).toBe(false)
+    expect(wrapper.get('.composer-area > p').text()).toContain('Enter 确认并继续')
+    wrapper.unmount()
+    vi.mocked(getConversation).mockClear()
+  })
+
   it('renders the concise empty state without promotional copy or suggestion cards', async () => {
     const router = createRouter({
       history: createMemoryHistory(),

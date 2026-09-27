@@ -8,6 +8,7 @@ import com.hnu.backend.observability.trace.AnswerTraceObserver;
 import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.observability.trace.TraceContext;
 import com.hnu.backend.rag.api.*;
+import com.hnu.backend.rag.clarification.ClarificationDecisionStage;
 import com.hnu.backend.rag.generation.AnswerGeneration;
 import com.hnu.backend.rag.generation.AnswerResult;
 import com.hnu.backend.rag.generation.AssembledPrompt;
@@ -17,6 +18,7 @@ import com.hnu.backend.rag.retrieval.EvidenceDeduplicator;
 import com.hnu.backend.rag.retrieval.EvidenceReranker;
 import com.hnu.backend.rag.retrieval.EvidenceRetriever;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 /** 统一编排完整会话与旧单轮流程，不操作会话状态或数据库。 */
@@ -30,6 +32,13 @@ public class DefaultRagEngine implements RagEngine {
   private final AnswerGeneration answers;
   private final EvidenceRetriever retrieval;
   private final ContextBuilder contexts;
+  private ClarificationDecisionStage clarification;
+
+  /** 注入执行前消歧阶段；旧独立测试可继续装配不含消歧的引擎。 */
+  @Autowired
+  public void setClarification(ClarificationDecisionStage stage) {
+    this.clarification = stage;
+  }
 
   /** 装配各个可替换阶段。 */
   public DefaultRagEngine(
@@ -72,7 +81,39 @@ public class DefaultRagEngine implements RagEngine {
       ensureActive(observer, control);
       return result(answers.execute(prompt, observer, control));
     }
-    var prepared = conversationContextService.prepare(request, trace, control::cancelled);
+    var initial = conversationContextService.prepare(request, trace, control::cancelled);
+    ensureActive(observer, control);
+    var decision =
+        clarification == null
+            ? null
+            : clarification.execute(initial, request.clarification(), trace);
+    ensureActive(observer, control);
+    if (decision != null && decision.invalidated()) {
+      observer.prepared(null, List.of());
+      return new RagResult("意图或知识库配置已改变，无法继续本次选择。请重新提出原问题。", List.of(), List.of(), null);
+    }
+    if (decision != null && decision.context() != null && !decision.context().pending().isEmpty()) {
+      trace.executionMode(RagExecutionMode.WAITING_CLARIFICATION);
+      observer.prepared(null, List.of());
+      String question =
+          decision.context().plan().subQuestions().stream()
+              .filter(
+                  item -> item.id().equals(decision.context().pending().getFirst().subQuestionId()))
+              .map(SubQuestion::question)
+              .findFirst()
+              .orElse(decision.context().plan().standaloneQuestion());
+      return new RagResult(
+          "关于“" + question + "”，你想了解哪一项？请选择下方意图，或补充说明。",
+          List.of(),
+          List.of(),
+          null,
+          decision.context());
+    }
+    var prepared =
+        decision == null
+            ? initial
+            : new RagContextPreparation.PreparedContext(
+                initial.memory(), initial.queryPlan(), decision.routing());
     ensureActive(observer, control);
     String standaloneQuestion = prepared.queryPlan().standaloneQuestion();
     if (prepared.routingPlan().systemChatOnly()) {

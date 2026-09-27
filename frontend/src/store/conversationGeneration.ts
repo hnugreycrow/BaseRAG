@@ -146,9 +146,10 @@ export const useConversationGenerationStore = defineStore('conversation-generati
     user: UserMessage,
     assistant: AssistantMessage,
     content: string,
+    selection?: import('../api').ClarificationSelection,
   ) {
     return launch(conversationId, user, assistant, (callback, signal) =>
-      askConversation(conversationId, user.id, content, callback, signal),
+      askConversation(conversationId, user.id, content, callback, signal, selection),
     )
   }
 
@@ -208,6 +209,9 @@ export const useConversationGenerationStore = defineStore('conversation-generati
     const versionIndex = turn.assistantVersions.findIndex(
       (item) => item.id === task.assistant.id || item.variantIndex === task.assistant.variantIndex,
     )
+    if (versionIndex >= 0 && !isActive(detail.id)) {
+      task.assistant.clarification = turn.assistantVersions[versionIndex]?.clarification
+    }
     if (versionIndex >= 0) turn.assistantVersions[versionIndex] = task.assistant
     else turn.assistantVersions.push(task.assistant)
 

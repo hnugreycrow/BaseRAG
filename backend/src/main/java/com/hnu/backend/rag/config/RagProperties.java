@@ -37,6 +37,9 @@ public class RagProperties {
         || !Double.isFinite(pipeline.routing.confidenceThreshold)
         || pipeline.routing.confidenceThreshold < 0
         || pipeline.routing.confidenceThreshold > 1
+        || !Double.isFinite(pipeline.routing.clarificationScoreGap)
+        || pipeline.routing.clarificationScoreGap < 0
+        || pipeline.routing.clarificationScoreGap > 1
         || pipeline.routing.timeoutMs < 1
         || pipeline.mcp.timeoutMs < 1
         || pipeline.mcp.maxOutputChars < 1
@@ -83,6 +86,12 @@ public class RagProperties {
   @Data
   public static class Routing {
     private double confidenceThreshold = 0.70;
+
+    /** 两个 KB 候选触发语义确认的最大分差，包含边界。 */
+    @jakarta.validation.constraints.DecimalMin("0.0")
+    @jakarta.validation.constraints.DecimalMax("1.0")
+    private double clarificationScoreGap = 0.10;
+
     private int timeoutMs = 10_000;
   }
 

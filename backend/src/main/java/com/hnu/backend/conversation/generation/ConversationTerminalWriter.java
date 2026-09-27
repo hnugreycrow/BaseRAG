@@ -6,11 +6,14 @@ import com.hnu.backend.conversation.entity.MessageStatus;
 import com.hnu.backend.conversation.mapper.ConversationMapper;
 import com.hnu.backend.conversation.mapper.GenerationAttemptMapper;
 import com.hnu.backend.conversation.mapper.MessageMapper;
+import com.hnu.backend.conversation.service.ConversationClarificationService;
 import com.hnu.backend.observability.RagRunStatus;
 import com.hnu.backend.observability.RagStageName;
 import com.hnu.backend.observability.service.RagTraceManager;
 import com.hnu.backend.observability.trace.RagRunTrace;
+import com.hnu.backend.rag.api.ClarificationContext;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -22,6 +25,13 @@ public class ConversationTerminalWriter {
   private final GenerationAttemptMapper attempts;
   private final TransactionTemplate tx;
   private final RagTraceManager traces;
+  private ConversationClarificationService clarifications;
+
+  /** 注入澄清终态事务参与者。 */
+  @Autowired
+  public void setClarifications(ConversationClarificationService service) {
+    this.clarifications = service;
+  }
 
   /**
    * 创建终态持久化服务。
@@ -57,6 +67,15 @@ public class ConversationTerminalWriter {
 
   /** 保存成功回答与 Trace。 */
   void complete(Context context, String citationsJson, String modelInfoJson) {
+    complete(context, citationsJson, modelInfoJson, null);
+  }
+
+  /** 与消息终态同事务提交或结束澄清。 */
+  void complete(
+      Context context,
+      String citationsJson,
+      String modelInfoJson,
+      ClarificationContext clarification) {
     RagRunTrace.Span span = context.trace().start(RagStageName.RESULT_PERSISTENCE, null, 1);
     try {
       tx.executeWithoutResult(
@@ -69,6 +88,9 @@ public class ConversationTerminalWriter {
                     citationsJson,
                     modelInfoJson);
             if (changed > 0) {
+              if (clarifications != null) {
+                clarifications.complete(context.generationId(), clarification);
+              }
               messages.saveReasoning(
                   context.ownerId(), context.generationId(), context.reasoning());
               conversations.touch(context.ownerId(), context.conversationId());
@@ -100,6 +122,9 @@ public class ConversationTerminalWriter {
               conversations.touch(context.ownerId(), context.conversationId());
             }
             attempts.cancelRunning(context.ownerId(), context.generationId());
+            if (clarifications != null) {
+              clarifications.release(context.generationId());
+            }
             span.success(changed);
             traces.finish(
                 context.trace(), RagRunStatus.CANCELLED, ErrorCode.GENERATION_CANCELLED.code());
@@ -141,6 +166,9 @@ public class ConversationTerminalWriter {
               conversations.touch(context.ownerId(), context.conversationId());
             }
             span.success(changed);
+            if (clarifications != null) {
+              clarifications.release(context.generationId());
+            }
             traces.finish(context.trace(), RagRunStatus.FAILED, code);
           });
     } catch (RuntimeException error) {
@@ -156,6 +184,9 @@ public class ConversationTerminalWriter {
           int changed = messages.cancelRunning(ownerId, generationId, conversationId, content);
           attempts.cancelRunning(ownerId, generationId);
           traces.cancelStored(generationId);
+          if (clarifications != null) {
+            clarifications.release(generationId);
+          }
           if (changed > 0) {
             conversations.touch(ownerId, conversationId);
           }

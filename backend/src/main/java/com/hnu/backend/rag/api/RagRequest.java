@@ -14,6 +14,7 @@ import java.util.UUID;
  * @param knowledgeBaseIds 限定知识库；null 表示原有全范围语义
  * @param thinkingEnabled 是否向支持的模型请求思考模式
  * @param mode 原有完整或单轮兼容流程
+ * @param clarification 已持久化的 KB 消歧上下文；普通请求为空
  */
 public record RagRequest(
     UUID ownerId,
@@ -22,7 +23,20 @@ public record RagRequest(
     int turn,
     List<UUID> knowledgeBaseIds,
     boolean thinkingEnabled,
-    Mode mode) {
+    Mode mode,
+    ClarificationContext clarification) {
+  /** 兼容无需消歧上下文的调用方。 */
+  public RagRequest(
+      UUID ownerId,
+      String question,
+      UUID conversationId,
+      int turn,
+      List<UUID> knowledgeBaseIds,
+      boolean thinkingEnabled,
+      Mode mode) {
+    this(ownerId, question, conversationId, turn, knowledgeBaseIds, thinkingEnabled, mode, null);
+  }
+
   /** 固定集合快照并校验执行模式。 */
   public RagRequest {
     Objects.requireNonNull(mode, "mode");

@@ -154,3 +154,54 @@ describe('conversation thinking stream', () => {
     expect(task?.assistant.reasoningContent).toBe('部分思考')
   })
 })
+
+it('passes a validated choice through SSE and preserves clarification metadata', async () => {
+  setActivePinia(createPinia())
+  const user: UserMessage = { id: 'choice-user', turnIndex: 2, content: '财务', createdAt: '' }
+  const assistant: AssistantMessage = {
+    id: 'choice-answer',
+    replyToId: user.id,
+    turnIndex: 2,
+    variantIndex: 1,
+    active: true,
+    status: 'PENDING',
+    content: '',
+    thinkingEnabled: false,
+    reasoningContent: '',
+    retrievalQuery: null,
+    sources: [],
+    citations: [],
+    modelInfo: null,
+    errorCode: null,
+    errorMessage: null,
+    createdAt: '',
+    updatedAt: '',
+    completedAt: null,
+  }
+  const clarification = {
+    id: 'next',
+    type: 'KB_INTENT' as const,
+    status: 'PENDING' as const,
+    options: [{ nodeId: 'node', label: '财务 > 审批' }],
+  }
+  vi.mocked(askConversation).mockImplementation(async (_id, _client, _content, callback) => {
+    callback({
+      type: 'complete',
+      data: {
+        schemaVersion: 1,
+        assistantMessage: {
+          ...assistant,
+          content: '第二个子问题需要选择',
+          status: 'COMPLETED',
+          clarification,
+        },
+      },
+    })
+  })
+  const store = useConversationGenerationStore()
+  const selection = { clarificationId: 'previous', selectedNodeId: 'finance' }
+  await store.startAsk('choices', user, assistant, user.content, selection)
+  expect(vi.mocked(askConversation).mock.calls.at(-1)?.[5]).toEqual(selection)
+  expect(store.taskFor('choices')?.assistant.clarification).toEqual(clarification)
+  expect(store.isActive('choices')).toBe(false)
+})

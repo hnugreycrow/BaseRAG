@@ -28,7 +28,8 @@ export function getDashboardTrend(from: string, to: string) {
 export type RagRunStatus = 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'INTERRUPTED'
 
 /** 问答流水线执行模式。 */
-export type RagExecutionMode = 'FULL_PIPELINE' | 'SYSTEM_CHAT' | 'FAST_PATH'
+export type RagExecutionMode =
+  'FULL_PIPELINE' | 'SYSTEM_CHAT' | 'FAST_PATH' | 'WAITING_CLARIFICATION'
 
 /** 单个阶段执行状态。 */
 export type RagStageStatus = 'SUCCESS' | 'DEGRADED' | 'FAILED' | 'CANCELLED' | 'SKIPPED'
@@ -44,6 +45,7 @@ export type RagStageName =
   | 'MEMORY_SUMMARY'
   | 'QUERY_PLANNING'
   | 'INTENT_ROUTING'
+  | 'CLARIFICATION'
   | 'SUBQUESTION_EXECUTION'
   | 'EMBEDDING'
   | 'DATABASE_RETRIEVAL'

@@ -59,3 +59,11 @@ npm run format:check
 - [环境变量](.env.example) · [后端配置](backend/src/main/resources/application.yaml)
 - [产品需求](REQUIREMENTS.md) · [系统架构](docs/architecture.md)
 - [演示步骤](docs/demo.md) · [开发与配置](docs/development.md)
+
+
+### KB 意图澄清
+
+会话问答遇到两个接近的 KB 意图时，会先做语义确认，必要时展示选项并暂停整轮检索。
+支持按钮选择、自由补充、刷新恢复和取消后换题；MCP 参数澄清尚未开放。
+默认分差阈值为 `rag.pipeline.routing.clarification-score-gap: 0.10`（包含边界）。
+部署需执行新增 V14 Flyway 迁移；接口、状态和截图见 [KB 消歧协议](docs/kb-clarification.md)。

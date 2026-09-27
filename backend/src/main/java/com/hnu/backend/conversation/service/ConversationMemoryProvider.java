@@ -14,6 +14,7 @@ import com.hnu.backend.observability.RagStageName;
 import com.hnu.backend.observability.TraceReasonCatalog;
 import com.hnu.backend.observability.trace.RagRunTrace;
 import com.hnu.backend.observability.trace.TraceContext;
+import com.hnu.backend.rag.api.ClarificationContext;
 import com.hnu.backend.rag.generation.MemorySummaryPrompts;
 import com.hnu.backend.rag.memory.MemoryProvider;
 import com.hnu.backend.rag.memory.MemoryTurn;
@@ -265,6 +266,7 @@ public class ConversationMemoryProvider implements MemoryProvider {
                 message.getRole() == MessageRole.ASSISTANT
                     && message.isActive()
                     && message.getStatus() == MessageStatus.COMPLETED
+                    && message.getClarificationJson() == null
                     && message.getTurnIndex() < beforeTurn)
         .sorted(Comparator.comparingInt(Message::getTurnIndex))
         .forEach(
@@ -273,10 +275,19 @@ public class ConversationMemoryProvider implements MemoryProvider {
               if (user != null) {
                 result.add(
                     new MemoryTurn(
-                        assistant.getTurnIndex(), user.getContent(), assistant.getContent()));
+                        assistant.getTurnIndex(), memoryQuestion(user), assistant.getContent()));
               }
             });
     return List.copyOf(result);
+  }
+
+  /** 已续接轮次的记忆使用原问题，避免仅记住“财务”等补充短语。 */
+  private String memoryQuestion(Message user) {
+    if (user.getClarificationContextJson() == null) {
+      return user.getContent();
+    }
+    var context = json.readValue(user.getClarificationContextJson(), ClarificationContext.class);
+    return context.plan().standaloneQuestion() + "\n用户补充：" + user.getContent();
   }
 
   /** 兼容根 Trace 入口；内部显式传递父节点上下文。 */

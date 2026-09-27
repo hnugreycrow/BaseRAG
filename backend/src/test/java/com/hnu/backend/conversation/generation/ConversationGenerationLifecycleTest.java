@@ -81,16 +81,16 @@ class ConversationGenerationLifecycleTest {
   void persistenceFailureDoesNotReopenTerminalAndReleasesConversation() throws Exception {
     doThrow(new IllegalStateException("persistence failed"))
         .when(writer)
-        .complete(any(), anyString(), any());
+        .complete(any(), anyString(), any(), any());
     Running running = launch();
     running.active().appendContent("answer");
-    running.callbacks().completed(running.active(), "answer", List.of(), null);
+    running.callbacks().completed(running.active(), "answer", List.of(), null, null);
 
     assertTrue(running.active().terminal());
     running.callbacks().failed(running.active(), "INTERNAL_ERROR", "late failure");
     running.callbacks().cancelled(running.active());
-    running.callbacks().completed(running.active(), "duplicate", List.of(), null);
-    verify(writer, times(1)).complete(any(), anyString(), any());
+    running.callbacks().completed(running.active(), "duplicate", List.of(), null, null);
+    verify(writer, times(1)).complete(any(), anyString(), any(), any());
     verify(writer, never()).fail(any(), anyString(), anyString());
     verify(writer, never()).cancel(any());
 
@@ -108,7 +108,7 @@ class ConversationGenerationLifecycleTest {
     running.active().appendContent("partial");
     running.active().appendReasoning("reasoning");
     service.cancel(ownerId, conversationId, running.active().generationId());
-    running.callbacks().completed(running.active(), "late answer", List.of(), null);
+    running.callbacks().completed(running.active(), "late answer", List.of(), null, null);
     running.callbacks().cancelled(running.active());
 
     var context = org.mockito.ArgumentCaptor.forClass(ConversationTerminalWriter.Context.class);
@@ -116,7 +116,7 @@ class ConversationGenerationLifecycleTest {
     assertEquals("partial", context.getValue().content());
     assertEquals("reasoning", context.getValue().reasoning());
     assertEquals(attemptId, context.getValue().currentAttemptId());
-    verify(writer, never()).complete(any(), anyString(), any());
+    verify(writer, never()).complete(any(), anyString(), any(), any());
   }
 
   private Running launch() throws InterruptedException {

@@ -668,3 +668,17 @@
     padding-bottom: 18px;
   }
 }
+
+.composer-area > .clarification-choices {
+  width: min(800px, 100%);
+  margin: 0 auto 12px;
+}
+.clarification-record {
+  margin-top: 12px;
+  color: var(--color-text);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.clarification-record ul {
+  padding-left: 20px;
+}

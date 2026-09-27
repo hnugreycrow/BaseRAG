@@ -62,6 +62,32 @@ class DefaultRagEngineTest {
   }
 
   @Test
+  void clarificationStopsEveryExecutionAndAnswerStage() {
+    var clarification = mock(com.hnu.backend.rag.clarification.ClarificationDecisionStage.class);
+    var option =
+        new com.hnu.backend.rag.api.ClarificationContext.Option(UUID.randomUUID(), "OA > 权限");
+    var state =
+        new com.hnu.backend.rag.api.ClarificationContext(
+            null,
+            plan,
+            java.util.Map.of(),
+            List.of(
+                new com.hnu.backend.rag.api.ClarificationContext.Ambiguity("Q1", List.of(option))),
+            List.of());
+    when(clarification.execute(any(), isNull(), any()))
+        .thenReturn(
+            new com.hnu.backend.rag.clarification.ClarificationDecisionStage.Decision(
+                routing, state, false));
+    engine.setClarification(clarification);
+    var result = engine.execute(request, observer, control, RagRunTrace.noop());
+    assertEquals("CLARIFICATION_REQUIRED", result.outcome());
+    assertTrue(result.sources().isEmpty());
+    assertTrue(result.citations().isEmpty());
+    assertNull(result.generation());
+    verifyNoInteractions(execution, retrieval, deduplication, reranker, prompts, answers);
+  }
+
+  @Test
   void completePipelineUsesOnlyReplaceableStageContracts() {
     ExecutionResult recalled = mock(ExecutionResult.class);
     ExecutionResult merged = mock(ExecutionResult.class);
