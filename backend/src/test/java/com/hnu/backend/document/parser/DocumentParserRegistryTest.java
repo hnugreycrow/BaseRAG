@@ -3,6 +3,7 @@ package com.hnu.backend.document.parser;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.hnu.backend.common.exception.ApiException;
+import com.hnu.backend.document.config.DocumentParserConfiguration;
 import com.hnu.backend.rag.config.RagProperties;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -23,7 +24,10 @@ import org.junit.jupiter.api.Test;
 
 class DocumentParserRegistryTest {
   private final MarkdownChunker chunker = new MarkdownChunker(new RagProperties());
-  private final DocumentParserRegistry registry = new DocumentParserRegistry(chunker);
+  private final DocumentParserRegistry registry =
+      new DocumentParserConfiguration()
+          .documentParserRegistry(
+              new DocumentParserConfiguration().documentParsingOptions(new RagProperties()));
 
   @Test
   void extractsPdfTextWithPageLocations() throws IOException {
@@ -44,7 +48,7 @@ class DocumentParserRegistryTest {
       pdf.save(output);
       bytes = output.toByteArray();
     }
-    assertEquals(DocumentFormat.PDF, registry.verify("a.pdf", bytes));
+    assertEquals(DocumentFormat.PDF, new DocumentUploadValidator(registry).verify("a.pdf", bytes));
     var blocks = registry.parser(DocumentFormat.PDF).parse(bytes);
     assertEquals(List.of(1, 2), blocks.stream().map(b -> b.source().start()).toList());
     assertTrue(blocks.get(1).content().contains("Second page"));
@@ -71,7 +75,8 @@ class DocumentParserRegistryTest {
       doc.write(output);
       bytes = output.toByteArray();
     }
-    assertEquals(DocumentFormat.DOCX, registry.verify("a.docx", bytes));
+    assertEquals(
+        DocumentFormat.DOCX, new DocumentUploadValidator(registry).verify("a.docx", bytes));
     var blocks = registry.parser(DocumentFormat.DOCX).parse(bytes);
     assertEquals(StructuredBlock.Kind.HEADING, blocks.getFirst().kind());
     assertTrue(blocks.stream().anyMatch(b -> b.content().contains("中文正文")));
@@ -90,22 +95,34 @@ class DocumentParserRegistryTest {
   void rejectsMismatchedCorruptAndTextlessFiles() throws IOException {
     assertCode(
         "INVALID_FILE_FORMAT",
-        () -> registry.verify("fake.pdf", "hello".getBytes(StandardCharsets.UTF_8)));
+        () ->
+            new DocumentUploadValidator(registry)
+                .verify("fake.pdf", "hello".getBytes(StandardCharsets.UTF_8)));
     assertCode(
         "INVALID_PDF",
-        () -> registry.verify("broken.pdf", "%PDF-broken".getBytes(StandardCharsets.US_ASCII)));
+        () ->
+            new DocumentUploadValidator(registry)
+                .verify("broken.pdf", "%PDF-broken".getBytes(StandardCharsets.US_ASCII)));
     assertCode(
         "INVALID_FILE_FORMAT",
         () ->
-            registry.verify("old.docx", new byte[] {(byte) 0xd0, (byte) 0xcf, 0x11, (byte) 0xe0}));
+            new DocumentUploadValidator(registry)
+                .verify("old.docx", new byte[] {(byte) 0xd0, (byte) 0xcf, 0x11, (byte) 0xe0}));
     assertCode(
-        "INVALID_DOCX", () -> registry.verify("broken.docx", new byte[] {'P', 'K', 3, 4, 0, 0}));
-    assertCode("INVALID_UTF8", () -> registry.verify("broken.md", new byte[] {(byte) 0xff}));
+        "INVALID_DOCX",
+        () ->
+            new DocumentUploadValidator(registry)
+                .verify("broken.docx", new byte[] {'P', 'K', 3, 4, 0, 0}));
+    assertCode(
+        "INVALID_UTF8",
+        () -> new DocumentUploadValidator(registry).verify("broken.md", new byte[] {(byte) 0xff}));
     try (PDDocument pdf = new PDDocument();
         ByteArrayOutputStream output = new ByteArrayOutputStream()) {
       pdf.addPage(new PDPage());
       pdf.save(output);
-      assertCode("PDF_NO_TEXT", () -> registry.verify("scan.pdf", output.toByteArray()));
+      assertCode(
+          "PDF_NO_TEXT",
+          () -> new DocumentUploadValidator(registry).verify("scan.pdf", output.toByteArray()));
     }
   }
 
@@ -119,7 +136,10 @@ class DocumentParserRegistryTest {
       policy.setEncryptionKeyLength(128);
       pdf.protect(policy);
       pdf.save(output);
-      assertCode("ENCRYPTED_PDF", () -> registry.verify("encrypted.pdf", output.toByteArray()));
+      assertCode(
+          "ENCRYPTED_PDF",
+          () ->
+              new DocumentUploadValidator(registry).verify("encrypted.pdf", output.toByteArray()));
     }
   }
 
@@ -134,7 +154,9 @@ class DocumentParserRegistryTest {
       zip.write("a".repeat(2_000_000).getBytes(StandardCharsets.UTF_8));
       zip.closeEntry();
     }
-    assertCode("DOCX_ZIP_LIMIT", () -> registry.verify("bomb.docx", output.toByteArray()));
+    assertCode(
+        "DOCX_ZIP_LIMIT",
+        () -> new DocumentUploadValidator(registry).verify("bomb.docx", output.toByteArray()));
   }
 
   private static void assertCode(String code, Runnable action) {

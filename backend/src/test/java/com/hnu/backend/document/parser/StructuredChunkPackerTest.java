@@ -2,6 +2,7 @@ package com.hnu.backend.document.parser;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.hnu.backend.document.config.DocumentParserConfiguration;
 import com.hnu.backend.document.parser.StructuredBlock.Kind;
 import com.hnu.backend.document.parser.StructuredBlock.SourceSpan;
 import com.hnu.backend.document.parser.StructuredBlock.SourceSpan.Unit;
@@ -15,13 +16,15 @@ class StructuredChunkPackerTest {
     config.setChunkSize(target);
     config.setChunkMinSize(minimum);
     config.setChunkMaxSize(maximum);
-    return new StructuredChunkPacker(config);
+    return new StructuredChunkPacker(
+        new DocumentParserConfiguration().documentParsingOptions(config));
   }
 
   @Test
   void acceptsPageLocatedElementsWithoutMarkdownParser() {
     var config = new RagProperties();
-    var packer = new StructuredChunkPacker(config);
+    var packer =
+        new StructuredChunkPacker(new DocumentParserConfiguration().documentParsingOptions(config));
     var blocks =
         List.of(
             new StructuredBlock(

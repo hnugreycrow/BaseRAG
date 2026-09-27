@@ -14,8 +14,9 @@ import com.hnu.backend.document.entity.DocumentVersionStatus;
 import com.hnu.backend.document.mapper.DocumentChunkMapper;
 import com.hnu.backend.document.mapper.DocumentMapper;
 import com.hnu.backend.document.mapper.DocumentVersionMapper;
+import com.hnu.backend.document.parser.DocumentChunker;
 import com.hnu.backend.document.parser.DocumentParserRegistry;
-import com.hnu.backend.document.parser.MarkdownChunker;
+import com.hnu.backend.document.parser.DocumentUploadValidator;
 import com.hnu.backend.document.storage.FileStorage;
 import com.hnu.backend.document.vo.DocumentBatchUploadResponse;
 import com.hnu.backend.document.vo.DocumentChunkBatchResponse;
@@ -25,7 +26,7 @@ import com.hnu.backend.document.vo.DocumentImportResponse;
 import com.hnu.backend.document.vo.DocumentPreviewResponse;
 import com.hnu.backend.document.vo.DocumentResponse;
 import com.hnu.backend.knowledgebase.api.KnowledgeBaseAccess;
-import com.hnu.backend.model.client.EmbeddingClient;
+import com.hnu.backend.model.client.EmbeddingEncoder;
 import jakarta.annotation.PreDestroy;
 import java.util.List;
 import java.util.UUID;
@@ -57,7 +58,9 @@ public class DocumentService {
    * @param documentMapper 文档持久化接口
    * @param documentVersionMapper 文档版本持久化接口
    * @param documentChunkMapper 文档分块持久化接口
-   * @param chunker Markdown 解析和通用结构块打包入口
+   * @param chunker 通用结构块打包入口
+   * @param parsers 格式解析器注册表
+   * @param validator 上传校验器
    * @param embedding 向量模型客户端
    * @param storage 对象存储接口
    * @param tx 事务模板
@@ -68,8 +71,10 @@ public class DocumentService {
       DocumentMapper documentMapper,
       DocumentVersionMapper documentVersionMapper,
       DocumentChunkMapper documentChunkMapper,
-      MarkdownChunker chunker,
-      EmbeddingClient embedding,
+      DocumentChunker chunker,
+      DocumentParserRegistry parsers,
+      DocumentUploadValidator validator,
+      EmbeddingEncoder embedding,
       FileStorage storage,
       TransactionTemplate tx,
       DocumentProcessingProperties processing) {
@@ -79,7 +84,6 @@ public class DocumentService {
     this.storage = storage;
     this.tx = tx;
     this.access = new DocumentAccess(knowledgeBaseService, documentMapper, documentVersionMapper);
-    DocumentParserRegistry parsers = new DocumentParserRegistry(chunker);
     DocumentIndexService indexer =
         new DocumentIndexService(
             knowledgeBaseService,
@@ -98,7 +102,7 @@ public class DocumentService {
             documentMapper,
             documentVersionMapper,
             documentChunkMapper,
-            parsers,
+            validator,
             indexer,
             storage,
             tx,

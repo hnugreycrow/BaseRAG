@@ -6,6 +6,7 @@ import static org.mockito.Mockito.*;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.hnu.backend.common.exception.ApiException;
 import com.hnu.backend.common.persistence.UuidTypeHandler;
+import com.hnu.backend.document.config.DocumentParserConfiguration;
 import com.hnu.backend.document.entity.Document;
 import com.hnu.backend.document.entity.DocumentChunk;
 import com.hnu.backend.document.entity.DocumentVersion;
@@ -13,8 +14,6 @@ import com.hnu.backend.document.entity.DocumentVersionStatus;
 import com.hnu.backend.document.mapper.DocumentChunkMapper;
 import com.hnu.backend.document.mapper.DocumentMapper;
 import com.hnu.backend.document.mapper.DocumentVersionMapper;
-import com.hnu.backend.document.parser.DocumentParserRegistry;
-import com.hnu.backend.document.parser.MarkdownChunker;
 import com.hnu.backend.document.storage.FileStorage;
 import com.hnu.backend.knowledgebase.api.KnowledgeBaseAccess;
 import com.hnu.backend.model.client.EmbeddingClient;
@@ -26,6 +25,7 @@ import java.util.function.Consumer;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.apache.ibatis.session.Configuration;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.transaction.TransactionStatus;
@@ -77,19 +77,68 @@ class DocumentIndexServiceTest {
             })
         .when(tx)
         .executeWithoutResult(any());
-    MarkdownChunker chunker = new MarkdownChunker(new RagProperties());
     indexer =
         new DocumentIndexService(
             knowledgeBase,
             documents,
             versions,
             chunks,
-            chunker,
-            new DocumentParserRegistry(chunker),
+            new DocumentParserConfiguration()
+                .documentChunker(
+                    new DocumentParserConfiguration().documentParsingOptions(new RagProperties())),
+            new DocumentParserConfiguration()
+                .documentParserRegistry(
+                    new DocumentParserConfiguration().documentParsingOptions(new RagProperties())),
             embedding,
             storage,
             tx,
             access);
+  }
+
+  @Test
+  void replacementChunkerControlsTextAndVersionWithoutChangingIndexing() {
+    var configuration = new DocumentParserConfiguration();
+    var parsers =
+        configuration.documentParserRegistry(
+            configuration.documentParsingOptions(new RagProperties()));
+    var source =
+        new com.hnu.backend.document.parser.StructuredBlock.SourceSpan(
+            com.hnu.backend.document.parser.StructuredBlock.SourceSpan.Unit.LINE, 3, 3, 6, 10);
+    var replacement =
+        new com.hnu.backend.document.parser.DocumentChunker() {
+          @Override
+          public String version() {
+            return "replacement-test";
+          }
+
+          @Override
+          public List<com.hnu.backend.document.parser.DocumentChunkResult> pack(
+              List<com.hnu.backend.document.parser.StructuredBlock> blocks) {
+            assertFalse(blocks.isEmpty());
+            return List.of(
+                new com.hnu.backend.document.parser.DocumentChunkResult(
+                    "展示正文", "检索正文", "标题", source));
+          }
+        };
+    var independent =
+        new DocumentIndexService(
+            knowledgeBase,
+            documents,
+            versions,
+            chunks,
+            replacement,
+            parsers,
+            embedding,
+            storage,
+            tx,
+            access);
+    independent.process(owner, kb, document.getId(), false);
+    assertEquals("replacement-test", version.getChunkerVersion());
+    verify(embedding).embed("embedding-id", "local", "embedding", 2, List.of("检索正文"));
+    var saved = org.mockito.ArgumentCaptor.forClass(DocumentChunk.class);
+    verify(chunks).insertVector(saved.capture());
+    assertEquals("展示正文", saved.getValue().getContent());
+    assertEquals(3, saved.getValue().getSourceStart());
   }
 
   @ParameterizedTest

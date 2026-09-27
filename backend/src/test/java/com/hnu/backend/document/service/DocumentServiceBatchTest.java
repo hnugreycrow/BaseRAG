@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import com.hnu.backend.common.exception.ApiException;
+import com.hnu.backend.document.config.DocumentParserConfiguration;
 import com.hnu.backend.document.config.DocumentProcessingProperties;
 import com.hnu.backend.document.entity.Document;
 import com.hnu.backend.document.entity.DocumentVersion;
@@ -11,10 +12,10 @@ import com.hnu.backend.document.entity.DocumentVersionStatus;
 import com.hnu.backend.document.mapper.DocumentChunkMapper;
 import com.hnu.backend.document.mapper.DocumentMapper;
 import com.hnu.backend.document.mapper.DocumentVersionMapper;
-import com.hnu.backend.document.parser.MarkdownChunker;
 import com.hnu.backend.document.storage.FileStorage;
 import com.hnu.backend.knowledgebase.api.KnowledgeBaseAccess;
 import com.hnu.backend.model.client.EmbeddingClient;
+import com.hnu.backend.rag.config.RagProperties;
 import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.List;
@@ -57,7 +58,18 @@ class DocumentServiceBatchTest {
             documentMapper,
             documentVersionMapper,
             mock(DocumentChunkMapper.class),
-            mock(MarkdownChunker.class),
+            new DocumentParserConfiguration()
+                .documentChunker(
+                    new DocumentParserConfiguration().documentParsingOptions(new RagProperties())),
+            new DocumentParserConfiguration()
+                .documentParserRegistry(
+                    new DocumentParserConfiguration().documentParsingOptions(new RagProperties())),
+            new DocumentParserConfiguration()
+                .documentUploadValidator(
+                    new DocumentParserConfiguration()
+                        .documentParserRegistry(
+                            new DocumentParserConfiguration()
+                                .documentParsingOptions(new RagProperties()))),
             mock(EmbeddingClient.class),
             storage,
             tx,

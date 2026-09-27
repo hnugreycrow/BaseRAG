@@ -14,7 +14,7 @@ import com.hnu.backend.document.mapper.DocumentChunkMapper;
 import com.hnu.backend.document.mapper.DocumentMapper;
 import com.hnu.backend.document.mapper.DocumentVersionMapper;
 import com.hnu.backend.document.parser.DocumentFormat;
-import com.hnu.backend.document.parser.DocumentParserRegistry;
+import com.hnu.backend.document.parser.DocumentUploadValidator;
 import com.hnu.backend.document.storage.FileStorage;
 import com.hnu.backend.document.vo.DocumentBatchUploadResponse;
 import com.hnu.backend.document.vo.DocumentChunkBatchResponse;
@@ -49,7 +49,7 @@ final class DocumentImportService {
   private final DocumentChunkMapper documentChunkMapper;
 
   /** 按版本格式选择解析器，并在上传时验证原文件内容。 */
-  private final DocumentParserRegistry parsers;
+  private final DocumentUploadValidator parsers;
 
   private final DocumentIndexService indexer;
   private final FileStorage storage;
@@ -78,7 +78,7 @@ final class DocumentImportService {
       DocumentMapper documentMapper,
       DocumentVersionMapper documentVersionMapper,
       DocumentChunkMapper documentChunkMapper,
-      DocumentParserRegistry parsers,
+      DocumentUploadValidator parsers,
       DocumentIndexService indexer,
       FileStorage storage,
       TransactionTemplate tx,

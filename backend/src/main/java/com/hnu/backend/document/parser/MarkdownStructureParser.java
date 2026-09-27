@@ -1,23 +1,18 @@
 package com.hnu.backend.document.parser;
 
-import com.hnu.backend.rag.config.RagProperties;
+import com.hnu.backend.document.config.DocumentParsingOptions;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.regex.Pattern;
-import org.springframework.stereotype.Component;
 
 /**
- * 将 Markdown 标题、正文和结构单元解析为原子块，再按软标题与长度预算合并。
+ * 将 Markdown 标题、正文和结构单元解析为保留来源位置的原子块。
  *
  * <p>切分结果保留标题路径和原文行号，便于回答引用回溯到原文。
  */
-@Component
-public class MarkdownChunker {
-  public record Piece(
-      String content, String embeddingText, String heading, int lineStart, int lineEnd) {}
-
+public final class MarkdownStructureParser {
   private enum Kind {
     HEADING,
     TEXT,
@@ -55,49 +50,13 @@ public class MarkdownChunker {
   private final int minSize;
   private final int maxSize;
   private final int overlap;
-  private final StructuredChunkPacker packer;
 
-  public MarkdownChunker(RagProperties config) {
+  /** 创建使用显式结构限制的解析器。 */
+  public MarkdownStructureParser(DocumentParsingOptions config) {
     targetSize = config.getChunkSize();
     minSize = Math.min(config.getChunkMinSize(), targetSize);
     maxSize = Math.max(config.getChunkMaxSize(), targetSize);
     overlap = config.getChunkOverlap();
-    packer = new StructuredChunkPacker(config);
-  }
-
-  /**
-   * 将 Markdown 文本切分为适合向量化的语义片段。
-   *
-   * @param markdown Markdown 原文
-   * @return 按原文顺序排列的非空片段
-   */
-  public List<Piece> split(String markdown) {
-    List<Piece> result = new ArrayList<>();
-    for (StructuredChunkPacker.Chunk chunk : packer.pack(parse(markdown))) {
-      result.add(
-          new Piece(
-              chunk.content(),
-              chunk.embeddingText(),
-              chunk.heading(),
-              chunk.source().start(),
-              chunk.source().end()));
-    }
-    return result;
-  }
-
-  /** 返回结构块允许的最大字符数，供其他格式解析器限制单块大小。 */
-  public int maxSize() {
-    return maxSize;
-  }
-
-  /**
-   * 使用统一策略打包各格式的结构块。
-   *
-   * @param blocks 按原文顺序排列的结构块
-   * @return 带来源位置的分块
-   */
-  public List<StructuredChunkPacker.Chunk> pack(List<StructuredBlock> blocks) {
-    return packer.pack(blocks);
   }
 
   /**

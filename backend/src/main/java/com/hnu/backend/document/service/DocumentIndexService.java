@@ -12,14 +12,16 @@ import com.hnu.backend.document.entity.DocumentVersionStatus;
 import com.hnu.backend.document.mapper.DocumentChunkMapper;
 import com.hnu.backend.document.mapper.DocumentMapper;
 import com.hnu.backend.document.mapper.DocumentVersionMapper;
+import com.hnu.backend.document.parser.DocumentChunkResult;
+import com.hnu.backend.document.parser.DocumentChunker;
 import com.hnu.backend.document.parser.DocumentFormat;
 import com.hnu.backend.document.parser.DocumentParserRegistry;
-import com.hnu.backend.document.parser.MarkdownChunker;
-import com.hnu.backend.document.parser.StructuredChunkPacker;
+import com.hnu.backend.document.parser.StructuredBlock;
 import com.hnu.backend.document.storage.FileStorage;
 import com.hnu.backend.document.vo.DocumentImportResponse;
 import com.hnu.backend.knowledgebase.api.KnowledgeBaseAccess;
-import com.hnu.backend.model.client.EmbeddingClient;
+import com.hnu.backend.model.client.EmbeddingEncoder;
+import com.hnu.backend.model.client.EmbeddingVector;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -34,9 +36,9 @@ final class DocumentIndexService {
   private final DocumentMapper documentMapper;
   private final DocumentVersionMapper documentVersionMapper;
   private final DocumentChunkMapper documentChunkMapper;
-  private final MarkdownChunker chunker;
+  private final DocumentChunker chunker;
   private final DocumentParserRegistry parsers;
-  private final EmbeddingClient embedding;
+  private final EmbeddingEncoder embedding;
   private final FileStorage storage;
   private final TransactionTemplate tx;
   private final DocumentAccess access;
@@ -47,9 +49,9 @@ final class DocumentIndexService {
       DocumentMapper documentMapper,
       DocumentVersionMapper documentVersionMapper,
       DocumentChunkMapper documentChunkMapper,
-      MarkdownChunker chunker,
+      DocumentChunker chunker,
       DocumentParserRegistry parsers,
-      EmbeddingClient embedding,
+      EmbeddingEncoder embedding,
       FileStorage storage,
       TransactionTemplate tx,
       DocumentAccess access) {
@@ -116,8 +118,7 @@ final class DocumentIndexService {
           DocumentFormat.valueOf(version.getFormat() == null ? "MARKDOWN" : version.getFormat());
       byte[] original = storage.get(version.getStorageKey());
       // 解析器只负责结构和来源；所有格式共用同一分块预算与策略。
-      List<StructuredChunkPacker.Chunk> pieces =
-          chunker.pack(parsers.parser(format).parse(original));
+      List<DocumentChunkResult> pieces = chunker.pack(parsers.parser(format).parse(original));
       if (pieces.isEmpty()) {
         throw ApiException.bad(ErrorCode.EMPTY_DOCUMENT, "文档没有可用文本");
       }
@@ -135,7 +136,7 @@ final class DocumentIndexService {
               version.getEmbeddingProvider(),
               version.getEmbeddingModel(),
               version.getEmbeddingDimensions(),
-              pieces.stream().map(StructuredChunkPacker.Chunk::embeddingText).toList());
+              pieces.stream().map(DocumentChunkResult::embeddingText).toList());
       tx.executeWithoutResult(
           status -> {
             // 新分块和激活版本在同一事务内切换，查询端不会观察到半成品版本。
@@ -162,17 +163,16 @@ final class DocumentIndexService {
               chunk.setSourceUnit(piece.source().unit().name());
               chunk.setSourceStart(piece.source().start());
               chunk.setSourceEnd(piece.source().end());
-              if (piece.source().unit()
-                  == com.hnu.backend.document.parser.StructuredBlock.SourceSpan.Unit.LINE) {
+              if (piece.source().unit() == StructuredBlock.SourceSpan.Unit.LINE) {
                 chunk.setLineStart(piece.source().start());
                 chunk.setLineEnd(piece.source().end());
               }
               chunk.setEmbeddingDimensions(version.getEmbeddingDimensions());
-              chunk.setVector(EmbeddingClient.literal(vectors.get(i)));
+              chunk.setVector(EmbeddingVector.literal(vectors.get(i)));
               documentChunkMapper.insertVector(chunk);
             }
             version.setStatus(DocumentVersionStatus.READY);
-            version.setChunkerVersion("structured-block-v6");
+            version.setChunkerVersion(chunker.version());
             documentVersionMapper.updateById(version);
             document.setActiveVersionId(version.getId());
             documentMapper.updateById(document);

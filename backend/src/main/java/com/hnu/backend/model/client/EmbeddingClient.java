@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 
 /** 根据固定模型身份路由到对应 Embedding 协议适配器。 */
 @Component
-public class EmbeddingClient {
+public class EmbeddingClient implements EmbeddingEncoder {
   private final AiProperties config;
   private final Map<EmbeddingProtocol, EmbeddingAdapter> adapters;
 
@@ -37,6 +37,7 @@ public class EmbeddingClient {
    *
    * @return 模型名称
    */
+  @Override
   public String model() {
     return config.embeddingModel().model();
   }
@@ -46,11 +47,13 @@ public class EmbeddingClient {
    *
    * @return 向量维度
    */
+  @Override
   public int dimensions() {
     return config.embeddingModel().dimension();
   }
 
   /** 校验默认向量模型是否已完整配置。 */
+  @Override
   public void requireConfigured() {
     AiProperties.ModelTarget target = config.embeddingModel();
     adapter().requireConfigured(target);
@@ -64,6 +67,7 @@ public class EmbeddingClient {
    * @param model 模型名称
    * @param dimensions 向量维度
    */
+  @Override
   public void requireConfigured(String modelId, String provider, String model, int dimensions) {
     AiProperties.ModelTarget target = target(modelId, provider, model, dimensions);
     adapter().requireConfigured(target);
@@ -75,6 +79,7 @@ public class EmbeddingClient {
    * @param texts 待编码文本
    * @return 与输入顺序一致的向量列表
    */
+  @Override
   public List<float[]> embed(List<String> texts) {
     return embedTarget(config.embeddingModel(), texts);
   }
@@ -89,6 +94,7 @@ public class EmbeddingClient {
    * @param texts 待编码文本
    * @return 与输入顺序一致的向量列表
    */
+  @Override
   public List<float[]> embed(
       String modelId, String provider, String model, int dimensions, List<String> texts) {
     return embedTarget(target(modelId, provider, model, dimensions), texts);
@@ -154,6 +160,6 @@ public class EmbeddingClient {
    * @return pgvector 文本表示
    */
   public static String literal(float[] vector) {
-    return Arrays.toString(vector);
+    return EmbeddingVector.literal(vector);
   }
 }

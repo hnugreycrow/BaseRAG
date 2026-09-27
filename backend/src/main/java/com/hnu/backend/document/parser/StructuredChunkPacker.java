@@ -1,28 +1,36 @@
 package com.hnu.backend.document.parser;
 
+import com.hnu.backend.document.config.DocumentParsingOptions;
 import com.hnu.backend.document.parser.StructuredBlock.Kind;
 import com.hnu.backend.document.parser.StructuredBlock.SourceSpan;
-import com.hnu.backend.rag.config.RagProperties;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
 /** 将结构块按软标题和长度预算打包，并生成展示正文、向量文本及真实来源范围。 */
-public class StructuredChunkPacker {
-  public record Chunk(String content, String embeddingText, String heading, SourceSpan source) {}
+public class StructuredChunkPacker implements DocumentChunker {
+
+  /** {@inheritDoc} */
+  @Override
+  public String version() {
+    return "structured-block-v6";
+  }
 
   private static final String SEPARATOR = "\n\n";
   private final int targetSize;
   private final int minSize;
   private final int maxSize;
 
-  public StructuredChunkPacker(RagProperties config) {
+  /** 创建使用显式字符预算的打包器。 */
+  public StructuredChunkPacker(DocumentParsingOptions config) {
     targetSize = config.getChunkSize();
     minSize = Math.min(config.getChunkMinSize(), targetSize);
     maxSize = Math.max(config.getChunkMaxSize(), targetSize);
   }
 
-  public List<Chunk> pack(List<StructuredBlock> blocks) {
+  /** {@inheritDoc} */
+  @Override
+  public List<DocumentChunkResult> pack(List<StructuredBlock> blocks) {
     List<List<StructuredBlock>> packed = new ArrayList<>();
     List<StructuredBlock> buffer = new ArrayList<>();
     for (List<StructuredBlock> unit : units(prepareListContext(blocks))) {
@@ -54,14 +62,14 @@ public class StructuredChunkPacker {
     }
     flush(buffer, packed);
 
-    List<Chunk> result = new ArrayList<>();
+    List<DocumentChunkResult> result = new ArrayList<>();
     for (List<StructuredBlock> group : packed) {
       if (group.stream().allMatch(block -> block.kind() == Kind.HEADING)) {
         continue;
       }
       result.add(assemble(group));
     }
-    return result;
+    return List.copyOf(result);
   }
 
   private List<List<StructuredBlock>> units(List<StructuredBlock> blocks) {
@@ -132,7 +140,7 @@ public class StructuredChunkPacker {
       }
       result.add(prepared);
     }
-    return result;
+    return List.copyOf(result);
   }
 
   private boolean canJoin(List<StructuredBlock> previous, List<StructuredBlock> next, int limit) {
@@ -166,7 +174,7 @@ public class StructuredChunkPacker {
     buffer.clear();
   }
 
-  private static Chunk assemble(List<StructuredBlock> blocks) {
+  private static DocumentChunkResult assemble(List<StructuredBlock> blocks) {
     // 展示正文保留原有标题标记；向量文本可补上下文，但不得扩大来源范围。
     StringBuilder content = new StringBuilder();
     StringBuilder body = new StringBuilder();
@@ -188,7 +196,7 @@ public class StructuredChunkPacker {
     SourceSpan first = blocks.getFirst().source();
     SourceSpan last = blocks.getLast().source();
     // 合并块只标记首尾原子块实际覆盖的原文位置，不把补入的表头等上下文当作来源。
-    return new Chunk(
+    return new DocumentChunkResult(
         content.toString(),
         withHeading(body.toString(), outline),
         String.join(" / ", outline),
